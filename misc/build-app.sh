@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 source misc/util.sh
 rootdir=$PWD
 
-rm -rf docs/app.* docs/resources.*
+rm -rf docs/app.* docs/resources.* docs/source-map-*.wasm
 
 spawn_monaco_build "$rootdir/docs" && echo "monaco is up-to-date" || true
 
@@ -25,5 +25,11 @@ let s = fs.readFileSync("docs/index.html", "utf8")
 s = s.replace(/<script type="text\/javascript" src="resources\.[^\.]+\.js"><\/script>/, "")
 fs.writeFileSync("docs/index.html", s, "utf8")
 _JS_
+
+# for some reason, the webpack CopyPlugin fails to copy the source-map wasm module file,
+# so we do it manually:
+SOURCE_MAP_VERSION=$(node -p 'require("source-map/package.json").version')
+cp -f node_modules/source-map/lib/mappings.wasm \
+      docs/source-map-${SOURCE_MAP_VERSION}-mappings.wasm
 
 echo "✓ done"
