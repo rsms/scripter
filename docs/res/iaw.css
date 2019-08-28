@@ -1,0 +1,89 @@
+/* quattro */
+@font-face {
+  font-family: 'iaw-quattro';
+  font-style:  normal;
+  font-weight: 400;
+  src: url("iaw-quattro-Regular.woff2") format("woff2"),
+       url("iaw-quattro-Regular.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-quattro';
+  font-style:  italic;
+  font-weight: 400;
+  src: url("iaw-quattro-Italic.woff2") format("woff2"),
+       url("iaw-quattro-Italic.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-quattro';
+  font-style:  normal;
+  font-weight: 700;
+  src: url("iaw-quattro-Bold.woff2") format("woff2"),
+       url("iaw-quattro-Bold.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-quattro';
+  font-style:  italic;
+  font-weight: 700;
+  src: url("iaw-quattro-BoldItalic.woff2") format("woff2"),
+       url("iaw-quattro-BoldItalic.woff") format("woff");
+}
+/* quattro var */
+@font-face {
+  font-family: 'iaw-quattro-var';
+  font-weight: 100 700;
+  font-style: normal;
+  font-named-instance: 'Regular';
+  src: url("iaw-quattro-vf.woff2") format("woff2");
+}
+@font-face {
+  font-family: 'iaw-quattro-var';
+  font-weight: 100 700;
+  font-style: italic;
+  font-named-instance: 'Italic';
+  src: url("iaw-quattro-vf-Italic.woff2") format("woff2");
+}
+
+/* mono */
+@font-face {
+  font-family: 'iaw-mono';
+  font-style:  normal;
+  font-weight: 400;
+  src: url("iaw-mono-Regular.woff2") format("woff2"),
+       url("iaw-mono-Regular.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-mono';
+  font-style:  italic;
+  font-weight: 400;
+  src: url("iaw-mono-Italic.woff2") format("woff2"),
+       url("iaw-mono-Italic.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-mono';
+  font-style:  normal;
+  font-weight: 700;
+  src: url("iaw-mono-Bold.woff2") format("woff2"),
+       url("iaw-mono-Bold.woff") format("woff");
+}
+@font-face {
+  font-family: 'iaw-mono';
+  font-style:  italic;
+  font-weight: 700;
+  src: url("iaw-mono-BoldItalic.woff2") format("woff2"),
+       url("iaw-mono-BoldItalic.woff") format("woff");
+}
+/* mono var */
+@font-face {
+  font-family: 'iaw-mono-var';
+  font-weight: 100 700;
+  font-style: normal;
+  font-named-instance: 'Regular';
+  src: url("iaw-mono-vf.woff2") format("woff2");
+}
+@font-face {
+  font-family: 'iaw-mono-var';
+  font-weight: 100 700;
+  font-style: italic;
+  font-named-instance: 'Italic';
+  src: url("iaw-mono-vf-Italic.woff2") format("woff2");
+}

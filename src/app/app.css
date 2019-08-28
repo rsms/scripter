@@ -1,0 +1,250 @@
+/* reset */
+* { font-family: inherit; line-height: inherit; font-synthesis: none; }
+a, abbr, acronym, address, applet, article, aside, audio, b, big, blockquote,
+body, canvas, caption, center, cite, code, dd, del, details, dfn, div, dl, dt,
+em, embed, fieldset, figcaption, figure, footer, form, grid, h1, h2, h3, h4, h5,
+h6, header, hgroup, hr, html, i, iframe, img, ins, kbd, label, legend, li, main,
+mark, menu, nav, noscript, object, ol, output, p, pre, q, s, samp, section,
+small, span, strike, strong, sub, summary, sup, table, tbody, td, tfoot, th,
+thead, time, tr, tt, u, ul, var, video {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  vertical-align: baseline;
+}
+blockquote, q { quotes: none; }
+blockquote:before, blockquote:after, q:before, q:after {
+  content: "";
+  content: none;
+}
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+a, a:active, a:visited { color: inherit; }
+/* end of reset */
+
+:root {
+  --toolbarHeight: 32px;
+  --messageHeight: 48px;
+}
+
+body {
+  background: transparent;
+  color: #222;
+  overflow: hidden;
+}
+body, .sansSerif {
+  font: 12px/16px 'Inter', system-ui, -system-ui, sans-serif;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+}
+@supports (font-variation-settings: normal) {
+  body, .sansSerif { font-family: 'Inter var', system-ui, sans-serif; }
+}
+
+b, strong { font-weight:600 }
+em, i { font-style:italic }
+
+code, pre, textarea.code, tt, .monospace, .monaco-editor {
+  font-family: iaw-quattro-var, iaw-quattro, monospace;
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
+  /*
+    ss01: single-storey a
+    ss02: double-storey g
+    ss03: zero with slash (instead of dotted zero)
+    ss04: zero without decoration (simple open zero)
+  */
+}
+pre { white-space:pre-wrap }
+code { white-space:nowrap }
+code b, pre b, tt b { font-weight:540 }
+
+#editor {
+  position: absolute;
+  left: 0; top: 0; right:0; bottom: var(--toolbarHeight);
+}
+
+
+#progress-spinner {}
+
+
+#toolbar {
+  position: absolute;
+  left: 0; right:0; bottom: 0;
+  height: var(--toolbarHeight);
+  background: #333;
+  color: white;
+  z-index:3;
+  display: flex;
+  justify-content: space-between;
+  border-bottom-left-radius: 2px; /* match figma dialog corner radius */
+  border-bottom-right-radius: 2px; /* match figma dialog corner radius */
+}
+#toolbar .button {
+  flex: 0 0 auto;
+  display: block;
+  width: var(--toolbarHeight);
+  height: var(--toolbarHeight);
+  line-height: var(--toolbarHeight);
+  text-align: center;
+  cursor: default;
+  user-select: none;
+  opacity: 0.8;
+  /*transition: background 200ms ease-out;*/
+}
+#toolbar .button:hover { opacity:1; background: black; }
+#toolbar .runqueue {
+  display: flex;
+  min-width: var(--toolbarHeight);
+  height: var(--toolbarHeight);
+  line-height: var(--toolbarHeight);
+  font-size: 11px;
+}
+#toolbar .runqueue > div {
+  min-width: var(--toolbarHeight);
+  text-align: center;
+  transition: all 100ms ease-in;
+  transform-origin: 50% 50%;
+}
+#toolbar .runqueue > div.ok { color: lightgreen; }
+#toolbar .runqueue > div.err { color: #FFF866; }
+#toolbar .runqueue > div.hide {
+  /*min-width: 0px;
+  width: 0;*/
+  transform: translate(0, calc(var(--toolbarHeight) / 2));
+  opacity: 0;
+}
+
+
+@keyframes button-flash {
+  0%   { background: lightgreen; }
+  100% {  }
+}
+.button.flash {
+  animation: button-flash 200ms 1;
+}
+
+
+#message {
+  position: absolute;
+  left: 0; right:0; bottom: var(--toolbarHeight);
+  height: var(--messageHeight);
+  background: #FFF866;
+  color: black;
+  box-shadow: 0 -1px 2px rgba(50,20,0,0.1), 0 -0.5px 0 rgba(0,0,0,0.1);
+  z-index:2;
+  font-size:11px;
+  align-items: center;
+  overflow: hidden;
+  /*display: flex;*/
+  display: none;
+}
+#message .message {
+  flex: 1 1 auto;
+  align-items: center;
+  max-height: var(--messageHeight);
+  overflow: auto;
+}
+#message .message > p {
+  padding: 8px 0;
+}
+#message div.warning-icon, #message div.close-button {
+  flex: 0 0 auto;
+  height: var(--messageHeight);
+  line-height: var(--messageHeight);
+  width: calc(var(--messageHeight) * 0.75);
+  text-align: center;
+  font-size: 16px;
+  cursor: default;
+  user-select: none; -webkit-user-select: none; -moz-user-select: none;
+}
+#message div.close-button { opacity: 0.4 }
+#message div.close-button:hover { opacity: 1 }
+
+/*#message > p::before {
+  content: "⚠ ";
+  font-size: 16px;
+  vertical-align: top;
+}*/
+body.showMessage #message { display: flex }
+body.showMessage #editor { bottom: calc(var(--messageHeight) + var(--toolbarHeight)); }
+
+
+.monaco-editor {
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
+}
+/*.monaco-editor .editor-scrollable {
+  margin:8px 0;
+}*/
+
+/*@supports (font-variation-settings: normal)*/
+/* Figma desktop app uses a really old version of chromium lacking vf support */
+.monaco-editor.scripter-light .mtk16 { font-weight: 600; font-weight: 520 } /*keyword*/
+.monaco-editor.scripter-light .mtk29 { font-weight: 440 } /*type.identifier*/
+
+/* decorate runtime error */
+.monaco-editor .runtimeErrorDecoration {
+  background: url("data:image/svg+xml,%3Csvg%20width%3D%226%22%20height%3D%223%22%20viewBox%3D%220%200%206%203%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5.4%200L2.4%203H1L4%200H5.4Z%22%20fill%3D%22%23FF9900%22%2F%3E%3Cpath%20d%3D%22M4%200L6%202V0.6L5.4%200H4Z%22%20fill%3D%22%23FF9900%22%2F%3E%3Cpath%20d%3D%22M0%202L1%203H2.4L0%200.599998V2Z%22%20fill%3D%22%23FF9900%22%2F%3E%3C%2Fsvg%3E") repeat-x bottom left;
+  background-color: rgba(255, 240, 0, 0.2);
+}
+
+.monaco-editor .printDecoration {
+  background-color: rgba(0, 200, 255, 0.1);
+}
+
+.monaco-editor .printWidget {
+  z-index: 99;
+  /*width: 500px;*/
+  overflow: auto;
+
+  /*box-sizing: border-box;
+  border: 0.5em solid white;
+  padding: 0.5em;
+  border-radius: 13px;
+  background-color: rgba(0, 0, 0, 0.1);*/
+
+  /*border-left: 4px solid lightgreen;
+  padding-left: 1em;
+  background: #eeffee;*/
+}
+
+.monaco-editor .printWidget > div {
+  background: lightpink;
+  display: flex;
+  align-items: flex-start;
+  height: 100%;
+
+  border-left: 4px solid lightgreen;
+  padding-left: 1em;
+  margin-right: 2em;
+  background: #eeffee;
+}
+
+.monaco-editor .printWidget > div .message {
+  flex: 1 1 auto;
+  white-space: pre-wrap;
+  user-select: all;
+}
+
+.monaco-editor .printWidget > div .button {
+  cursor: default;
+  padding: 0.5em 0.125em;
+  margin: 0 0.125em;
+  flex: 0 0 auto;
+  opacity:0.5;
+  user-select: none;
+  pointer-events: all;
+  /*background: transparent;*/
+  background: rgba(0,0,0,0);
+  border-radius: 2px;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'cv08' 1; /* serif I */
+}
+.monaco-editor .printWidget > div .button:last-child {
+  margin-right: 0.0;
+  padding-right: 0.5em;
+}
+.monaco-editor .printWidget > div .button:hover {
+  opacity:1;
+}
+.monaco-editor .printWidget > div .button.closeButton {}
+.monaco-editor .printWidget > div .button.inlineButton {}

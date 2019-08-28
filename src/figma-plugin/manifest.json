@@ -1,0 +1,9 @@
+{
+  "api":  "1.0.0",
+  "name": "Scripter",
+  "main": "plugin.ts",
+  "ui":   "ui.ts",
+  "figplug": {
+    "libs": ["../common/scripter-env"]
+  }
+}
