@@ -791,6 +791,7 @@ function setMsgZone(pos :SourcePos, message :string) :number {
     closeButtonEl.addEventListener('click', ev => {
       ev.preventDefault()
       ev.stopPropagation()
+      editor.focus()
       clearMsgZones([viewZoneId])
     }, {passive:false, capture:true})
 
