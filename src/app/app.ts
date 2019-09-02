@@ -5,6 +5,7 @@ import * as monaco from "monaco-editor"
 // import * as monaco from "./monaco-ambient"
 import { api as defaultPluginApiVersion } from "../figma-plugin/manifest.json"
 import { SourceMapConsumer, SourceMapGenerator } from "../misc/source-map"
+import { initData, settings, Script } from "./data"
 
 const isMac = navigator.platform.indexOf("Mac")
 const print = console.log.bind(console)
@@ -31,7 +32,7 @@ let editor :monaco.editor.IStandaloneCodeEditor
 let defaultFontSize = 11
 let edOptions :monaco.editor.IEditorOptions = {
   automaticLayout: true,
-  // lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
+  lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
   lineNumbersMinChars: 3,
   scrollBeyondLastLine: false,
   lineDecorationsWidth: 16, // margin on left side, in pixels
@@ -61,6 +62,9 @@ let edOptions :monaco.editor.IEditorOptions = {
     enabled: false,
   },
 }
+
+
+let currentScript = new Script("")
 
 
 async function setupEditor() {
@@ -747,6 +751,8 @@ function setMsgZone(pos :SourcePos, message :string) :number {
     return -1
   }
 
+  let lineOffset = 0 // set to -1 to have it appear above pos.line
+
   let existingViewZoneId = msgZones[pos.line]
   let viewZoneId :number = -1
 
@@ -756,8 +762,18 @@ function setMsgZone(pos :SourcePos, message :string) :number {
       existingViewZoneId = undefined
     }
 
+    let heightInLines = message.split("\n").length
+
     let domNode = document.createElement('div')
     domNode.className = "printWidget"
+    if (heightInLines < 2) {
+      if (message.length > 40) {
+        // make room for wrapping text
+        heightInLines = 2
+      } else {
+        domNode.className += " small"
+      }
+    }
 
     let mainEl = document.createElement('div')
     domNode.appendChild(mainEl)
@@ -767,24 +783,35 @@ function setMsgZone(pos :SourcePos, message :string) :number {
     textEl.className = "message monospace"
     mainEl.appendChild(textEl)
 
-    let inlineButtonEl = document.createElement('div')
-    inlineButtonEl.innerText = "+⃞"
-    inlineButtonEl.title = "Add to script as code"
-    inlineButtonEl.className = "button inlineButton sansSerif"
-    mainEl.appendChild(inlineButtonEl)
+    let inlineButtonEl :HTMLElement|null = null
+    if (message != "") {
+      inlineButtonEl = document.createElement('div')
+      inlineButtonEl.innerText = "+"
+      inlineButtonEl.title = "Add to script as code"
+      inlineButtonEl.className = "button inlineButton sansSerif"
+      mainEl.appendChild(inlineButtonEl)
+    }
 
     let closeButtonEl = document.createElement('div')
-    closeButtonEl.innerText = "✗⃞"
+    closeButtonEl.innerText = "✗"
     closeButtonEl.title = "Dismiss"
     closeButtonEl.className = "button closeButton sansSerif"
     mainEl.appendChild(closeButtonEl)
 
-    let heightInLines = message.split("\n").length
+    // compute actual height, as text may wrap
+    let heightInPx = 16
+    let domNode2 = domNode.cloneNode(true)
+    editor.getDomNode().appendChild(domNode2)
+    heightInPx = (domNode2 as any).querySelector('.message').clientHeight
+    editor.getDomNode().removeChild(domNode2)
+
+    heightInPx += 2
+
 
     viewZoneId = changeAccessor.addZone({
-      afterLineNumber: pos.line,
-      afterColumn: pos.column,
-      heightInLines,
+      afterLineNumber: pos.line + lineOffset,
+      // afterColumn: pos.column,
+      heightInPx,
       domNode,
     })
 
@@ -805,6 +832,8 @@ function setMsgZone(pos :SourcePos, message :string) :number {
           lineNumber = parseInt(line)
         }
       }
+
+      lineNumber += lineOffset
 
       clearMsgZones([viewZoneId])
 
@@ -847,17 +876,19 @@ function setMsgZone(pos :SourcePos, message :string) :number {
       setTimeout(() => { editor.setSelection(newSelection) },1)
     }
 
-    textEl.addEventListener('dblclick', ev => {
-      ev.stopPropagation()
-      ev.preventDefault()
-      addAsCode()
-    }, {passive:false, capture:true})
+    if (inlineButtonEl) {
+      textEl.addEventListener('dblclick', ev => {
+        ev.stopPropagation()
+        ev.preventDefault()
+        addAsCode()
+      }, {passive:false, capture:true})
 
-    inlineButtonEl.addEventListener('click', ev => {
-      ev.stopPropagation()
-      ev.preventDefault()
-      addAsCode()
-    }, {passive:false, capture:true})
+      inlineButtonEl.addEventListener('click', ev => {
+        ev.stopPropagation()
+        ev.preventDefault()
+        addAsCode()
+      }, {passive:false, capture:true})
+    }
 
     msgZones[pos.line] = viewZoneId
   })
@@ -886,13 +917,26 @@ async function handlePrintMsg(msg :PrintMsg) {
   }
 
   // format message
-  let message = msg.args.map(v =>
-    typeof v == "object" ?
-       v.toString !== Object.prototype.toString ? v.toString()
-       : JSON.stringify(v, null, 2)
-    : v
-  ).join(" ").trim()
+  let message = msg.message
 
+  // TODO: find end of print statement and adjust line if it spans more than one line.
+  // Example: Currently this is what happens:
+  //
+  //   print("single line")
+  //   > single line
+  //
+  //   print("multiple",
+  //   > multiple
+  //   > lines
+  //         "lines")
+  //
+  // It would be much nicer to have this:
+  //
+  //   print("multiple",
+  //         "lines")
+  //   > multiple
+  //   > lines
+  //
 
   setMsgZone(pos, message)
 
@@ -1111,7 +1155,8 @@ function setupMessageHandler() {
 }
 
 
-function main() {
+async function main() {
+  await initData()
   setupToolbarUI()
   setupEditor()
   setupKeyboardHandlers()
@@ -1122,4 +1167,4 @@ function main() {
 }
 
 
-main()
+main().catch(e => console.error(e.stack||String(e)))

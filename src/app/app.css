@@ -213,9 +213,10 @@ body.showMessage #editor { bottom: calc(var(--messageHeight) + var(--toolbarHeig
   display: flex;
   align-items: flex-start;
   height: 100%;
+  width: 430px;
 
   border-left: 4px solid lightgreen;
-  padding-left: 1em;
+  padding-left: 0.5em;
   margin-right: 2em;
   background: #eeffee;
 }
@@ -224,27 +225,46 @@ body.showMessage #editor { bottom: calc(var(--messageHeight) + var(--toolbarHeig
   flex: 1 1 auto;
   white-space: pre-wrap;
   user-select: all;
+  overflow: auto;
 }
 
 .monaco-editor .printWidget > div .button {
   cursor: default;
-  padding: 0.5em 0.125em;
-  margin: 0 0.125em;
+  /*padding: 0.5em 0.125em;*/
+  /*margin: 0 0.125em;*/
+  width:14px;
+  height:14px;
+  text-align: center;
+  line-height:14px;
+  font-size:12px;
   flex: 0 0 auto;
   opacity:0.5;
   user-select: none;
   pointer-events: all;
   /*background: transparent;*/
-  background: rgba(0,0,0,0);
+  /*background: rgba(0,0,0,0);*/
+  /*background: black;*/
+  color: black;
+  border: 1px solid rgba(0,0,0,0);
   border-radius: 2px;
-  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'cv08' 1; /* serif I */
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'case' 1;
+
+  /*padding:1px;*/
+  margin:1px;
 }
-.monaco-editor .printWidget > div .button:last-child {
+/*.monaco-editor .printWidget > div .button:last-child {
   margin-right: 0.0;
   padding-right: 0.5em;
-}
+}*/
 .monaco-editor .printWidget > div .button:hover {
-  opacity:1;
+  opacity:0.99;
+  border-color: black;
+  /*background: rgba(0,0,0,0.1);*/
 }
 .monaco-editor .printWidget > div .button.closeButton {}
-.monaco-editor .printWidget > div .button.inlineButton {}
+.monaco-editor .printWidget.empty > div .button.inlineButton {}
+
+/*.monaco-editor .printWidget.small > div .button {
+  padding:1px;
+  margin:0 1px 0 0;
+}*/

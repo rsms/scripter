@@ -18,9 +18,9 @@ export interface EvalResponseMsg {
 }
 
 export interface PrintMsg {
-  type  :"print"
-  args  :any[]
-  reqId :string
-  srcPos :{line:number,column:number}  // source code position where error originated
+  type    :"print"
+  message :string
+  reqId   :string
+  srcPos  :{line:number,column:number}  // source code position where error originated
   srcLineOffset :number  // line offset of source code (for sourcemap)
 }

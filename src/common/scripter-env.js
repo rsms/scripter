@@ -24,11 +24,29 @@ function assert(condition) {
 
 // const print = console.log.bind(console)
 
-function _print(reqId, args) {
+function _print(reqId, valueFormatter, args) {
   console.log.apply(console, args)
+
+  let message = ""
+  let prevWasLinebreak = false
+  for (let i = 0, endindex = args.length - 1; i <= endindex; i++) {
+    let s = valueFormatter(args[i])
+    if (s && s[s.length-1] == "\n") {
+      if (message.length && message[message.length-1] == " ") {
+        message = message.substr(0, message.length-1)
+      }
+      prevWasLinebreak = true
+    } else if (prevWasLinebreak) {
+      prevWasLinebreak = false
+    } else if (i != endindex) {
+      s += " "
+    }
+    message += s
+  }
+
   let msg = { // PrintMsg
     type: "print",
-    args: args,
+    message: message,
     reqId: reqId,
     srcPos: {line:0,column:0},
     srcLineOffset: evalScript.lineOffset,
@@ -44,7 +62,21 @@ function _print(reqId, args) {
       column: isNaN(column) ? 0 : column,
     }
   }
-  figma.ui.postMessage(msg)
+  try {
+    figma.ui.postMessage(msg)
+  } catch (_) {
+    // something that can't be cloned is in msg.
+    // run through json as fallback
+    try {
+      for (let i = 0; i < msg.args.length; i++) {
+        if (typeof msg.args[i] == "function") {
+          msg.args[i] = "[Function]"
+        }
+      }
+      msg.args = JSON.parse(JSON.stringify(msg.args))
+      figma.ui.postMessage(msg)
+    } catch (_) {}
+  }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -356,13 +388,13 @@ try {
   jsHeader += "var " + names.map(k => `${k} = _e.${k}`).join(",") + ";"
 }
 
-function evalScript(reqId, js) {
+function evalScript(reqId, valueFormatter, js) {
   return new Promise((resolve, reject) => {
     function print0() {
-      _print(reqId, Array.prototype.slice.call(arguments))
+      _print(reqId, valueFormatter, Array.prototype.slice.call(arguments))
     }
     js = jsHeader + "\n" + js + "\n" + jsFooter
-    console.log("evalScript", js)
+    // console.log("evalScript", js)
     try {
       // @ts-ignore eval (indirect call means scope is global)
       return (0,eval)(js)({id:"",exports:{}}, {}, print0, env)

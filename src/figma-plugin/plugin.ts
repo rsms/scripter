@@ -1,8 +1,9 @@
 import { EvalRequestMsg, EvalResponseMsg } from "../common/messages"
+import { fmtValue } from "../common/fmtval"
 
 // defined by library ../common/scripter-env.js
 interface EvalScriptFun {
-  (reqid :string, js :string) :any
+  (reqid :string, valueFormatter :(v:any)=>string, js :string) :any
   readonly lineOffset :number
 }
 declare const evalScript :EvalScriptFun
@@ -43,10 +44,10 @@ async function evalCode(req :EvalRequestMsg) {
     figma.ui.postMessage(response)
   }
   let triedToFixSnippets = new Set<string>()
-  let maxRetries = 5
+  let maxRetries = 10
   while (true) {
     try {
-      let r = evalScript(req.id, req.js)
+      let r = evalScript(req.id, fmtValue, req.js)
       while (r instanceof Promise) {
         dlog("plugin awaiting promise from script...")
         r = await r
