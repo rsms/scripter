@@ -5,7 +5,9 @@ import * as monaco from "monaco-editor"
 // import * as monaco from "./monaco-ambient"
 import { api as defaultPluginApiVersion } from "../figma-plugin/manifest.json"
 import { SourceMapConsumer, SourceMapGenerator } from "../misc/source-map"
-import { initData, settings, Script } from "./data"
+import { db, initData } from "./data"
+import { config } from "./config"
+import { Script } from "./script"
 
 const isMac = navigator.platform.indexOf("Mac")
 const print = console.log.bind(console)
@@ -14,18 +16,6 @@ const storageKeyViewState = "figsketch.viewstate"
 
 // defined globally in webpack config
 declare const SOURCE_MAP_VERSION :string
-
-let defaultProgramCode = `
-  for (let n of figma.currentPage.selection) {
-    if (isText(n)) {
-      n.characters = n.characters.trim()
-    }
-  }
-  function isText(n :BaseNode) :n is TextNode {
-    let unusedone = 5
-    return n.type == "TEXT"
-  }
-`.trim().replace(/\n  /mg, "\n")
 
 let pluginApiVersion :string = defaultPluginApiVersion
 let editor :monaco.editor.IStandaloneCodeEditor
@@ -64,100 +54,104 @@ let edOptions :monaco.editor.IEditorOptions = {
 }
 
 
-let currentScript = new Script("")
+let currentScript :Script
+let currentModel  :monaco.editor.ITextModel
 
 
-async function setupEditor() {
-  // define editor themes
-  defineEditorThemes()
+async function loadLastOpenedScript() :Promise<Script> {
+  if (config.lastOpenScript > 0) {
+    try {
+      return await Script.load(config.lastOpenScript)
+    } catch (err) {
+      console.error(`failed to reopen last open script:`, err.stack)
+    }
+  }
+  return Script.createDefault()
+}
 
-  // load past code buffer
-  let code = localStorage.getItem(storageKeyBuffer0)
-  if (!code || code.trim().length == 0) {
-    code = defaultProgramCode
+
+function onCurrentScriptSave() {
+  config.lastOpenScript = currentScript.id
+  menu.updateScriptList()
+}
+
+
+let nextModelId = 0
+
+
+function setCurrentScript(script :Script) :monaco.editor.ITextModel {
+  if (currentScript === script) {
+    return currentModel
+  }
+  if (currentScript) {
+    currentScript.removeListener("save", onCurrentScriptSave)
+  }
+  currentScript = script
+  currentScript.on("save", onCurrentScriptSave)
+
+  if (currentModel) {
+    let oldModel = currentModel
+    setTimeout(() => { oldModel.dispose() }, 0)
   }
 
-  // load previously-stored view state
-  let viewState :any
-  try {
-    viewState = JSON.parse(localStorage.getItem(storageKeyViewState))
-    if (viewState.options) for (let k in viewState.options) {
-      edOptions[k] = viewState.options[k]
-      if (k == "fontSize") {
-        document.body.style.fontSize = `${edOptions[k]}px`
-      }
-    }
-  } catch (_) {}
-
-  // configure typescript
-  let tsconfig = monaco.languages.typescript.typescriptDefaults
-  tsconfig.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
-  tsconfig.setCompilerOptions({
-    // Note: When we set compiler options, we _override_ the default ones.
-    // This is why we need to set allowNonTsExtensions.
-    allowNonTsExtensions: true, // make "in-memory source" work
-    target: 6,
-    allowUnreachableCode: true,
-    allowUnusedLabels: true,
-    removeComments: true,
-    module: 1, // ts.ModuleKind.CommonJS
-    // lib: [ "esnext", "dom" ],
-    sourceMap: true,
-
-    // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
-    // we disable sourcemaps for now (since it's pointless).
-    // However, we could use the sourcemap lib to decorate error stack traces a la
-    // evanw's sourcemap-support. The plugin could do this, so that the stack trace in Figma's
-    // console is updated as well as what we display in the Scripter UI. Upon error, the plugin
-    // process could request sourcemap from Scripter, so that we only have to transmit it on error.
-    // inlineSourceMap: true,
-  })
-  tsconfig.addExtraLib(await resources["figma.d.ts"], "scripter:figma.d.ts")
-  tsconfig.addExtraLib(await resources["scripter-env.d.ts"], "scripter:scripter-env.d.ts")
-  // tsconfig.setDiagnosticsOptions({noSemanticValidation:true})
-
-  // create editor model
-  let model = monaco.editor.createModel(code, "typescript",
-    // TODO: use meaningful names instead of "1" when users can save scripts
-    monaco.Uri.from({scheme:"scripter", path:"1.ts"})
+  currentModel = monaco.editor.createModel(
+    script.body,
+    "typescript",
+    monaco.Uri.from({scheme:"scripter", path:`${nextModelId++}.ts`})
   )
 
-  // create editor
-  editor = monaco.editor.create(document.getElementById('editor')!, {
-    model,
-    theme: 'scripter-light',
-    ...edOptions,
-    extraEditorClassName: 'scripter-light',
-  })
+  return currentModel
+}
 
-  // restore editor view state
-  if (viewState && viewState.editor) {
+
+function restoreViewState() {
+  if (currentScript.editorViewState) {
     // workaround for a bug: Restoring the view state on the next frame works around
     // a bug with variable-width fonts.
     setTimeout(() => {
-      editor.restoreViewState(viewState.editor as monaco.editor.ICodeEditorViewState)
+      editor.restoreViewState(currentScript.editorViewState)
     }, 0)
   }
+}
 
-  // assign focus
+
+function switchToScript(script :Script) {
+  let model = setCurrentScript(script)
+  editor.setModel(model)
+  initModel(model)
   editor.focus()
+  config.lastOpenScript = currentScript.id
+  restoreViewState()
+}
 
-  // monaco.languages.registerCodeActionProvider("typescript", {
-  //   provideCodeActions( model: monaco.editor.ITextModel,
-  //     range: monaco.Range,
-  //     context: monaco.languages.CodeActionContext,
-  //     token: monaco.CancellationToken,
-  //   ): ( monaco.languages.Command | monaco.languages.CodeAction)[]
-  //      | Promise<(monaco.languages.Command | monaco.languages.CodeAction)[]>
-  //   {
-  //     print("hola!", context, range)
-  //     return []
-  //   }
-  // })
 
+function newScript() :Script {
+  let script = Script.createEmpty()
+  switchToScript(script)
+  return script
+}
+
+
+async function openScript(id :number) {
+  let script = await Script.load(id)
+  if (!script) {
+    console.error(`openScript(${id}) failed (not found)`)
+    return
+  }
+  switchToScript(script)
+}
+
+
+function initModel(model :monaco.editor.ITextModel) {
   // filter out some errors
   let lastSeenMarkers :monaco.editor.IMarker[] = []
   let onDidChangeDecorationsCallbackRunning = false
+
+  model.onWillDispose(() => {
+    model.onDidChangeDecorations(() => {})
+    model.onWillDispose(() => {})
+  })
+
   model.onDidChangeDecorations(async ev => {
     if (onDidChangeDecorationsCallbackRunning) {
       // print("onDidChangeDecorationsCallbackRunning -- ignore")
@@ -240,6 +234,78 @@ async function setupEditor() {
       onDidChangeDecorationsCallbackRunning = false
     }
   })
+}
+
+
+async function setupEditor() {
+  // define editor themes
+  defineEditorThemes()
+
+  // load previously-stored view state
+  if (config.fontSize) {
+    edOptions.fontSize = config.fontSize
+    document.body.style.fontSize = `${config.fontSize}px`
+  }
+
+  // configure typescript
+  let tsconfig = monaco.languages.typescript.typescriptDefaults
+  tsconfig.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
+  tsconfig.setCompilerOptions({
+    // Note: When we set compiler options, we _override_ the default ones.
+    // This is why we need to set allowNonTsExtensions.
+    allowNonTsExtensions: true, // make "in-memory source" work
+    target: 6,
+    allowUnreachableCode: true,
+    allowUnusedLabels: true,
+    removeComments: true,
+    module: 1, // ts.ModuleKind.CommonJS
+    // lib: [ "esnext", "dom" ],
+    sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
+
+    // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
+    // we disable sourcemaps for now (since it's pointless).
+    // However, we could use the sourcemap lib to decorate error stack traces a la
+    // evanw's sourcemap-support. The plugin could do this, so that the stack trace in Figma's
+    // console is updated as well as what we display in the Scripter UI. Upon error, the plugin
+    // process could request sourcemap from Scripter, so that we only have to transmit it on error.
+    // inlineSourceMap: true,
+  })
+  tsconfig.addExtraLib(await resources["figma.d.ts"], "scripter:figma.d.ts")
+  tsconfig.addExtraLib(await resources["scripter-env.d.ts"], "scripter:scripter-env.d.ts")
+  // tsconfig.setDiagnosticsOptions({noSemanticValidation:true})
+
+  // load past code buffer
+  let script = await loadLastOpenedScript()
+  let model = setCurrentScript(script)
+
+  // create editor
+  editor = monaco.editor.create(document.getElementById('editor')!, {
+    model,
+    theme: 'scripter-light',
+    ...edOptions,
+    extraEditorClassName: 'scripter-light',
+  })
+
+  // restore editor view state
+  restoreViewState()
+
+  // assign focus
+  editor.focus()
+
+  // monaco.languages.registerCodeActionProvider("typescript", {
+  //   provideCodeActions( model: monaco.editor.ITextModel,
+  //     range: monaco.Range,
+  //     context: monaco.languages.CodeActionContext,
+  //     token: monaco.CancellationToken,
+  //   ): ( monaco.languages.Command | monaco.languages.CodeAction)[]
+  //      | Promise<(monaco.languages.Command | monaco.languages.CodeAction)[]>
+  //   {
+  //     print("hola!", context, range)
+  //     return []
+  //   }
+  // })
+
+  initModel(model)
 
   // // DEBUG print compiled JS code
   // compileCurrentProgram().then(r => print(r.outputFiles[0].text))
@@ -255,22 +321,65 @@ async function setupEditor() {
   //   print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings())
   // })()
 
+  let isRestoringViewState = false
+  let isRestoringModel = false
+
   editor.onDidChangeModelContent((e: monaco.editor.IModelContentChangedEvent) :void => {
-    setNeedsSaveEditorBuffer()
+    // getAlternativeVersionId is a version number that tracks undo/redo.
+    // i.e. version=1; edit -> version=2; undo -> version=1.
+    if (!isRestoringModel) {
+      currentScript.updateBody(currentModel.getValue(), currentModel.getAlternativeVersionId())
+    }
     invalidateSemanticDiagnostics()
   })
 
   editor.onDidChangeCursorPosition((e: monaco.editor.ICursorPositionChangedEvent) :void => {
-    setNeedsSaveViewState()
+    if (!isRestoringViewState && !isRestoringModel) {
+      setNeedsSaveViewState()
+    }
   })
 
   editor.onDidChangeCursorSelection((e: monaco.editor.ICursorSelectionChangedEvent) :void => {
-    setNeedsSaveViewState()
+    if (!isRestoringViewState && !isRestoringModel) {
+      setNeedsSaveViewState()
+    }
+  })
+
+  editor.onDidChangeModel((e: monaco.editor.IModelChangedEvent) :void => {
+    menu.updateScriptList()
   })
 
   // editor.addCommand(monaco.KeyCode.Enter | monaco.KeyCode.Ctrl, (ctx :any) => {
   //   print("handler called with ctx:", ctx)
   // })
+
+  // handle changes to the database that were made by another tab
+  db.on("remotechange", async ev => {
+    if (ev.type == "update") {
+      if (ev.store == "scriptViewState" && ev.key == currentScript.id) {
+        // view state of currently-open script changed in another tab
+        let viewState = await currentScript.reloadEditorViewState()
+        isRestoringViewState = true
+        editor.restoreViewState(viewState)
+        isRestoringViewState = false
+      } else if (ev.store == "scriptBody" && ev.key == currentScript.id) {
+        // script data of currently-open script changed
+        await currentScript.load()
+        isRestoringModel = true
+        isRestoringViewState = true
+        currentModel.setValue(currentScript.body)
+        editor.restoreViewState(currentScript.editorViewState)
+        isRestoringModel = false
+        isRestoringViewState = false
+      } else if (ev.store == "scripts") {
+        menu.updateScriptList()
+      }
+    }
+  })
+
+  if (currentScript.id <= 0) {
+    currentScript.save()
+  }
 }
 
 
@@ -349,7 +458,7 @@ async function getSemanticDiagnostics() :Promise<any[]> {
     // "blinking" effect of error markers.
     let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
     let tsclient = await tsworker(editor.getModel().uri)
-    _semdiag = await tsclient.getSemanticDiagnostics("scripter:1.ts")
+    _semdiag = await tsclient.getSemanticDiagnostics(currentModel.uri.toString())
   }
   return _semdiag
 }
@@ -364,12 +473,7 @@ let saveViewStateTimer :any = null
 function saveViewState() {
   clearTimeout(saveViewStateTimer as number)
   saveViewStateTimer = null
-  localStorage.setItem(storageKeyViewState, JSON.stringify({
-    editor: editor.saveViewState(),
-    options: {
-      fontSize: edOptions.fontSize,
-    },
-  }))
+  currentScript.editorViewState = editor.saveViewState()
 }
 
 function setNeedsSaveViewState() {
@@ -378,26 +482,6 @@ function setNeedsSaveViewState() {
   }
 }
 
-
-let saveEditorBufferTimer :any = null
-
-function saveEditorBuffer() {
-  clearTimeout(saveEditorBufferTimer as number)
-  saveEditorBufferTimer = null
-
-  // save to local storage
-  let code = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-  localStorage.setItem(storageKeyBuffer0, code)
-
-  // save view state too
-  saveViewState()
-}
-
-function setNeedsSaveEditorBuffer() {
-  if (saveEditorBufferTimer === null) {
-    saveEditorBufferTimer = setTimeout(saveEditorBuffer, 200)
-  }
-}
 
 interface EvalTransaction {
   resolve(res :any) :void
@@ -601,17 +685,19 @@ function runqPush() :RunQItem {
   let runqEl = document.querySelector("#toolbar .runqueue") as HTMLElement
   let e = document.createElement("div")
   e.className = "pending"
-  e.innerText = "\u25CB"
   runqEl.appendChild(e)
+  let makeVisible = () => { e.classList.add("visible") }
+  // only show the [clock] icon when the run takes longer than 60ms
+  let visibleTimer = setTimeout(makeVisible, 60)
   return {
     clearWithStatus(state :"ok"|"error") {
+      clearTimeout(visibleTimer)
       if (state == "ok") {
         e.className = "ok"
-        e.innerText = "\uE13C"
       } else {
         e.className = "err"
-        e.innerText = "\uE13D"
       }
+      makeVisible()
       setTimeout(() => {
         e.classList.add("hide")
         setTimeout(() => { runqEl.removeChild(e) }, 250)
@@ -631,7 +717,7 @@ async function runCurrentProgram() :Promise<void> {
   hideWarningMessage()
   clearAllDecorations()
   clearAllMsgZones()
-  flashRunButton()
+  toolbar.flashRunButton()
   let runqItem = runqPush()
   let result = await compileCurrentProgram()
   if (result.outputFiles && result.outputFiles.length) {
@@ -644,6 +730,7 @@ async function runCurrentProgram() :Promise<void> {
         jsCode = f.text
       }
     }
+    jsCode = jsCode.replace(/\n\/\/#\s*sourceMappingURL=.+/, "")
     try {
       await evalPluginCode(jsCode, sourceMapCode)
       runqItem.clearWithStatus("ok")
@@ -651,6 +738,7 @@ async function runCurrentProgram() :Promise<void> {
       runqItem.clearWithStatus("error")
     }
   }
+  editor.focus()
 }
 
 
@@ -1067,23 +1155,140 @@ function setFigmaApiVersion(version :string) {
 }
 
 
-let runButton :HTMLElement
+class ToolbarUI {
+  el :HTMLElement = document.getElementById('toolbar') as HTMLElement
+  runButton :HTMLElement
+  menuButton :HTMLElement
 
-function setupToolbarUI() {
-  let toolbar = document.getElementById('toolbar') as HTMLElement
-  runButton = toolbar.querySelector('.button.run') as HTMLElement
-  runButton.title = runButton.title + (
-    isMac != -1 ? "  (⌘⏎)"
-                : "  (Ctrl+Enter)"
-  )
-  runButton.onclick = runCurrentProgram
+  init() {
+    this.runButton = this.el.querySelector('.button.run') as HTMLElement
+    this.runButton.title = this.runButton.title + (
+      isMac != -1 ? "  (⌘⏎)"
+                  : "  (Ctrl+Enter)"
+    )
+    this.runButton.addEventListener("click", ev => {
+      runCurrentProgram()
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+
+    this.menuButton = this.el.querySelector('.button.menu') as HTMLElement
+    this.menuButton.addEventListener("click", ev => {
+      menu.toggle()
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+  }
+
+  flashRunButton() {
+    this.runButton.classList.add("flash")
+    setTimeout(() => this.runButton.classList.remove("flash"), 300)
+  }
 }
 
 
-function flashRunButton() {
-  runButton.classList.add("flash")
-  setTimeout(()=>runButton.classList.remove("flash"), 300)
+var toolbar = new ToolbarUI()
+
+
+class MenuUI {
+  visible :boolean = false
+  el :HTMLElement = document.getElementById('menu') as HTMLElement
+  scriptListEl :HTMLElement
+  newScriptButton :HTMLElement
+
+  init() {
+    this.el.addEventListener("keydown", ev => {
+      if (ev.key == "Escape") {
+        this.close()
+      }
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+
+    this.scriptListEl = this.el.querySelector(".script-list") as HTMLElement
+
+    this.newScriptButton = this.el.querySelector(".button.new") as HTMLElement
+    this.newScriptButton.onclick = () => {
+      newScript()
+    }
+  }
+
+
+  async updateScriptList() {
+    if (!this.visible) {
+      return
+    }
+
+    let [scripts] = await db.read(["scripts"], async scripts => {
+      let modifiedAt = scripts.getIndex("modifiedAt")
+      return modifiedAt.getAll()
+    })
+
+    if (currentScript.id <= 0) {
+      // special case: list unsaved script
+      scripts.push(currentScript.meta)
+    }
+
+    this.scriptListEl.style.visibility = "hidden"
+    this.scriptListEl.innerText = ""
+
+    for (let script of scripts.reverse()) {
+      let li = document.createElement("li")
+      li.innerText = script.name
+      if (script.id <= 0) {
+        li.classList.add("unsaved")
+        li.innerText += " •"
+      }
+      li.title = `Last modified ${script.modifiedAt.toLocaleString()}`
+      if (currentScript && script.id == currentScript.id) {
+        li.classList.add("active")
+      }
+      li.onclick = () => {
+        openScript(script.id)
+      }
+      this.scriptListEl.appendChild(li)
+    }
+
+    this.scriptListEl.style.visibility = null
+  }
+
+
+  onOpen() {
+    this.el.focus()
+    this.updateScriptList()
+  }
+
+  onClose() {
+    editor.focus()
+  }
+
+  toggle() :boolean {
+    this.visible = this.el.classList.toggle("visible", !this.visible)
+    document.body.classList.toggle("menuVisible", this.visible)
+    toolbar.menuButton.classList.toggle("on", this.visible)
+    if (this.visible) {
+      this.onOpen()
+    } else {
+      this.onClose()
+    }
+    return this.visible
+  }
+
+  open() {
+    if (!this.visible) {
+      this.toggle()
+    }
+  }
+
+  close() {
+    if (this.visible) {
+      this.toggle()
+    }
+  }
 }
+
+
+var menu = new MenuUI()
 
 
 function setupKeyboardHandlers() {
@@ -1091,6 +1296,11 @@ function setupKeyboardHandlers() {
     if (key == "Enter" || key == "r" || key == "s") {
       runCurrentProgram()
       return true
+    }
+
+    // toggle menu
+    if (key == "m") {
+      menu.toggle()
     }
 
     // editor options
@@ -1113,7 +1323,9 @@ function setupKeyboardHandlers() {
     }
     if (shouldUpdateOptions) {
       editor.updateOptions(updatedOptions)
-      setNeedsSaveViewState()
+      if ("fontSize" in updatedOptions) {
+        config.fontSize = updatedOptions.fontSize
+      }
       return true
     }
 
@@ -1130,9 +1342,9 @@ function setupKeyboardHandlers() {
 
 function setupMessageHandler() {
   window.onmessage = ev => {
-    print("ui received message",
-      JSON.stringify({ origin: ev.origin, data: ev.data }, null, "  ")
-    )
+    // print("ui received message",
+    //   JSON.stringify({ origin: ev.origin, data: ev.data }, null, "  ")
+    // )
     let msg = ev.data
     if (msg && typeof msg == "object") {
       switch (msg.type) {
@@ -1157,13 +1369,17 @@ function setupMessageHandler() {
 
 async function main() {
   await initData()
-  setupToolbarUI()
+  await config.load()
+  menu.init()
+  toolbar.init()
   setupEditor()
   setupKeyboardHandlers()
   setupMessageHandler()
 
   // signal to parent that we are ready
   parent.postMessage({ type: "ui-init" }, '*')
+
+  setTimeout(() => { menu.open() },100)
 }
 
 

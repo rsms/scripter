@@ -7,8 +7,18 @@
   <!-- <link href="https://rsms.me/res/fonts/ibm-plex-mono.css" rel="stylesheet"> -->
 </head>
 <body>
-  <div id="progress-spinner"></div>
-  <div id="editor"></div>
+  <div id="main">
+    <div id="menu" tabindex=0>
+      <div class="section">
+        <div class="button new" title="New script"
+          style="background-image:url(<%= require('./icon-add.svg') %>)"></div>
+        <!-- <span>Scripts</span> -->
+      </div>
+      <ul class="script-list">
+      </ul>
+    </div>
+    <div id="editor"></div>
+  </div>
   <div id="message">
     <div class="warning-icon">⚠</div>
     <div class="message"><p>in set_characters: Cannot write to node with unloaded font "Roboto Regular". Please call figma.loadFontAsync({ family: "Roboto", style: "Regular" }) and await the returned promise first.
@@ -16,13 +26,17 @@
     <div class="close-button">✗</div>
   </div>
   <div id="toolbar">
-    <div class="run button" title="Run">►</div>
+    <div class="button menu"
+      style="background-image:url(<%= require('./icon-menu.svg') %>)"></div>
     <div class="runqueue">
-      <!-- <div class="pending">&#x25CB;</div>
-      <div class="ok">&#xE13C;</div>
-      <div class="err">&#xE13D;</div> -->
+      <!-- <div class="pending"></div>
+      <div class="ok"></div>
+      <div class="err"></div> -->
     </div>
+    <div class="button run" title="Run"
+      style="background-image:url(<%= require('./icon-play.svg') %>)"></div>
   </div>
+  <div id="progress-spinner"></div>
   <script type="text/javascript" src="resources.js?v=${BUILD_VERSION}"></script>
   <script type="text/javascript" src="monaco-${MONACO_VERSION}/monaco.js"></script>
 </body>

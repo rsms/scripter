@@ -1,4 +1,4 @@
-import { Database } from "./xdb"
+import * as xdb from "./xdb"
 
 const print = console.log.bind(console)
 

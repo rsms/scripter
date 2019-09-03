@@ -45,8 +45,12 @@ return {
 
   module: {
     rules: [
-      // Converts TypeScript code to JavaScript
+      // TypeScript -> JavaScript
       { test: /\.tsx?$/, use: 'ts-loader', exclude: /node_modules|monaco-ambient/ },
+
+      // Allows you to use "<%= require('./file.svg') %>" in your HTML code to get a data URI.
+      // In CSS simply use url("./file.svg").
+      { test: /\.(png|jpg|gif|webp|svg)$/, use: [{ loader: 'url-loader' }] },
 
       // Enables including CSS by doing "import './file.css'" in your TypeScript code
       // { test: /\.css$/, loader: [{ loader: 'style-loader' }, { loader: 'css-loader' }] },
@@ -96,6 +100,9 @@ return {
               require('postcss-import'),
               require('postcss-preset-env')({
                 browsers: 'last 2 versions',
+                features: {
+                  'nesting-rules': true
+                },
               }),
             ].concat(isDevMode ? [] : [
               // plugins only active for mode=production

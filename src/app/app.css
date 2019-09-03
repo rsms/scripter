@@ -27,6 +27,7 @@ a, a:active, a:visited { color: inherit; }
 :root {
   --toolbarHeight: 32px;
   --messageHeight: 48px;
+  --menuWidth: 160px;
 }
 
 body {
@@ -59,28 +60,17 @@ pre { white-space:pre-wrap }
 code { white-space:nowrap }
 code b, pre b, tt b { font-weight:540 }
 
-#editor {
-  position: absolute;
-  left: 0; top: 0; right:0; bottom: var(--toolbarHeight);
-}
-
 
 #progress-spinner {}
 
 
-#toolbar {
-  position: absolute;
-  left: 0; right:0; bottom: 0;
-  height: var(--toolbarHeight);
-  background: #333;
-  color: white;
-  z-index:3;
-  display: flex;
-  justify-content: space-between;
-  border-bottom-left-radius: 2px; /* match figma dialog corner radius */
-  border-bottom-right-radius: 2px; /* match figma dialog corner radius */
+@keyframes button-flash {
+  0%   { background: lightgreen; }
+  100% {  }
 }
-#toolbar .button {
+
+
+.button {
   flex: 0 0 auto;
   display: block;
   width: var(--toolbarHeight);
@@ -91,37 +81,172 @@ code b, pre b, tt b { font-weight:540 }
   user-select: none;
   opacity: 0.8;
   /*transition: background 200ms ease-out;*/
+  background-position: center center;
+  background-repeat: no-repeat;
+
+  &:hover { opacity:1; background-color: #eee; }
+  &:active { opacity:1; background-color: #ccc; }
+  &.flash { animation: button-flash 200ms 1; }
 }
-#toolbar .button:hover { opacity:1; background: black; }
-#toolbar .runqueue {
-  display: flex;
-  min-width: var(--toolbarHeight);
+
+
+#toolbar {
+  position: absolute;
+  left: 0; right:0; bottom: 0;
   height: var(--toolbarHeight);
-  line-height: var(--toolbarHeight);
+  background: #eee;
+  color: #333;
+  z-index:3;
+  display: flex;
+  /*justify-content: space-between;*/
+  border-bottom-left-radius: 2px; /* match figma dialog corner radius */
+  border-bottom-right-radius: 2px; /* match figma dialog corner radius */
+
+  & .button {
+    &:hover { opacity:1; background-color: #ddd; }
+    &:active { opacity:1; background-color: #aaa; }
+    &.menu.on {
+      opacity:1;
+      background: #ddd;
+      &:hover { background-color: #ccc; }
+      &:active { background-color: #bbb; }
+    }
+  }
+
+  & .runqueue {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: center;
+    min-width: var(--toolbarHeight);
+    height: var(--toolbarHeight);
+    line-height: var(--toolbarHeight);
+    font-size: 11px;
+    user-select: none;
+    pointer-events: none;
+    overflow: hidden;
+
+    & > div {
+      width: var(--toolbarHeight);
+      height: var(--toolbarHeight);
+      text-align: center;
+      transition: all 100ms ease-in;
+      transition-property: transform, opacity;
+      transform-origin: 50% 50%;
+      background-position: 0 0;
+      background-repeat: no-repeat;
+
+      visibility:hidden;
+      &.visible { visibility:visible; }
+
+      &.pending { background-image: url("./icon-clock.svg"); opacity:0.3; }
+      &.ok { background-image: url("./icon-success.svg"); }
+      &.err { background-image: url("./icon-error.svg"); }
+      &.hide {
+        /*min-width: 0px;
+        width: 0;*/
+        transform: translate(0, calc(var(--toolbarHeight) / 2));
+        opacity: 0;
+      }
+    }
+  }
+} /* #toolbar */
+
+
+
+#menu {
+  --padding: 8px;
+  --menuItemHeight: 24px;
+
+  position: absolute;
+  left:0;
+  top:0;
+  bottom: 0;
+
+  background: #fff;
+  border-right: 1px solid #ddd;
+  z-index: 3;
+  width: calc(var(--menuWidth) - calc(var(--padding) * 2));
+  padding: var(--padding);
+  flex: 0 0 auto;
+  outline: none;
   font-size: 11px;
-}
-#toolbar .runqueue > div {
-  min-width: var(--toolbarHeight);
-  text-align: center;
-  transition: all 100ms ease-in;
-  transform-origin: 50% 50%;
-}
-#toolbar .runqueue > div.ok { color: lightgreen; }
-#toolbar .runqueue > div.err { color: #FFF866; }
-#toolbar .runqueue > div.hide {
-  /*min-width: 0px;
-  width: 0;*/
-  transform: translate(0, calc(var(--toolbarHeight) / 2));
-  opacity: 0;
+
+  flex-direction:column;
+  display:none;
+  &.visible { display:flex; }
+
+  & * { font-size: inherit; }
+
+  & .button {
+    border-radius: 2px;
+    width:var(--menuItemHeight);
+    height:var(--menuItemHeight);
+  }
+
+  /*& h2 {
+    font-weight: inherit;
+    color: #ccc;
+  }*/
+
+  & ul {
+    list-style:none;
+
+    & li {
+      display:block;
+      height: var(--menuItemHeight);
+      /*background:lightpink;*/
+      display:flex;
+      align-items:center;
+      padding:0 8px;
+      user-select: none;
+      cursor: default;
+      border-radius:2px;
+      color: #444;
+
+      &:hover { background:#eee; }
+      &.active { color:#000; font-weight:600; }
+      &.unsaved { font-style:italic; }
+    }
+  }
+
+  & > .section {
+    height: var(--menuItemHeight);
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    padding-left:2px;
+    user-select: none;
+  }
+
+  & hr {
+    height:1px;
+    border:none;
+    background:rgba(0,0,0,0.1);
+    margin: 8px;
+  }
 }
 
 
-@keyframes button-flash {
-  0%   { background: lightgreen; }
-  100% {  }
+#main {
+  display: flex;
+  position: absolute;
+  left: 0; top: 0; right:0; bottom: var(--toolbarHeight);
+  & > * {
+    flex: 1 1 auto;
+  }
 }
-.button.flash {
-  animation: button-flash 200ms 1;
+
+
+#editor {
+  position: absolute;
+  left: 0; top: 0; right:0; bottom: 0;
+  /* for blur effect */
+  /*overflow:hidden;*/
+}
+
+body.menuVisible #editor {
+  left: var(--menuWidth);
 }
 
 
@@ -132,7 +257,7 @@ code b, pre b, tt b { font-weight:540 }
   background: #FFF866;
   color: black;
   box-shadow: 0 -1px 2px rgba(50,20,0,0.1), 0 -0.5px 0 rgba(0,0,0,0.1);
-  z-index:2;
+  z-index:4;
   font-size:11px;
   align-items: center;
   overflow: hidden;
@@ -167,12 +292,21 @@ code b, pre b, tt b { font-weight:540 }
   vertical-align: top;
 }*/
 body.showMessage #message { display: flex }
-body.showMessage #editor { bottom: calc(var(--messageHeight) + var(--toolbarHeight)); }
+body.showMessage #editor { bottom: var(--messageHeight); }
+
 
 
 .monaco-editor {
   font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
 }
+
+/*body.menuVisible .monaco-editor {
+  -webkit-filter: url('#blur');
+  filter: url('#blur');
+  -webkit-filter: blur(5px);
+  filter: blur(5px);
+}*/
+
 /*.monaco-editor .editor-scrollable {
   margin:8px 0;
 }*/
@@ -184,7 +318,7 @@ body.showMessage #editor { bottom: calc(var(--messageHeight) + var(--toolbarHeig
 
 /* decorate runtime error */
 .monaco-editor .runtimeErrorDecoration {
-  background: url("data:image/svg+xml,%3Csvg%20width%3D%226%22%20height%3D%223%22%20viewBox%3D%220%200%206%203%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5.4%200L2.4%203H1L4%200H5.4Z%22%20fill%3D%22%23FF9900%22%2F%3E%3Cpath%20d%3D%22M4%200L6%202V0.6L5.4%200H4Z%22%20fill%3D%22%23FF9900%22%2F%3E%3Cpath%20d%3D%22M0%202L1%203H2.4L0%200.599998V2Z%22%20fill%3D%22%23FF9900%22%2F%3E%3C%2Fsvg%3E") repeat-x bottom left;
+  background: url("./squiggly-line.svg") repeat-x bottom left;
   background-color: rgba(255, 240, 0, 0.2);
 }
 

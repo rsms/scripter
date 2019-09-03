@@ -1,3 +1,4 @@
+import { EventEmitter } from "./event"
 
 const print = console.log.bind(console)
 
@@ -24,6 +25,22 @@ interface DatabaseSnapshot {
   readonly storeInfo  :Map<string,StoreInfo>
 }
 
+type RemoteChangeEvent = RemoteStoreChangeEvent | RemoteRecordChangeEvent
+interface RemoteStoreChangeEvent {
+  store: string
+  type : "clear"
+}
+interface RemoteRecordChangeEvent {
+  store: string
+  type : "update"  // record was updated (put or add)
+       | "delete"  // record was removed
+  key: IDBValidKey
+}
+
+interface DatabaseEventMap {
+  "remotechange": RemoteChangeEvent
+}
+
 // interface Migrator {
 //   // upgradeSchema is called for every version step, i.e. upgrading from
 //   // version 3 -> 5 will call:
@@ -44,6 +61,7 @@ export function open(name :string, version :number, upgradefun? :UpgradeFun) :Pr
 
 
 // delete removes an entire database
+//
 export { _delete as delete };function _delete(name :string, onblocked? :()=>void) :Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let r = _indexedDB.deleteDatabase(name)
@@ -53,13 +71,26 @@ export { _delete as delete };function _delete(name :string, onblocked? :()=>void
       r.onerror = undefined
       reject(new Error("db blocked"))
     })
-    r.onsuccess = () => { resolve() }
+    r.onsuccess = () => {
+      if (navigator.userAgent.match(/Safari\//)) {
+        // Safari <=12.1.1 has a race condition bug where even after onsuccess is called,
+        // the database sometimes remains but without and actual object stores.
+        // This condition causes a subsequent open request to succeed without invoking an
+        // upgrade handler, and thus yielding an empty database.
+        // Running a second pass of deleteDatabase seem to work around this bug.
+        let r = _indexedDB.deleteDatabase(name)
+        r.onsuccess = () => { resolve() }
+        r.onerror = () => { reject(r.error) }
+      } else {
+        resolve()
+      }
+    }
     r.onerror = () => { reject(r.error) }
   })
 }
 
 
-export class Database {
+export class Database extends EventEmitter<DatabaseEventMap> {
   readonly db      :IDBDatabase  // underlying object
   readonly name    :string
   readonly version :number
@@ -73,21 +104,23 @@ export class Database {
 
   _isClosing = false
   _lastSnapshot :DatabaseSnapshot
+  _broadcastChannel :BroadcastChannel|undefined
 
   constructor(name :string, version :number) {
+    super()
     this.name = name
     this.version = version
   }
 
   // open the database, creating and/or upgrading it as needed using optional upgradefun
   open(upgradefun? :UpgradeFun) :Promise<void> {
-    return openDatabase(this.name, this.version, upgradefun).then(db => {
-      ;(this as any).db = db
-      this._onopen(upgradefun)
+    return openDatabase(this, upgradefun).then(() => {
+      this._setupCoordination()
+      return this._onopen(upgradefun)
     })
   }
 
-  _reopen(upgradefun? :UpgradeFun) {
+  _reopen(upgradefun? :UpgradeFun) :Promise<void> {
     // print("_reopen (database is closing)")
     if (!this.autoReopenOnClose) {
       return
@@ -114,19 +147,17 @@ export class Database {
     }
 
     // reopen
-    openDatabase(this.name, this.version, upgradefun).then(db => {
-      // print("db was reopened")
-      ;(this as any).db = db
+    return openDatabase(this, upgradefun).then(db => {
       this._isClosing = false
       delete this.transaction  // remove override
       for (let t of delayedTransactions) {
         t._flushDelayed()
       }
-      this._onopen(upgradefun)
+      return this._onopen(upgradefun)
     })
   }
 
-  _onopen(upgradefun? :UpgradeFun) {
+  async _onopen(upgradefun? :UpgradeFun) :Promise<void> {
     this._snapshot()
     this.db.onclose = () => { this._reopen(upgradefun) }
   }
@@ -134,18 +165,39 @@ export class Database {
   _snapshot() {
     let storeNames = this.storeNames
     let storeInfo = new Map<string,StoreInfo>()
-    let t = this.db.transaction(storeNames, "readonly")
-    for (let storeName of storeNames) {
-      let s = t.objectStore(storeName)
-      storeInfo.set(storeName, {
-        autoIncrement: s.autoIncrement,
-        indexNames: s.indexNames,
-        keyPath: s.keyPath,
-      } as StoreInfo)
+    if (storeNames.length > 0) {
+      let t = this.db.transaction(storeNames, "readonly")
+      // @ts-ignore workaround for Safari bug
+      // eval("1+1")
+      for (let storeName of storeNames) {
+        let s = t.objectStore(storeName)
+        storeInfo.set(storeName, {
+          autoIncrement: s.autoIncrement,
+          indexNames: s.indexNames,
+          keyPath: s.keyPath,
+        } as StoreInfo)
+      }
     }
     this._lastSnapshot = {
       storeNames,
       storeInfo,
+    }
+  }
+
+  _setupCoordination() {
+    if (typeof BroadcastChannel == "undefined") {
+      // environment doesn't support BroadcastChannel. No coordination.
+      return
+    }
+    this._broadcastChannel = new BroadcastChannel(`xdb:${this.name}.${this.version}`)
+    this._broadcastChannel.onmessage = ev => {
+      this.emitEvent("remotechange", ev.data as RemoteChangeEvent)
+    }
+  }
+
+  _broadcastChange(ev :RemoteChangeEvent) {
+    if (this._broadcastChannel) {
+      this._broadcastChannel.postMessage(ev)
     }
   }
 
@@ -196,7 +248,7 @@ export class Database {
   // handle transaction promise as part of operation promises.
   //
   transaction(mode: IDBTransactionMode, ...stores :string[]) :Transaction {
-    return createTransaction(this.db.transaction(stores, mode))
+    return createTransaction(this, this.db.transaction(stores, mode))
   }
 
 
@@ -304,10 +356,10 @@ export class UpgradeTransaction {
   readonly nextVersion :number
 
   _t  :Transaction  // the one transaction all upgrade operations share
-  db :IDBDatabase
+  db :Database
 
-  constructor(db :IDBDatabase, t :IDBTransaction, prevVersion :number, nextVersion :number) {
-    this._t = createTransaction(t)
+  constructor(db :Database, t :IDBTransaction, prevVersion :number, nextVersion :number) {
+    this._t = createTransaction(db, t)
     this.db = db
     this.prevVersion = prevVersion
     this.nextVersion = nextVersion
@@ -315,11 +367,11 @@ export class UpgradeTransaction {
 
   // storeNames is a list of objects store names that currently exist in the database.
   // Use ObjectStore.indexNames to list indexes of a given store.
-  get storeNames() :string[] { return Array.from(this.db.objectStoreNames) }
+  get storeNames() :string[] { return Array.from(this.db.db.objectStoreNames) }
 
   // hasStore returns true if the database contains the named object store
   hasStore(name :string) :boolean {
-    return this.db.objectStoreNames.contains(name)
+    return this.db.db.objectStoreNames.contains(name)
   }
 
   // getStore retrieves the names object store
@@ -329,17 +381,19 @@ export class UpgradeTransaction {
 
   // createStore creates a new object store
   createStore(name :string, params? :IDBObjectStoreParameters) :ObjectStore {
-    return new ObjectStore(this.db.createObjectStore(name, params), this._t)
+    let os = this.db.db.createObjectStore(name, params)
+    return new ObjectStore(this.db, os, this._t)
   }
 
   // deleteStore deletes the object store with the given name
   deleteStore(name :string) :void {
-    this.db.deleteObjectStore(name)
+    this.db.db.deleteObjectStore(name)
   }
 }
 
 
 export class Transaction extends Promise<void> {
+  readonly db :Database
   transaction :IDBTransaction  // underlying transaction object
 
   readonly aborted :boolean = false  // true if abort() was called
@@ -354,12 +408,13 @@ export class Transaction extends Promise<void> {
   }
 
   objectStore(name :string) :ObjectStore {
-    return new ObjectStore(this.transaction.objectStore(name), this)
+    return new ObjectStore(this.db, this.transaction.objectStore(name), this)
   }
 }
 
 
 export class ObjectStore {
+  readonly db            :Database
   readonly store         :IDBObjectStore
   readonly transaction   :Transaction   // associated transaction
 
@@ -373,7 +428,8 @@ export class ObjectStore {
   get name() :string { return this.store.name }
   set name(name :string) { this.store.name = name }
 
-  constructor(store :IDBObjectStore, transaction: Transaction) {
+  constructor(db :Database, store :IDBObjectStore, transaction: Transaction) {
+    this.db = db
     this.store = store
     this.transaction = transaction
   }
@@ -381,7 +437,9 @@ export class ObjectStore {
 
   // clear deletes _all_ records in store
   clear() :Promise<void> {
-    return this._promise(() => this.store.clear())
+    return this._promise(() => this.store.clear()).then(() => {
+      this.db._broadcastChange({ type:"clear", store: this.store.name })
+    })
   }
 
   // count the number of records matching the given key or key range in query
@@ -417,18 +475,24 @@ export class ObjectStore {
   // add inserts a new record. If a record already exists in the object store with the key,
   // then an error is raised.
   add(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
-    return this._promise(() => this.store.add(value, key))
+    return this._promise(() => this.store.add(value, key)).then(key =>
+      (this.db._broadcastChange({ type: "update", store: this.store.name, key }), key)
+    )
   }
 
   // put inserts or updates a record.
   put(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
-    return this._promise(() => this.store.put(value, key))
+    return this._promise(() => this.store.put(value, key)).then(key =>
+      (this.db._broadcastChange({ type: "update", store: this.store.name, key }), key)
+    )
   }
 
   // delete removes records in store with the given key or in the given key range in query.
   // Deleting a record that does not exists does _not_ cause an error but succeeds.
   delete(key :IDBValidKey|IDBKeyRange) :Promise<void> {
-    return this._promise(() => this.store.delete(key))
+    return this._promise(() => this.store.delete(key)).then(key =>
+      (this.db._broadcastChange({ type: "delete", store: this.store.name, key }), key)
+    )
   }
 
 
@@ -448,9 +512,52 @@ export class ObjectStore {
   }
 
   // getIndex retrieves the named index.
-  getIndex(name :string) :IDBIndex {
-    return this.store.index(name)
+  getIndex(name :string) :Index {
+    return new Index(this, this.store.index(name))
   }
+
+  _promise<R,T extends IDBRequest = IDBRequest>(f :()=>IDBRequest<R>) :Promise<R> {
+    return new Promise<R>((resolve, reject) => {
+      let r = f()
+      r.onsuccess = () => { resolve(r.result) }
+      r.onerror = () => { reject(r.error) }
+    })
+  }
+}
+
+
+class Index {
+  readonly store :ObjectStore
+  readonly index :IDBIndex
+
+  constructor(store :ObjectStore, index :IDBIndex) {
+    this.store = store
+    this.index = index
+  }
+
+
+  get keyPath(): string | string[] { return this.index.keyPath }
+  get multiEntry(): boolean { return this.index.multiEntry }
+
+  get name(): string { return this.index.name }
+  set name(v :string) { this.index.name = v }  // only valid during upgrade
+
+  get unique(): boolean { return this.index.unique }
+
+
+  count(key? :IDBValidKey|IDBKeyRange) :Promise<number> {
+    return this._promise(() => this.index.count(key))
+  }
+
+  get(key :IDBValidKey|IDBKeyRange) :Promise<any|undefined> {
+    return this._promise(() => this.index.get(key))
+  }
+
+  getAll(query? :IDBValidKey|IDBKeyRange, count? :number) :Promise<any[]> {
+    return this._promise(() => this.index.getAll(query, count))
+  }
+
+  // TOOD: implement more methods
 
   _promise<R,T extends IDBRequest = IDBRequest>(f :()=>IDBRequest<R>) :Promise<R> {
     return new Promise<R>((resolve, reject) => {
@@ -472,7 +579,7 @@ class DelayedTransaction extends Transaction {
   _delayed :DelayedObjectStore[] = []
 
   _flushDelayed() {
-    print("DelayedTransaction _flushDelayed")
+    // print("DelayedTransaction _flushDelayed")
     this.abort = Transaction.prototype.abort
     this.objectStore = Transaction.prototype.objectStore
 
@@ -495,12 +602,16 @@ class DelayedTransaction extends Transaction {
   objectStore(name :string) :ObjectStore {
     let info = this._db._lastSnapshot.storeInfo.get(name)!
     if (!info) { throw new Error("object store not found") }
-    let os = new DelayedObjectStore({
-      name,
-      autoIncrement: info.autoIncrement,
-      indexNames: info.indexNames,
-      keyPath: info.keyPath,
-    } as any as IDBObjectStore, this)
+    let os = new DelayedObjectStore(
+      this._db,
+      {
+        name,
+        autoIncrement: info.autoIncrement,
+        indexNames: info.indexNames,
+        keyPath: info.keyPath,
+      } as any as IDBObjectStore,
+      this
+    )
     // TODO: support ObjectStore.getIndex(name:string):IDBIndex
     this._delayed.push(os)
     return os
@@ -519,7 +630,7 @@ class DelayedObjectStore extends ObjectStore {
   _delayed :DelayedObjectStoreAction<any>[] = []
 
   _flushDelayed() {
-    print("DelayedObjectStore _flushDelayed", this._delayed)
+    // print("DelayedObjectStore _flushDelayed", this._delayed)
     ;(this as any).store = this.transaction.transaction.objectStore(this.store.name)
     this._promise = ObjectStore.prototype._promise
     this._delayed.forEach(({ f, resolve, reject }) => {
@@ -536,6 +647,108 @@ class DelayedObjectStore extends ObjectStore {
     })
   }
 }
+
+
+// export class MemoryDatabase extends Database {
+//   close() :void {}
+//   open(upgradefun? :UpgradeFun) :Promise<void> {
+//     return Promise.resolve()
+//   }
+
+//   transaction(mode: IDBTransactionMode, ...stores :string[]) :MemTransaction {
+//     return new MemTransaction(this, stores, mode)
+//   }
+// }
+
+// class MemObjectStore extends ObjectStore {
+//   _data = new Map<any,any>()
+
+//   clear() :Promise<void> {
+//     this._data.clear()
+//     return Promise.resolve()
+//   }
+
+//   count(key? :IDBValidKey|IDBKeyRange) :Promise<number> {
+//     // TODO count keys
+//     return Promise.resolve(this._data.size)
+//   }
+
+//   get(query :IDBValidKey|IDBKeyRange) :Promise<any|undefined> {
+//     return Promise.resolve(this._data.get(query))
+//   }
+
+//   getAll(query? :IDBValidKey|IDBKeyRange, count? :number) :Promise<any[]> {
+//     // TOOD: get multiple
+//     return Promise.resolve(this._data.get(query))
+//   }
+
+//   getKey(query :IDBValidKey|IDBKeyRange) :Promise<IDBValidKey|undefined> {
+//     let key :IDBValidKey|undefined
+//     for (let k of this._data.keys()) {
+//       key = k as IDBValidKey
+//       break
+//     }
+//     return Promise.resolve(key)
+//   }
+
+//   getAllKeys(query? :IDBValidKey|IDBKeyRange, count? :number) :Promise<IDBValidKey[]> {
+//     return Promise.resolve(Array.from(this._data.keys()))
+//   }
+
+//   add(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
+//     if (this._data.has(key)) {
+
+//     }
+//   }
+
+//   // put inserts or updates a record.
+//   put(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
+//     return this._promise(() => this.store.put(value, key)).then(key =>
+//       (this.db._broadcastChange({ type: "update", store: this.store.name, key }), key)
+//     )
+//   }
+
+//   // delete removes records in store with the given key or in the given key range in query.
+//   // Deleting a record that does not exists does _not_ cause an error but succeeds.
+//   delete(key :IDBValidKey|IDBKeyRange) :Promise<void> {
+//     return this._promise(() => this.store.delete(key)).then(key =>
+//       (this.db._broadcastChange({ type: "delete", store: this.store.name, key }), key)
+//     )
+//   }
+// }
+
+// class MemTransaction extends Transaction {
+//   db     :MemoryDatabase
+//   stores :string[]
+//   mode   :IDBTransactionMode
+
+//   constructor(db :MemoryDatabase, stores :string[], mode: IDBTransactionMode) {
+//     super(resolve => resolve())
+//     this.db = db
+//     this.stores = stores
+//     this.mode = mode
+//   }
+
+//   abort() :void {
+//     ;(this as any).aborted = true
+//   }
+
+//   objectStore(name :string) :ObjectStore {
+//     let os = new MemObjectStore(
+//       this._db,
+//       {
+//         name,
+//         autoIncrement: info.autoIncrement,
+//         indexNames: info.indexNames,
+//         keyPath: info.keyPath,
+//       } as any as IDBObjectStore,
+//       this
+//     )
+//     // TODO: support ObjectStore.getIndex(name:string):IDBIndex
+//     this._delayed.push(os)
+//     return os
+//   }
+// }
 
 
 
@@ -555,7 +768,7 @@ function activateDelayedTransaction(t :DelayedTransaction) {
   }
 }
 
-function createTransaction(tr :IDBTransaction) :Transaction {
+function createTransaction(db :Database, tr :IDBTransaction) :Transaction {
   // Note: For complicated reasons related to Promise implementation in V8, we
   // can't customize the Transaction constructor.
   var t = new Transaction((resolve, reject) => {
@@ -570,12 +783,13 @@ function createTransaction(tr :IDBTransaction) :Transaction {
       }
     }
   })
+  ;(t as any).db = db
   t.transaction = tr
   return t
 }
 
 
-function openDatabase(name :string, version :number, upgradef? :UpgradeFun) :Promise<IDBDatabase> {
+function openDatabase(db :Database, upgradef? :UpgradeFun) :Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((_resolve, reject) => {
     // Note on pcount: upgradef may take an arbitrary amount of time to complete.
     // The semantics of open() are so that open() should complete when the database
@@ -585,33 +799,42 @@ function openDatabase(name :string, version :number, upgradef? :UpgradeFun) :Pro
     // like for instance "post upgrade" code run that e.g. logs on the network.
     // To solve for this, we simply count promises with pcount and resolve when pcount
     // reaches zero (no outstanding processes.)
-    let openReq = _indexedDB.open(name, version)
+    let openReq = _indexedDB.open(db.name, db.version)
     let pcount = 1  // promise counter; starts with 1 outstanding process (the "open" action)
 
     let resolve = () => {
       if (--pcount == 0) {
-        _resolve(openReq.result)
+        ;(db as any).db = openReq.result
+        _resolve()
+      }
+    }
+
+    if (upgradef) {
+      openReq.onupgradeneeded = ev => {
+        ;(db as any).db = openReq.result
+        let u = new UpgradeTransaction(db, openReq.transaction, ev.oldVersion, ev.newVersion)
+
+        let onerr = err => {
+          // abort the upgrade if upgradef fails
+          try { u._t.abort() } catch(_) {}
+          reject(err)
+        }
+
+        pcount++
+        u._t.then(resolve).catch(onerr)
+
+        pcount++
+        try {
+          upgradef(u).then(resolve).catch(onerr)
+        } catch (err) {
+          onerr(err)
+        }
       }
     }
 
     openReq.onsuccess = () => { resolve() }
-
     openReq.onerror = () => { reject(openReq.error) }
-
-    if (upgradef) openReq.onupgradeneeded = ev => {
-      let db = openReq.result
-      let u = new UpgradeTransaction(db, openReq.transaction, ev.oldVersion, ev.newVersion)
-      pcount++
-      let onerr = err => {
-        // abort the upgrade if upgradef fails
-        try { u._t.abort() } catch(_) {}
-        reject(err)
-      }
-      try {
-        upgradef(u).then(resolve).catch(onerr)
-      } catch (err) {
-        onerr(err)
-      }
-    }
   })
 }
+
+
