@@ -8,6 +8,7 @@ const print = console.log.bind(console)
 class Data {
   lastOpenScript  :number = 0
   editorViewState :monaco.editor.ICodeEditorViewState|null = null
+  menuVisible     :bool = true
   fontSize?       :number = undefined
 }
 
@@ -19,7 +20,7 @@ class Config {
 
   get lastOpenScript() :number { return this.data.lastOpenScript }
   set lastOpenScript(v :number) {
-    if (this.data.lastOpenScript !== v && v > 0) {
+    if (this.data.lastOpenScript !== v && v != 0) {
       this.data.lastOpenScript = v
       this.dirty("lastOpenScript")
     }
@@ -43,10 +44,18 @@ class Config {
     }
   }
 
+  get menuVisible() :bool { return this.data.menuVisible }
+  set menuVisible(v :bool) {
+    if (this.data.menuVisible !== v) {
+      this.data.menuVisible = v
+      this.dirty("menuVisible")
+    }
+  }
+
 
 
   dirty(prop :string) {
-    print("config dirty", prop)
+    // print("config dirty", prop)
     this._dirtyProps.add(prop)
     if (this._saveTimer === null) {
       this._saveTimer = setTimeout(() => { this.saveDirty() }, 200)
@@ -73,7 +82,7 @@ class Config {
   async saveProps(props :string[]) {
     clearTimeout(this._saveTimer) ; this._saveTimer = null
     let values = props.map(k => this.data[k]) // copy since put is async
-    print("config saveProps", props, values)
+    print("[config] save", props, values)
     await db.modify(["config"], async s => {
       props.forEach((k, i) => s.put(values[i], k))
     })

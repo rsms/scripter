@@ -33,7 +33,7 @@ export class EventEmitter<EventMap = {[k:string]:any}> {
     }
   }
 
-  emitEvent<K extends keyof EventMap>(e :K, data? :EventMap[K]) {
+  triggerEvent<K extends keyof EventMap>(e :K, data? :EventMap[K]) {
     let m = this._events
     let s :Set<EventHandler<EventMap[K]>>
     if (m && (s = m.get(e))) {

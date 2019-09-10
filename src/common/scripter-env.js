@@ -8,7 +8,6 @@
 //
 const evalScript = (function(){
 
-
 function _assertFailure(args) {
   let e = new Error(args.length > 0 ? args.join(", ") : "assertion failed")
   e.name = "AssertionError"
@@ -26,6 +25,9 @@ function assert(condition) {
 
 function _print(reqId, valueFormatter, args) {
   console.log.apply(console, args)
+  if (!this.scripter.visualizePrint || this.canceled) {
+    return
+  }
 
   let message = ""
   let prevWasLinebreak = false
@@ -49,7 +51,7 @@ function _print(reqId, valueFormatter, args) {
     message: message,
     reqId: reqId,
     srcPos: {line:0,column:0},
-    srcLineOffset: evalScript.lineOffset,
+    srcLineOffset: _evalScript.lineOffset,
   }
 
   let e = new Error()
@@ -116,6 +118,7 @@ const figmaObject = Object.create(figma, {
 
 
 function closeScripter(message) {
+  if (this.canceled) { throw new Error("script canceled") }
   if (typeof figma != "undefined") {
     figma.closePlugin(message)
   } else if (typeof window != "undefined") {
@@ -174,6 +177,7 @@ function _cancelAllTimers(error) {
       clearInterval(id)
     } else {
       // Promise rejection function
+      clearTimeout(id)
       _timerDebug(id, `_cancelAllTimers reject`)
       try { t(new TimerCancelation()) } catch(_) {}
     }
@@ -201,10 +205,9 @@ function _wrapTimerFun(f, id, clearf) {
 // interface Timer extends Promise<void> { cancel():void }
 // timer(duration :number, handler :(canceled?:boolean)=>any) :Timer
 function timer(duration, f) {
+  if (this.canceled) { throw new Error("script canceled") }
   var id
   var rejectfun
-  let hasCustomFun = !!f
-  if (!hasCustomFun) { f = ()=>{} }
   let p = new Promise((resolve, reject) => {
     id = setTimeout(
       f ? () => {
@@ -242,8 +245,8 @@ function timer(duration, f) {
     }
   }
   let _catch = p.catch
-  p.catch = f => {
-    _catch.call(p, f)
+  p.catch = fn => {
+    _catch.call(p, fn)
     return p
   }
   return p
@@ -257,10 +260,11 @@ function _clearTimer(id) {
       _timerWaitPromise.resolve()
       _timerWaitPromise = null
     }
-  } else _timerDebug(id, `_clearTimer not found`)
+  } else _timerDebug(id, `_clearTimer: #${id} not found`)
 }
 
 function _setTimeout(f, duration) {
+  if (this.canceled) { throw new Error("script canceled") }
   let id = setTimeout(() => _wrapTimerFun(f, id, clearTimeout), duration)
   _timerDebug(id, `setTimeout start`)
   _timers[id] = 1
@@ -268,6 +272,7 @@ function _setTimeout(f, duration) {
 }
 
 function _setInterval(f, interval) {
+  if (this.canceled) { throw new Error("script canceled") }
   let id = setInterval(() => _wrapTimerFun(f, id, clearInterval), interval)
   _timerDebug(id, `setInterval start`)
   _timers[id] = 2
@@ -378,36 +383,72 @@ env.Paint.Gray = env.Paint.Grey
 
 // ------------------------------------------------------------------------------------------
 
-let jsHeader = `false||async function script(module,exports,print,_e){`
-let jsFooter = `}`
+env.scripter = {
+  visualizePrint: true,
+}
+
+// ------------------------------------------------------------------------------------------
+
+let jsHeader = `var canceled=false;[async function script(module,exports,print,_e){`
+let jsFooter = `},function(){canceled=true}]`
 let names = Object.keys(env).filter(k => k[0] != "_")
 try {
+  // @ts-ignore eval
   eval(`const {x,y} = {x:1,y:1}`)
   jsHeader += `const {${names.join(',')}} = _e;`
 } catch (_) {
   jsHeader += "var " + names.map(k => `${k} = _e.${k}`).join(",") + ";"
 }
 
-function evalScript(reqId, valueFormatter, js) {
-  return new Promise((resolve, reject) => {
-    function print0() {
-      _print(reqId, valueFormatter, Array.prototype.slice.call(arguments))
-    }
+function _evalScript(reqId, valueFormatter, js) {
+  var cancelFun
+  return [new Promise((resolve, reject) => {
     js = jsHeader + "\n" + js + "\n" + jsFooter
-    // console.log("evalScript", js)
+    // console.log("_evalScript", js)
     try {
       // @ts-ignore eval (indirect call means scope is global)
-      return (0,eval)(js)({id:"",exports:{}}, {}, print0, env)
-        .then(result => _awaitAsync().then(() => resolve(result)))
-        .catch(function(e) {
-          _cancelAllTimers(e)
+      let r = (0,eval)(js);
+
+      let env0 = {
+        canceled: false,
+        scripter: Object.assign({}, env.scripter),
+      }
+      for (let k in env) {
+        if (k != "scripter") {
+          let v = env[k]
+          env0[k] = typeof v == "function" ? v.bind(env0) : v
+        }
+      }
+
+      function print0() {
+        _print.call(env0, reqId, valueFormatter, Array.prototype.slice.call(arguments))
+      }
+
+      let cancelInner = r[1]
+      cancelFun = reason => {
+        env0.canceled = true
+        cancelInner()
+        _cancelAllTimers(reason || new Error("cancel"))
+        if (reason) {
+          reject(reason)
+        } else {
+          resolve(reason)
+        }
+      }
+
+      return r[0].call(env0, {id:"",exports:{}}, {}, print0, env0)
+        .then(result =>
+          _awaitAsync().then(() => resolve(result))
+        )
+        .catch(e => {
+          try { _cancelAllTimers(e) } catch(_) {}
           reject(e)
         })
     } catch(e) {
       _cancelAllTimers(e)
       reject(e)
     }
-  })
+  }), cancelFun]
 }
 
 
@@ -421,8 +462,8 @@ while (true) {
   i++ // skip past \n
   lineOffset++
 }
-evalScript.lineOffset = lineOffset
+_evalScript.lineOffset = lineOffset
 
 
-return evalScript
+return _evalScript
 })();

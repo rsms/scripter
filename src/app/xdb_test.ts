@@ -7,61 +7,61 @@ let db :xdb.Database
 
 async function openDatabase() {
   print("deleting database")
-  await xdb.delete("scripter")
+  await xdb.delete("mydb", () => print("delete is blocked -- waiting"))
 
   print("opening database")
-  db = await xdb.open("scripter", DB_VERSION, async t => {
+  db = await xdb.open("mydb", DB_VERSION, async t => {
     print(`upgrade database ${t.prevVersion} -> ${t.nextVersion}`)
-    let scripts = t.createStore("scripts", { keyPath: "id" })
-    // scripts.createIndex("hours", "hours", { unique: false })
-    await scripts.add({ id: "hello", code: `print("hello")` })
-    // let rec = await scripts.get("hello")
-    // let store2 = t.createStore("scripts2", { keyPath: "id" })
+    let articles = t.createStore("articles", { keyPath: "id" })
+    // articles.createIndex("hours", "hours", { unique: false })
+    await articles.add({ id: "hello", code: `print("hello")` })
+    // let rec = await articles.get("hello")
+    // let store2 = t.createStore("articles2", { keyPath: "id" })
     print("upgrade done")
   })
 
   print("opened database")
 
-  let script = await db.get("scripts", "hello")
-  print(`db.get("scripts", "hello") =>`, script)
-  script = await db.get("scripts", "helloz")
-  print(`db.get("scripts", "helloz") =>`, script)
+  let script = await db.get("articles", "hello")
+  print(`db.get("articles", "hello") =>`, script)
+  script = await db.get("articles", "helloz")
+  print(`db.get("articles", "helloz") =>`, script)
 
-  await db.put("scripts", { id: "meow", meow: "Meow meow" })
-  print(`db.get("scripts", "meow") =>`, await db.get("scripts", "meow"))
+  await db.put("articles", { id: "meow", meow: "Meow meow" })
+  print(`db.get("articles", "meow") =>`, await db.get("articles", "meow"))
 
-  print("getAll =>", await db.getAll("scripts"))
-  print("getAllKeys =>", await db.getAllKeys("scripts"))
+  print("getAll =>", await db.getAll("articles"))
+  print("getAllKeys =>", await db.getAllKeys("articles"))
 
   // print("deleting a record that exists")
-  // await db.modify(["scripts"], s => s.delete("hello"))
+  // await db.modify(["articles"], s => s.delete("hello"))
 
   // print("deleting a record that does not exist")
-  // await db.modify(["scripts"], s => s.delete("hellozzzz"))
+  // await db.modify(["articles"], s => s.delete("hellozzzz"))
 
-  ;[script] = await db.read(["scripts"], s => s.get("hello"))
-  print(`db.read(["scripts"], s => s.get("hello")) =>`, script)
+  ;[script] = await db.read(["articles"], s => s.get("hello"))
+  print(`db.read(["articles"], s => s.get("hello")) =>`, script)
 
   // await new Promise(r => setTimeout(r, 100))
 
   // simulate the user deleting the database in the browser
-  db.db.onclose(undefined as any as Event)
+  // db.db.onclose(undefined as any as Event)
 
   // print("db.get()...")
-  // script = await db.get("scripts", "hello")
+  // script = await db.get("articles", "hello")
   // print("script:", script)
 
   print("db.put() ...")
-  let key = await db.put("scripts", { id: "closetest", message: "close event test" })
-  print(`db.put("scripts", {...}) => ${key}`)
-  script = await db.get("scripts", "closetest")
+  let key = await db.put("articles", { id: "closetest", message: "close event test" })
+  print(`db.put("articles", {...}) => ${key}`)
+  script = await db.get("articles", "closetest")
   print("script:", script)
 
   // setInterval(
   //   () => {
   //     (async () => {
-  //       await db.put("scripts", { id: "closetest", message: "close event test" })
-  //       script = await db.get("scripts", "closetest")
+  //       await db.put("articles", { id: "closetest", message: "close event test" })
+  //       script = await db.get("articles", "closetest")
   //       print("script:", script)
   //     })().catch(err => console.error(err.stack))
   //   },
@@ -70,7 +70,7 @@ async function openDatabase() {
 
   // print("making transaction and aborting it")
   // try {
-  //   let t = db.transaction("readonly", "scripts")
+  //   let t = db.transaction("readonly", "articles")
   //   t.abort()
   //   await t
   //   print("transaction completed")

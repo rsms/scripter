@@ -25,20 +25,27 @@ interface DatabaseSnapshot {
   readonly storeInfo  :Map<string,StoreInfo>
 }
 
-type RemoteChangeEvent = RemoteStoreChangeEvent | RemoteRecordChangeEvent
-interface RemoteStoreChangeEvent {
-  store: string
-  type : "clear"
+interface StoreChangeEvent {
+  store :string
+  type  :"clear"
 }
-interface RemoteRecordChangeEvent {
-  store: string
-  type : "update"  // record was updated (put or add)
-       | "delete"  // record was removed
-  key: IDBValidKey
+interface RecordDeleteEvent {
+  store :string
+  type  :"delete"
+  key   :IDBValidKey|IDBKeyRange  // input key, not effective key
 }
+interface RecordUpdateEvent {
+  store :string
+  type  :"update"  // put or add
+  key   :IDBValidKey
+  value :any  // always undefined for remote events
+}
+type ChangeEvent = StoreChangeEvent | RecordDeleteEvent | RecordUpdateEvent
 
 interface DatabaseEventMap {
-  "remotechange": RemoteChangeEvent
+  "open": undefined
+  "change": ChangeEvent
+  "remotechange": ChangeEvent
 }
 
 // interface Migrator {
@@ -102,7 +109,8 @@ export class Database extends EventEmitter<DatabaseEventMap> {
   // a new recreated database.
   autoReopenOnClose :boolean = true
 
-  _isClosing = false
+  readonly isOpen = false
+
   _lastSnapshot :DatabaseSnapshot
   _broadcastChannel :BroadcastChannel|undefined
 
@@ -125,7 +133,6 @@ export class Database extends EventEmitter<DatabaseEventMap> {
     if (!this.autoReopenOnClose) {
       return
     }
-    this._isClosing = true
 
     let db = this
     let delayedTransactions :DelayedTransaction[] = []
@@ -148,7 +155,6 @@ export class Database extends EventEmitter<DatabaseEventMap> {
 
     // reopen
     return openDatabase(this, upgradefun).then(db => {
-      this._isClosing = false
       delete this.transaction  // remove override
       for (let t of delayedTransactions) {
         t._flushDelayed()
@@ -159,7 +165,12 @@ export class Database extends EventEmitter<DatabaseEventMap> {
 
   async _onopen(upgradefun? :UpgradeFun) :Promise<void> {
     this._snapshot()
-    this.db.onclose = () => { this._reopen(upgradefun) }
+    this.db.onclose = () => {
+      ;(this as any).isOpen = false
+      this._reopen(upgradefun)
+    }
+    ;(this as any).isOpen = true
+    this.triggerEvent("open")
   }
 
   _snapshot() {
@@ -191,14 +202,15 @@ export class Database extends EventEmitter<DatabaseEventMap> {
     }
     this._broadcastChannel = new BroadcastChannel(`xdb:${this.name}.${this.version}`)
     this._broadcastChannel.onmessage = ev => {
-      this.emitEvent("remotechange", ev.data as RemoteChangeEvent)
+      this.triggerEvent("remotechange", ev.data as ChangeEvent)
     }
   }
 
-  _broadcastChange(ev :RemoteChangeEvent) {
+  _broadcastChange(ev :ChangeEvent) {
     if (this._broadcastChannel) {
       this._broadcastChannel.postMessage(ev)
     }
+    this.triggerEvent("change", ev)
   }
 
   // close the database.
@@ -223,6 +235,7 @@ export class Database extends EventEmitter<DatabaseEventMap> {
     // the database when this happens, and run the upgrade function which will handle
     // initialization of the database.
     //
+    ;(this as any).isOpen = false
     this.db.close()
   }
 
@@ -476,22 +489,22 @@ export class ObjectStore {
   // then an error is raised.
   add(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
     return this._promise(() => this.store.add(value, key)).then(key =>
-      (this.db._broadcastChange({ type: "update", store: this.store.name, key }), key)
+      (this.db._broadcastChange({ type: "update", store: this.store.name, key, value }), key)
     )
   }
 
   // put inserts or updates a record.
   put(value :any, key? :IDBValidKey) :Promise<IDBValidKey> {
     return this._promise(() => this.store.put(value, key)).then(key =>
-      (this.db._broadcastChange({ type: "update", store: this.store.name, key }), key)
+      (this.db._broadcastChange({ type: "update", store: this.store.name, key, value }), key)
     )
   }
 
   // delete removes records in store with the given key or in the given key range in query.
   // Deleting a record that does not exists does _not_ cause an error but succeeds.
   delete(key :IDBValidKey|IDBKeyRange) :Promise<void> {
-    return this._promise(() => this.store.delete(key)).then(key =>
-      (this.db._broadcastChange({ type: "delete", store: this.store.name, key }), key)
+    return this._promise(() => this.store.delete(key)).then(() =>
+      (this.db._broadcastChange({ type: "delete", store: this.store.name, key }), undefined)
     )
   }
 

@@ -1,7 +1,12 @@
 export interface EvalRequestMsg {
-  type    :"eval"
-  id      :string  // opaque eval request ID
-  js      :string
+  type :"eval"
+  id   :string  // opaque eval request ID
+  js   :string
+}
+
+export interface EvalCancellationMsg {
+  type :"eval-cancel"
+  id   :string  // opaque eval request ID
 }
 
 export interface EvalResponseMsg {
@@ -20,7 +25,12 @@ export interface EvalResponseMsg {
 export interface PrintMsg {
   type    :"print"
   message :string
-  reqId   :string
+  reqId   :string  // eval request ID
   srcPos  :{line:number,column:number}  // source code position where error originated
   srcLineOffset :number  // line offset of source code (for sourcemap)
+}
+
+export interface ClosePluginMsg {
+  type     :"close-plugin"
+  message? :string  // optional message passed to figma.closePlugin()
 }

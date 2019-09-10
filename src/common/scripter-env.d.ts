@@ -10,7 +10,7 @@ type float = number
 type byte  = number
 type bool  = boolean
 
-/** Outputs a message to the console */
+/** Outputs a message to the console and on screen */
 declare function print(...args :any[]) :void
 
 /** Throws an error if condition is not thruthy */
@@ -25,12 +25,23 @@ declare function clearTimeout(id?: number): void;
 declare function setInterval(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 declare function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 
+/** Start a timer that expires after `duration` milliseconds */
+declare function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
 interface Timer extends Promise<void> {
   cancel() :void
   catch(onrejected?: ((reason: any) => any|PromiseLike<any>)|undefined|null): Timer;
 }
-/** Start a timer that expires after `duration` milliseconds */
-declare function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
+
+/** Set to true if the script was canceled by the user */
+declare const canceled :boolean
+
+/** Scripter-specific API */
+declare const scripter :ScripterAPI
+interface ScripterAPI {
+  /** Visualize print() results inline in editor. Defaults to true */
+  visualizePrint :bool
+}
+
 
 // Figma
 

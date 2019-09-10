@@ -1,8 +1,10 @@
 {
   "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "target": "es2017",
+    "jsx": "react",
     "lib": [
       "es2017",
       "dom"
@@ -10,5 +12,8 @@
   },
   "exclude": [
     "monaco-editor"
+  ],
+  "include": [
+    "global.d.ts"
   ]
 }
