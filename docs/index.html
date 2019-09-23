@@ -5,10 +5,20 @@
   <link href="res/iaw.css" rel="stylesheet">
   <link href="monaco-0.17.1/monaco.css" rel="stylesheet">
   <!-- <link href="https://rsms.me/res/fonts/ibm-plex-mono.css" rel="stylesheet"> -->
-<link href="app.e7a164e89646a5c84d83.css" rel="stylesheet"></head>
+<link href="app.c07775b8187e30671b92.css" rel="stylesheet"></head>
 <body>
-  <div id="progress-spinner"></div>
-  <div id="editor"></div>
+  <div id="main">
+    <div id="menu" tabindex=0>
+      <div class="section">
+        <div class="button new" title="New script"
+          style="background-image:url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEwIDE2SDIyIiBzdHJva2U9ImJsYWNrIi8+CjxwYXRoIGQ9Ik0xNiAxMEwxNiAyMiIgc3Ryb2tlPSJibGFjayIvPgo8L3N2Zz4K)"></div>
+        <!-- <span>Scripts</span> -->
+      </div>
+      <ul class="script-list">
+      </ul>
+    </div>
+    <div id="editor"></div>
+  </div>
   <div id="message">
     <div class="warning-icon">⚠</div>
     <div class="message"><p>in set_characters: Cannot write to node with unloaded font "Roboto Regular". Please call figma.loadFontAsync({ family: "Roboto", style: "Regular" }) and await the returned promise first.
@@ -16,13 +26,15 @@
     <div class="close-button">✗</div>
   </div>
   <div id="toolbar">
-    <div class="run button" title="Run">►</div>
+    <div class="button menu"></div>
     <div class="runqueue">
-      <!-- <div class="pending">&#x25CB;</div>
-      <div class="ok">&#xE13C;</div>
-      <div class="err">&#xE13D;</div> -->
+      <!-- <div class="pending"></div>
+      <div class="ok"></div>
+      <div class="err"></div> -->
     </div>
+    <div class="button run"></div>
   </div>
-  <script type="text/javascript" src="resources.js?v=jzvnb23r"></script>
+  <div id="progress-spinner"></div>
+  <script type="text/javascript" src="resources.js?v=k0vy4nib"></script>
   <script type="text/javascript" src="monaco-0.17.1/monaco.js"></script>
-<script type="text/javascript" src="app.e7a164e89646a5c84d83.js"></script></body>
+<script type="text/javascript" src="app.c07775b8187e30671b92.js"></script></body>
