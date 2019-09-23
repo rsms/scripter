@@ -39,8 +39,6 @@ export async function initData() {
 
       // scriptViewState maps script-id => monaco-view-state
       t.createStore("scriptViewState")
-
-      await scripts.add({ tags: ["text", "graphics"], code: `print("hello")` })
     }
 
     // let rec = await scripts.get("hello")

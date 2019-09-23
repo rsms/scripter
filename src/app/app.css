@@ -299,7 +299,32 @@ code b, pre b, tt b { font-weight:540 }
   &:hover ul .button {
     visibility: visible;
   }
-}
+
+  & .settings {
+    display: flex;
+    flex-direction: column;
+    padding: 0 8px var(--menuItemHeight) 16px;
+    user-select: none;
+
+    & label {
+      display: block;
+      height: var(--menuItemHeight);
+      cursor: default;
+      display:flex;
+      align-items:center;
+
+      & input[type="checkbox"] {
+        margin-right: 6px;
+        margin-left: 0;
+      }
+
+      & select[name="config.windowSize"] {
+        flex: 1 1 auto;
+        margin-left: 8px;
+      }
+    }
+  }
+} /* #menu */
 
 
 #main {
@@ -372,6 +397,23 @@ body.showMessage #editor { bottom: var(--messageHeight); }
 
 .monaco-editor {
   font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
+
+  /*& .invisible scrollbar vertical fade*/
+  /*& .visible.scrollbar vertical */
+  & .scrollbar {
+    & .slider {
+      border-radius:5px;
+    }
+  }
+
+  &.scripter-light .margin {
+    & .line-numbers {
+      color: #ccc;
+    }
+    & .current-line ~ .line-numbers {
+      color: #888;
+    }
+  }
 }
 
 /*body.menuVisible .monaco-editor {

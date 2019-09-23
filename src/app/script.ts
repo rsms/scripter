@@ -4,16 +4,16 @@ import * as monaco from "monaco-editor"
 
 const print = console.log.bind(console)
 
-const defaultScriptBody = `
-  for (let n of figma.currentPage.selection) {
-    if (isText(n)) {
-      n.characters = n.characters.trim()
-    }
-  }
-  function isText(n :BaseNode) :n is TextNode {
-    return n.type == "TEXT"
-  }
-`.trim().replace(/\n  /mg, "\n") + "\n"
+// const defaultScriptBody = `
+//   for (let n of figma.currentPage.selection) {
+//     if (isText(n)) {
+//       n.characters = n.characters.trim()
+//     }
+//   }
+//   function isText(n :BaseNode) :n is TextNode {
+//     return n.type == "TEXT"
+//   }
+// `.trim().replace(/\n  /mg, "\n") + "\n"
 
 
 type EditorViewState = monaco.editor.ICodeEditorViewState
@@ -53,6 +53,7 @@ interface ScriptEventMap {
 
 export class Script extends EventEmitter<ScriptEventMap> {
   meta :ScriptMeta
+  readOnly :bool = false   // if true, can't be edited
   _body :string
   _editorViewState :EditorViewState|null = null
 
@@ -115,6 +116,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
   scheduleSave() {
     // (re)start save timer
+    let e = new Error()
     clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       // print(`autosave script ${this}`)
@@ -134,6 +136,8 @@ export class Script extends EventEmitter<ScriptEventMap> {
         // avoid creating files that are empty
         return Promise.resolve()
       }
+
+      print(`save/create script ${JSON.stringify(this.meta.name)}`)
 
       if (this.meta.id < 0) {
         // example
@@ -229,11 +233,13 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
 
   clone() :Script {
-    return new Script(
+    let s = new Script(
       {...this.meta, tags: [].concat(this.meta.tags)},
       this._body,
       this._editorViewState, // intentionally a ref. (immutable)
     )
+    s.readOnly = this.readOnly
+    return s
   }
 
 
@@ -241,9 +247,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
     return `script#${this.meta.id}`
   }
 
-  static createDefault() :Script {
-    return this.create({}, defaultScriptBody)
-  }
+  // static createDefault() :Script {
+  //   return this.create({}, defaultScriptBody)
+  // }
 
   static create(meta :Partial<ScriptMeta> = {}, body :string = "") :Script {
     return new Script(createScriptMeta(meta), body, null)

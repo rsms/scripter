@@ -141,10 +141,14 @@ let _timerDebug = DEBUG ? function(id /* ...args */) {
 let _timers = {}
 let _timerWaitPromise = null
 
-class TimerCancelation extends Error {
+const TIMER_KIND_TIMEOUT = 1
+const TIMER_KIND_INTERVAL = 2
+const TIMER_KIND_ANIMATE = 3
+
+class TimerCancellation extends Error {
   constructor() {
-    super("timer canceled")
-    this.name = "TimerCancelation"
+    super("Timer canceled")
+    this.name = "TimerCancellation"
   }
 }
 
@@ -169,17 +173,18 @@ function _cancelAllTimers(error) {
     let t = timers[id]
     if (t === undefined) {
       continue
-    } else if (t === 1) {
+    } else if (t === TIMER_KIND_TIMEOUT) {
       _timerDebug(id, `_cancelAllTimers clearTimeout`)
       clearTimeout(id)
-    } else if (t === 2) {
+    } else if (t === TIMER_KIND_INTERVAL) {
       _timerDebug(id, `_cancelAllTimers clearInterval`)
       clearInterval(id)
     } else {
       // Promise rejection function
       clearTimeout(id)
+      clearInterval(id)
       _timerDebug(id, `_cancelAllTimers reject`)
-      try { t(new TimerCancelation()) } catch(_) {}
+      try { t(new TimerCancellation()) } catch(_) {}
     }
   }
   if (_timerWaitPromise) {
@@ -188,26 +193,13 @@ function _cancelAllTimers(error) {
   }
 }
 
-function _wrapTimerFun(f, id, clearf) {
-  _clearTimer(id)
-  try {
-    f()
-  } catch (e) {
-    _timerDebug(id, `exception in handler ${e}`)
-    clearf(id)
-    if (_timerWaitPromise) {
-      _cancelAllTimers(e)
-    }
-    throw e
-  }
-}
 
 // interface Timer extends Promise<void> { cancel():void }
 // timer(duration :number, handler :(canceled?:boolean)=>any) :Timer
 function timer(duration, f) {
   if (this.canceled) { throw new Error("script canceled") }
-  var id
-  var rejectfun
+  var id, rejectfun, resolvefun
+
   let p = new Promise((resolve, reject) => {
     id = setTimeout(
       f ? () => {
@@ -225,10 +217,12 @@ function timer(duration, f) {
       },
       duration
     )
+    resolvefun = resolve
     _timerDebug(id, `timer() start`)
     _timers[id] = rejectfun = reject
     return id
   })
+
   p.cancel = () => {
     clearTimeout(id)
     let reject = _timers[id]
@@ -241,41 +235,90 @@ function timer(duration, f) {
           console.error("uncaught exception in timer handler: " + (e.stack || e))
         }
       }
-      reject(new TimerCancelation())
+      reject(new TimerCancellation())
+    } else {
+      resolvefun()
     }
   }
-  let _catch = p.catch
-  p.catch = fn => {
-    _catch.call(p, fn)
-    return p
+
+  function wrapThenCatch(p) {
+    let _then = p.then
+    p.then = (resolve, reject) => {
+      let p2 = _then.call(p, resolve, reject)
+      p2.cancel = p.cancel
+      wrapThenCatch(p2)
+      return p2
+    }
+
+    let _catch = p.catch
+    p.catch = fn => {
+      let p2 = _catch.call(p, fn)
+      p2.cancel = p.cancel
+      wrapThenCatch(p2)
+      return p2
+    }
   }
+
+  wrapThenCatch(p)
+
   return p
 }
 
+
 function _clearTimer(id) {
   if (id in _timers) {
-    _timerDebug(id, `_clearTimer ok`)
+    _timerDebug(id, `_clearTimer: #${id} ok`)
     delete _timers[id]
     if (_timerWaitPromise && Object.keys(_timers).length == 0) {
       _timerWaitPromise.resolve()
       _timerWaitPromise = null
     }
-  } else _timerDebug(id, `_clearTimer: #${id} not found`)
+  } else {
+    _timerDebug(id, `_clearTimer: #${id} not found`)
+  }
 }
+
 
 function _setTimeout(f, duration) {
   if (this.canceled) { throw new Error("script canceled") }
-  let id = setTimeout(() => _wrapTimerFun(f, id, clearTimeout), duration)
+  // let id = setTimeout(() => _wrapTimerFun(f, id, clearTimeout), duration)
+  var id = setTimeout(() => {
+    if (id in _timers) {
+      _clearTimer(id)
+    }
+    try {
+      f()
+    } catch (e) {
+      _timerDebug(id, `exception in handler ${e}`)
+      clearTimeout(id)
+      if (_timerWaitPromise) {
+        _cancelAllTimers(e)
+      }
+      throw e
+    }
+  }, duration)
   _timerDebug(id, `setTimeout start`)
-  _timers[id] = 1
+  _timers[id] = TIMER_KIND_TIMEOUT
   return id
 }
 
 function _setInterval(f, interval) {
   if (this.canceled) { throw new Error("script canceled") }
-  let id = setInterval(() => _wrapTimerFun(f, id, clearInterval), interval)
+  var id = setInterval(() => {
+    try {
+      f()
+    } catch (e) {
+      _timerDebug(id, `exception in handler ${e}`)
+      clearInterval(id)
+      _clearTimer(id)
+      if (_timerWaitPromise) {
+        _cancelAllTimers(e)
+      }
+      throw e
+    }
+  }, interval)
   _timerDebug(id, `setInterval start`)
-  _timers[id] = 2
+  _timers[id] = TIMER_KIND_INTERVAL
   return id
 }
 
@@ -291,7 +334,56 @@ function _clearInterval(id) {
   _clearTimer(id)
 }
 
+
+// animate(f :(t:number)=>void|"STOP") :Promise<void>
+function animate(f) {
+  var id
+  var rejectfun
+  let p = new Promise((resolve, reject) => {
+    id = setInterval(() => {
+      try {
+        if (f(Date.now() / 1000) === "STOP") {
+          clearInterval(id)
+          _clearTimer(id)
+          resolve()
+        }
+      } catch (e) {
+        if (e === "STOP") {
+          resolve()
+          return
+        }
+        _timerDebug(`animate: #${id} exception in handler ${e}`)
+        clearInterval(id)
+        _clearTimer(id)
+        if (_timerWaitPromise) {
+          _cancelAllTimers(e)
+        }
+        throw e
+        reject(e)
+      }
+    }, 16)
+    _timerDebug(id, `animate start`)
+    _timers[id] = rejectfun = reject
+  })
+  p.cancel = () => {
+    clearInterval(id)
+    let reject = _timers[id]
+    if (reject === rejectfun) {
+      _clearTimer(id)
+      reject(new TimerCancellation())
+    }
+  }
+  return p
+}
+
 // ------------------------------------------------------------------------------------------
+
+// group from nodes
+function group(nodes, parent, index) {
+  return figma.group(nodes, parent || figma.currentPage, index)
+}
+
+const MIXED = figma.mixed
 
 const env = {
   figma: figmaObject,
@@ -300,33 +392,24 @@ const env = {
   // print,
   closeScripter,
   timer,
-  TimerCancelation,
+  TimerCancellation,
   setTimeout:    _setTimeout,
   setInterval:   _setInterval,
   clearTimeout:  _clearTimeout,
   clearInterval: _clearInterval,
+  animate,
 
   // shorthand figma.PROP
   apiVersion:    figma.apiVersion,
   root:          figma.root,
   viewport:      figma.viewport,
-  mixed:         figma.mixed,
+  MIXED,
   clientStorage: figma.clientStorage,
-  currentPage:   figma.currentPage,
+  // currentPage:   figma.currentPage,
 
-  // current selection
-  sel(v) {
-    if (v !== undefined) { figma.currentPage.selection = !v ? [] : v }
-    return figma.currentPage.selection
-  },
+  group,
 
-  // group from nodes
-  group(nodes, parent, index) {
-    return figma.group(nodes, parent || figma.currentPage, index)
-  },
-
-  // Make RGB object
-  RGB(r,g,b) { return {r,g,b} },
+  __html__:"", // always empty
 }
 
 // ------------------------------------------------------------------------------------------
@@ -334,52 +417,216 @@ const env = {
 // shorthand node constructors. figma.createNodeType => NodeType
 const _nodeCtor = c => props => {
   let n = c()
-  if (props) for (let k in props) { n[k] = props[k] }
+  try {
+    if (props) for (let k in props) {
+      n[k] = props[k]
+    }
+  } catch (e) {
+    n.remove()
+    throw e
+  }
   return n
 }
-env.Rectangle        = _nodeCtor(figma.createRectangle) ; env.Rect = env.Rectangle
-env.Line             = _nodeCtor(figma.createLine)
-env.Ellipse          = _nodeCtor(figma.createEllipse)
-env.Polygon          = _nodeCtor(figma.createPolygon)
-env.Star             = _nodeCtor(figma.createStar)
-env.Vector           = _nodeCtor(figma.createVector)
-env.Text             = _nodeCtor(figma.createText)
 env.BooleanOperation = _nodeCtor(figma.createBooleanOperation)
-env.Frame            = _nodeCtor(figma.createFrame)
 env.Component        = _nodeCtor(figma.createComponent)
+env.Ellipse          = _nodeCtor(figma.createEllipse)
+env.Frame            = _nodeCtor(figma.createFrame)
+env.Line             = _nodeCtor(figma.createLine)
 env.Page             = _nodeCtor(figma.createPage)
+env.Polygon          = _nodeCtor(figma.createPolygon)
+env.Rectangle        = _nodeCtor(figma.createRectangle) ; env.Rect = env.Rectangle
 env.Slice            = _nodeCtor(figma.createSlice)
+env.Star             = _nodeCtor(figma.createStar)
+env.Text             = _nodeCtor(figma.createText)
+env.Vector           = _nodeCtor(figma.createVector)
+
 env.PaintStyle       = _nodeCtor(figma.createPaintStyle)
 env.TextStyle        = _nodeCtor(figma.createTextStyle)
 env.EffectStyle      = _nodeCtor(figma.createEffectStyle)
 env.GridStyle        = _nodeCtor(figma.createGridStyle)
 
-// colors
-env.BLACK   = {r:0.0, g:0.0, b:0.0}
-env.WHITE   = {r:1.0, g:1.0, b:1.0}
-env.GREY    = {r:0.5, g:0.5, b:0.5} ; env.GRAY = env.GREY
-env.RED     = {r:1.0, g:0.0, b:0.0}
-env.GREEN   = {r:0.0, g:1.0, b:0.0}
-env.BLUE    = {r:0.0, g:0.0, b:1.0}
-env.CYAN    = {r:0.0, g:1.0, b:1.0}
-env.MAGENTA = {r:1.0, g:0.0, b:1.0}
-env.YELLOW  = {r:1.0, g:1.0, b:0.0}
-env.ORANGE  = {r:1.0, g:0.5, b:0.0}
-
-// paints
-env.Paint = {
-  Black:   { type: "SOLID", color: env.BLACK },
-  Grey:    { type: "SOLID", color: env.GREY },
-  White:   { type: "SOLID", color: env.WHITE },
-  Red:     { type: "SOLID", color: env.RED },
-  Green:   { type: "SOLID", color: env.GREEN },
-  Blue:    { type: "SOLID", color: env.BLUE },
-  Cyan:    { type: "SOLID", color: env.CYAN },
-  Magenta: { type: "SOLID", color: env.MAGENTA },
-  Yellow:  { type: "SOLID", color: env.YELLOW },
-  Orange:  { type: "SOLID", color: env.ORANGE },
+// Node type guards
+const nodeTypeGuard = typename => n => {
+  return n.type == typename
 }
-env.Paint.Gray = env.Paint.Grey
+env.isBooleanOperation = n => n && n.type == "BOOLEAN_OPERATION"
+env.isComponent        = n => n && n.type == "COMPONENT"
+env.isDocument         = n => n && n.type == "DOCUMENT"
+env.isEllipse          = n => n && n.type == "ELLIPSE"
+env.isFrame            = n => n && n.type == "FRAME"
+env.isGroup            = n => n && n.type == "GROUP"
+env.isInstance         = n => n && n.type == "INSTANCE"
+env.isLine             = n => n && n.type == "LINE"
+env.isPage             = n => n && n.type == "PAGE"
+env.isPolygon          = n => n && n.type == "POLYGON"
+env.isRectangle        = n => n && n.type == "RECTANGLE" ; env.isRect = env.isRectangle
+env.isSlice            = n => n && n.type == "SLICE"
+env.isStar             = n => n && n.type == "STAR"
+env.isText             = n => n && n.type == "TEXT"
+env.isVector           = n => n && n.type == "VECTOR"
+// SceneNode type guard
+const shapeNodeTypes = {
+  BOOLEAN_OPERATION:1,
+  ELLIPSE:1,
+  LINE:1,
+  POLYGON:1,
+  RECTANGLE:1,
+  STAR:1,
+  TEXT:1,
+  VECTOR:1,
+}
+const sceneNodeTypes = {
+  // Shapes
+  BOOLEAN_OPERATION:1,
+  ELLIPSE:1,
+  LINE:1,
+  POLYGON:1,
+  RECTANGLE:1,
+  STAR:1,
+  TEXT:1,
+  VECTOR:1,
+  // +
+  COMPONENT:1,
+  FRAME:1,
+  GROUP:1,
+  INSTANCE:1,
+  SLICE:1,
+}
+const containerNodeTypes = {
+  DOCUMENT:1,
+  PAGE:1,
+  BOOLEAN_OPERATION:1,
+  COMPONENT:1,
+  FRAME:1,
+  GROUP:1,
+  INSTANCE:1,
+}
+env.isSceneNode = n => n && n.type in sceneNodeTypes
+env.isShape = n => n && n.type in shapeNodeTypes
+env.isContainerNode = n => n && n.type in containerNodeTypes
+
+// Paint
+env.isSolidPaint = p => p && p.type == "SOLID"
+const gradientTypes = {
+  GRADIENT_LINEAR:1,
+  GRADIENT_RADIAL:1,
+  GRADIENT_ANGULAR:1,
+  GRADIENT_DIAMOND:1,
+}
+env.isGradient = p => p && p.type in gradientTypes
+
+// Style
+env.isPaintStyle  = s => s && s.type == "PAINT"
+env.isTextStyle   = s => s && s.type == "TEXT"
+env.isEffectStyle = s => s && s.type == "EFFECT"
+env.isGridStyle   = s => s && s.type == "GRID"
+
+// isImage(p :Paint|null|undefined) :p is ImagePaint
+// isImage<N extends Shape=Shape>(n :N) :n is N
+// isImage(n :BaseNode) :false
+env.isImage = n => (
+  n && (
+    n.type == "IMAGE" ||
+    ( n.type in shapeNodeTypes &&
+      n.fills !== MIXED &&
+      n.fills.some(v => v.type == "IMAGE" && v.visible && v.opacity > 0))
+      // Note: Even though v.opacity may be undefined, the v.opacity>0 test works as expected.
+  )
+)
+
+// current selection
+env.selection = index => (
+  index !== undefined ? (figma.currentPage.selection[index] || null)
+                      : figma.currentPage.selection
+)
+
+// setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void
+env.setSelection = n => {
+  figma.currentPage.selection = (Array.isArray(n) ? n : [n]).filter(env.isSceneNode)
+}
+
+const kPaint = Symbol("paint")
+
+class Color {
+  constructor(r,g,b) {
+    this.r = r
+    this.g = g
+    this.b = b
+    this[kPaint] = null
+  }
+  withAlpha(a) {
+    return new ColorWithAlpha(this.r, this.g, this.b, a)
+  }
+  get paint() {
+    return this[kPaint] || (this[kPaint] = {
+      type: "SOLID",
+      color: this,
+    })
+  }
+}
+
+class ColorWithAlpha extends Color {
+  constructor(r,g,b,a) {
+    super(r,g,b)
+    this.a = a
+  }
+  withoutAlpha() {
+    return new Color(this.r, this.g, this.b)
+  }
+  get paint() {
+    return this[kPaint] || (this[kPaint] = {
+      type: "SOLID",
+      color: this.withoutAlpha(),
+      opacity: this.a
+    })
+  }
+}
+
+// colors
+// hexstr should be in the format "RRGGBB", "RGB", "HH" or "H" (H for greyscale.)
+// Examples: C800A1, C0A, CC
+env.Color = (r, g, b, a) => {
+  if (typeof r == "string") {
+    // "RRGGBB", "RGB" or "HH"
+    let s = r
+    if (s.length == 6) {
+      r = parseInt(s.substr(0,2), 16) / 255
+      g = parseInt(s.substr(2,2), 16) / 255
+      b = parseInt(s.substr(4,2), 16) / 255
+    } else if (s.length == 3) {
+      r = parseInt(s[0]+s[0], 16) / 255
+      g = parseInt(s[1]+s[1], 16) / 255
+      b = parseInt(s[2]+s[2], 16) / 255
+    } else if (s.length < 3) {
+      r = g = b = parseInt(s.length == 1 ? s+s : s, 16) / 255
+    } else {
+      throw new Error("invalid color format " + JSON.stringify(s))
+    }
+  } else {
+    if (r > 1 || g > 1 || b > 1 || a > 1) {
+      // Note: a>1 works even when a is undefined
+      throw new Error("color values outside range [0-1]")
+    }
+  }
+  return a === undefined ? new Color(r,g,b) : new ColorWithAlpha(r,g,b,a)
+}
+
+env.RGB = (r,g,b) => new Color(r,g,b)
+env.RGBA = (r,g,b,a) => new ColorWithAlpha(r,g,b,a)
+// env.RGB = (r,g,b,a) => (a === undefined ? {r,g,b} : {r,g,b,a})
+// env.RGBA = (r,g,b,a) => ({r,g,b, a: a === undefined ? 1 : a})
+
+env.BLACK   = new Color(0   , 0   , 0)
+env.WHITE   = new Color(1   , 1   , 1)
+env.GREY    = new Color(0.5 , 0.5 , 0.5) ; env.GRAY = env.GREY
+env.RED     = new Color(1   , 0   , 0)
+env.GREEN   = new Color(0   , 1   , 0)
+env.BLUE    = new Color(0   , 0   , 1)
+env.CYAN    = new Color(0   , 1   , 1)
+env.MAGENTA = new Color(1   , 0   , 1)
+env.YELLOW  = new Color(1   , 1   , 0)
+env.ORANGE  = new Color(1   , 0.5 , 0)
+
 
 // ------------------------------------------------------------------------------------------
 
@@ -389,9 +636,87 @@ env.scripter = {
 
 // ------------------------------------------------------------------------------------------
 
-let jsHeader = `var canceled=false;[async function script(module,exports,print,_e){`
+// visit traverses the tree represented by node, calling visitor for each node.
+//
+// If the visitor returns false for a node with children, that
+// node's children will not be visited. This allows efficient searching
+// where you know that you can skip certain branches.
+//
+// Note: visitor is not called for `node`.
+//
+// visit(node :ContainerNode|ReadonlyArray<ContainerNode>, visitor :NodePredicate) :Promise<void>
+function visit(node, visitor) {
+  return new Promise(resolve => {
+    let branches = Array.isArray(node) ? node.slice() : [node]
+    function visitBranches() {
+      let startTime = Date.now()
+      while (true) {
+        let b = branches.shift()
+        if (!b) {
+          return resolve()
+        }
+        if (Date.now() - startTime > 100) {
+          // we've locked the UI for a long time -- yield
+          return setTimeout(visitBranches, 0)
+        }
+        for (let n of b.children) {
+          let r = visitor(n)
+          if (r || r === undefined) {
+            let children = n.children
+            if (children) {
+              branches.push(n)
+            }
+          }
+        }
+      }
+    }
+    visitBranches()
+  })
+}
+
+// find traverses the tree represented by node and returns a list of all
+// nodes for which predicate returns true.
+//
+// find(node :ContainerNode|ReadonlyArray<BaseNode>,
+//      predicate :NodePredicate, options? :FindOptions) :Promise<BaseNode[]>
+// find(predicate :NodePredicate, options? :FindOptions) :Promise<BaseNode[]>
+function find(node, predicate, options) {
+  if (typeof node == "function") {
+    // find(predicate :NodePredicate, options? :FindOptions) :Promise<BaseNode[]>
+    options = predicate
+    predicate = node
+    node = figma.currentPage
+  }
+  let results = []
+  if (Array.isArray(node)) {
+    node = node.filter(n => {
+      if (n) {
+        let r = predicate(n)
+        if (r || r === undefined) {
+          results.push(n)
+          return n.type in containerNodeTypes
+        }
+      }
+      return false
+    })
+  } else {
+    node = [node]
+  }
+  return Promise.all(
+    options && options.includeHidden ?
+      node.map(n => visit(n, n => ((predicate(n) && results.push(n)), true) )) :
+      node.map(n => visit(node, n => n.visible && ((predicate(n) && results.push(n)), true) ))
+  ).then(() => results)
+}
+
+env.visit = visit
+env.find = find
+
+// ------------------------------------------------------------------------------------------
+
+let jsHeader = `var canceled=false;[async function script(module,exports,print,Symbol,_e){`
 let jsFooter = `},function(){canceled=true}]`
-let names = Object.keys(env).filter(k => k[0] != "_")
+let names = Object.keys(env)  //.filter(k => k[0] != "_")
 try {
   // @ts-ignore eval
   eval(`const {x,y} = {x:1,y:1}`)
@@ -436,7 +761,7 @@ function _evalScript(reqId, valueFormatter, js) {
         }
       }
 
-      return r[0].call(env0, {id:"",exports:{}}, {}, print0, env0)
+      return r[0].call(env0, {id:"",exports:{}}, {}, print0, Symbol, env0)
         .then(result =>
           _awaitAsync().then(() => resolve(result))
         )

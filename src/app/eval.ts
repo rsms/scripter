@@ -3,8 +3,7 @@ import { SourceMapConsumer, SourceMapGenerator } from "../misc/source-map"
 import * as warningMessage from "./warning-message"
 import { editor } from "./editor"
 import toolbar from "./toolbar"
-
-const print = console.log.bind(console)
+import { print, dlog } from "./util"
 
 
 export interface EvalPromise extends Promise<any> {
@@ -60,8 +59,7 @@ export function run(js :string, sourceMapJSON :string) :EvalPromise {
   let id = (nextEvalRequestId++).toString(36)
   let p = new Promise<any>(async (resolve, reject) => {
     liveEvalRequests.set(id, {resolve, reject, sourceMapJSON})
-    print(`send eval request ${id}`)
-    print(js)
+    dlog(`send eval request ${id}\n${js}`)
     runtime.send<EvalRequestMsg>({ type: "eval", id, js })
   }) as EvalPromise
   ;(p as any).id = id
@@ -120,10 +118,15 @@ async function handleResponseMsg(msg :EvalResponseMsg) {
     return
   }
   if (msg.error) {
+    dlog("received error response:", msg)
     if (tx.sourceMapJSON && msg.srcPos) {
-      let pos = await resolveOrigSourcePos(msg.srcPos, msg.srcLineOffset, tx.sourceMapJSON)
-      if (pos.line > 0) {
-        editor.decorateError(pos, msg.error)
+      for (let p of msg.srcPos) {
+        // find and pick first matching source position as the error origin
+        let pos = await resolveOrigSourcePos(p, msg.srcLineOffset, tx.sourceMapJSON)
+        if (pos.line > 0) {
+          editor.decorateError(pos, msg.error)
+          break
+        }
       }
     }
     warningMessage.show(msg.error)

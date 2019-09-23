@@ -4,6 +4,8 @@ import {
   EvalCancellationMsg,
   EvalResponseMsg,
   ClosePluginMsg,
+  WindowConfigMsg,
+  WindowSize,
 } from "../common/messages"
 
 // defined by library ../common/scripter-env.js
@@ -15,28 +17,56 @@ interface EvalScriptFun {
 declare const evalScript :EvalScriptFun
 
 
+// WindowSize => pixels
+function windowWidth(ws :WindowSize) :number {
+  switch (ws) {
+  case WindowSize.SMALL:  return 300
+  case WindowSize.MEDIUM: return 500
+  case WindowSize.LARGE:  return 700
+  default:
+    console.error(`[plugin] unexpected windowWidth ${ws}`)
+    return 500
+  }
+}
+function windowHeight(ws :WindowSize) :number {
+  switch (ws) {
+  case WindowSize.SMALL:  return 300
+  case WindowSize.MEDIUM: return 500
+  case WindowSize.LARGE:  return 700
+  default:
+    console.error(`[plugin] unexpected windowHeight ${ws}`)
+    return 500
+  }
+}
+
+
+const initialWindowSize = WindowSize.MEDIUM
+
 figma.showUI(__html__, {
-  width: 500,
-  height: 500,
+  width: windowWidth(initialWindowSize),
+  height: windowHeight(initialWindowSize),
+  visible: false,
 })
 
 
 function fmtErrorResponse(err :Error, response :EvalResponseMsg) {
   response.error = err.message || String(err)
+  response.srcLineOffset = evalScript.lineOffset
   if (typeof err.stack == "string") {
     let frames = err.stack.split(/[\r\n]+/)
-    if (frames.length > 1) {
-      let m = frames[1].match(/:(\d+):(\d+)\)$/)
+    let framePos :{line:number,column:number}[] = []
+    for (let i = 1; i < frames.length; i++) {
+      let m = frames[i].match(/:(\d+):(\d+)\)$/)
       if (m) {
         let line = parseInt(m[1])
         let column = parseInt(m[2])
-        response.srcLineOffset = evalScript.lineOffset
-        response.srcPos = {
+        framePos.push({
           line: isNaN(line) ? 0 : line,
           column: isNaN(column) ? 0 : column,
-        }
+        })
       }
     }
+    response.srcPos = framePos
   }
 }
 
@@ -154,12 +184,18 @@ function cancelEval(msg :EvalCancellationMsg) {
 }
 
 
+function windowConfig(c :WindowConfigMsg) {
+  figma.ui.resize(windowWidth(c.width), windowHeight(c.height))
+}
+
+
 figma.ui.onmessage = msg => {
-  dlog("plugin recv", JSON.stringify(msg, null, 2))
+  // dlog("plugin recv", JSON.stringify(msg, null, 2))
   switch (msg.type) {
 
   case "ui-init":
     // UI is ready. Send info about our figma plugin API version
+    figma.ui.show()
     figma.ui.postMessage({ type: "set-figma-api-version", api: figma.apiVersion })
     break
 
@@ -173,6 +209,10 @@ figma.ui.onmessage = msg => {
 
   case "close-plugin":
     figma.closePlugin((msg as ClosePluginMsg).message)
+    break
+
+  case "window-config":
+    windowConfig(msg as WindowConfigMsg)
     break
 
   default:

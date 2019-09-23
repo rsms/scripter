@@ -1,3 +1,15 @@
+export enum WindowSize {
+  SMALL  = 100,
+  MEDIUM = 200,
+  LARGE  = 300,
+}
+
+export interface WindowConfigMsg {
+  type   :"window-config"
+  width  :WindowSize
+  height :WindowSize
+}
+
 export interface EvalRequestMsg {
   type :"eval"
   id   :string  // opaque eval request ID
@@ -17,8 +29,8 @@ export interface EvalResponseMsg {
   result? :any     // result of successful eval
 
   // when error
-  error?         :string  // response is error when not undefined
-  srcPos?        :{line:number,column:number}  // source code position where error originated
+  error?   :string  // response is error when not undefined
+  srcPos?  :{line:number,column:number}[]  // source code position of each stack frame
   srcLineOffset? :number  // line offset of source code (for sourcemap)
 }
 

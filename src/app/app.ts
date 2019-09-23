@@ -12,9 +12,7 @@ import { menu } from "./menu"
 import { editor, initEditorModel } from "./editor"
 import * as figmaPluginBridge from "./figma-plugin-bridge"
 import toolbar from "./toolbar"
-
-
-const print = console.log.bind(console)
+import { isMac /* , print, dlog */ } from "./util"
 
 
 function setupKeyboardHandlers() {
@@ -22,7 +20,11 @@ function setupKeyboardHandlers() {
 
     // run script
     if (key == "Enter" || key == "r" || key == "s") {
-      return editor.runCurrentScript(), true
+      if (ev.shiftKey) {
+        return editor.stopCurrentScript(), true
+      } else {
+        return editor.runCurrentScript(), true
+      }
     }
 
     // stop script (ctrl-shift-X)
@@ -31,7 +33,8 @@ function setupKeyboardHandlers() {
     }
 
     // toggle menu
-    if (key == "m") {
+    if (key == "m" && (!isMac || !ev.metaKey)) {
+      // Note: avoid intercepting cmd-M on mac
       return menu.toggle(), true
     }
 

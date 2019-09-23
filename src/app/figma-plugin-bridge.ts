@@ -1,8 +1,8 @@
-import { ClosePluginMsg } from "../common/messages"
+import { ClosePluginMsg, WindowConfigMsg } from "../common/messages"
 import * as Eval from "./eval"
+import { config } from "./config"
+import { dlog, print } from "./util"
 
-
-const print = console.log.bind(console)
 
 
 // let pluginApiVersion :string = defaultPluginApiVersion
@@ -20,6 +20,16 @@ export class FigmaPluginEvalRuntime implements Eval.Runtime {
   send<T>(m :T) {
     parent.postMessage(m, '*')
   }
+}
+
+
+function sendWindowConfigMsg() {
+  let msg :WindowConfigMsg = {
+    type: "window-config",
+    width: config.windowSize[0],
+    height: config.windowSize[1],
+  }
+  parent.postMessage(msg, '*')
 }
 
 
@@ -48,8 +58,16 @@ export function init() {
     }
   }
 
+  // hook up config event observation
+  config.on("change", ev => {
+    if (ev.key == "windowSize") {
+      sendWindowConfigMsg()
+    }
+  })
+
   // signal to plugin that we are ready
   parent.postMessage({ type: "ui-init" }, '*')
+  sendWindowConfigMsg()
 
   // handle ESC-ESC to close
   let lastEscapeKeypress = 0

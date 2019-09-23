@@ -1,8 +1,6 @@
 import { editor } from "./editor"
 import { menu } from "./menu"
-
-
-const isMac = navigator.platform.indexOf("Mac") != -1
+import { isMac } from "./util"
 
 
 class ToolbarUI {
@@ -37,11 +35,11 @@ class ToolbarUI {
     this.runButton.classList.toggle("running", this.isRunning)
     this.runButton.title = (
       this.isRunning ? (
-        isMac ? "Stop  (⌃⇧X)"
-              : "Stop  (Ctrl+Shift+X)"
+        isMac ? "Stop  (⇧⌘⏎)"
+              : "Stop  (Ctrl+Shift+Return)"
       ) : (
         isMac ? "Run  (⌘⏎)"
-              : "Run  (Ctrl+Enter)"
+              : "Run  (Ctrl+Return)"
       )
     )
   }

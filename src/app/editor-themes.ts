@@ -20,8 +20,8 @@ monaco.editor.defineTheme('scripter-light', {
   colors: {
     'editor.foreground': '#222222',
     'editor.background': '#ffffff',  // #fefefa
-    'editorCursor.foreground': '#004499',
-    'editorLineNumber.foreground': '#eeeeee',
+    'editorCursor.foreground': '#000000', // #004499
+    'editorLineNumber.foreground': '#d9d9d9',
     // 'editor.lineHighlightBackground': '#0000FF20',
     // 'editorLineNumber.foreground': '#008800',
     // 'editor.inactiveSelectionBackground': '#88000015'

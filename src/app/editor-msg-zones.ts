@@ -120,10 +120,10 @@ export class MsgZones {
       mainEl.appendChild(closeButtonEl)
 
       // compute actual height, as text may wrap
-      let heightInPx = 16
+      let heightInPx = 16  // minimum height
       let domNode2 = domNode.cloneNode(true)
       this.editor.editor.getDomNode().appendChild(domNode2)
-      heightInPx = (domNode2 as any).querySelector('.message').clientHeight
+      heightInPx = Math.max(heightInPx, (domNode2 as any).querySelector('.message').clientHeight)
       this.editor.editor.getDomNode().removeChild(domNode2)
 
       heightInPx += 2

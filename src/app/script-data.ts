@@ -4,9 +4,8 @@ import { db as _db } from "./data"
 import { EventEmitter } from "./event"
 import { editor } from "./editor"
 import exampleScripts from "./example-scripts"
-
-
-const print = console.log.bind(console)
+import resources from "./resources"
+// import { print, dlog } from "./util"
 
 
 interface ScriptsDataEvents {
@@ -19,6 +18,7 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   readonly version = 0
 
   exampleScripts :Script[] = []
+  referenceScripts :Script[] = []
   scripts :Script[] = []
   scriptsById = new Map<number,Script>()  // same order as scripts
 
@@ -72,13 +72,30 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     })
 
     let nextExampleId = -1
-    for (let exampleScript of exampleScripts) {
-      this.exampleScripts.push(Script.create({
+    const mkExample = (name :string, code :string) => {
+      return Script.create({
         id: nextExampleId--,
-        name: exampleScript.name,
+        name: name,
         modifiedAt: new Date("2000-01-01 00:00:00"),
-      }, exampleScript.code))
+      }, code)
     }
+
+    for (let exampleScript of exampleScripts) {
+      this.exampleScripts.push(mkExample(exampleScript.name, exampleScript.code))
+    }
+
+    let externalExampleFiles = [
+      ["figma.d.ts", "Figma API"],
+      ["scripter-env.d.ts", "Scripter API"],
+    ]
+    Promise.all(externalExampleFiles.map(name => resources[name[0]])).then(codes => {
+      for (let i = 0; i < codes.length; i++) {
+        let s = mkExample(externalExampleFiles[i][1], codes[i])
+        s.readOnly = true
+        this.referenceScripts.push(s)
+      }
+      this.finalizeChanges()
+    })
 
     if (this.db.isOpen) {
       this.refresh()
@@ -115,20 +132,36 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   scriptAfter(id :number) :Script|null {
     for (let i = 0, z = this.scripts.length; i < z; i++) {
       if (this.scripts[i].id == id) {
-        return this.scripts[i + 1] || null
+        let s = this.scripts[i + 1]
+        if (s) {
+          return s
+        }
+        break
       }
     }
-    return null
+    return this.firstNonUserScript()
   }
 
 
   scriptAfterOrBefore(id :number) :Script|null {
     for (let i = 0, z = this.scripts.length; i < z; i++) {
       if (this.scripts[i].id == id) {
-        return this.scripts[i + 1] || this.scripts[i - 1] || null
+        let s = this.scripts[i + 1] || this.scripts[i - 1]
+        if (s) {
+          return s
+        }
+        break
       }
     }
-    return null
+    return this.firstNonUserScript()
+  }
+
+
+  firstNonUserScript() :Script|null {
+    if (this.exampleScripts.length > 0) {
+      return this.exampleScripts[0]
+    }
+    return this.referenceScripts[0] || null
   }
 
 
@@ -172,7 +205,8 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       )
     }
     // sort scriptsById (also filters out deleted scripts)
-    this.scriptsById = new Map(this.scripts.concat(this.exampleScripts).map(s => [s.id, s]))
+    let scripts = this.scripts.concat(this.exampleScripts).concat(this.referenceScripts)
+    this.scriptsById = new Map(scripts.map(s => [s.id, s]))
     ;(this as any).version++
     this.triggerEvent("change")
   }

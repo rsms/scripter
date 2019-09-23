@@ -11,9 +11,7 @@ import * as Eval from "./eval"
 import * as warningMessage from "./warning-message"
 import * as runqueue from "./runqueue"
 import toolbar from "./toolbar"
-
-
-const print = console.log.bind(console)
+import { print, dlog } from "./util"
 
 
 type EditorModel = monaco.editor.ITextModel
@@ -29,12 +27,14 @@ const defaultFontSize = 11
 // default monaco editor options
 const defaultOptions :EditorOptions = {
   automaticLayout: true,
-  lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
-  lineNumbersMinChars: 3,
   scrollBeyondLastLine: false,
   lineDecorationsWidth: 16, // margin on left side, in pixels
-  // wordWrap: "on",
-  // wrappingIndent: "indent",
+
+  lineNumbers: "on", // lineNumbers: (lineNumber: number) => "•",
+  lineNumbersMinChars: 3,
+  wordWrap: "on",
+  wrappingIndent: "same", // none | same | indent | deepIndent
+
   // fontLigatures: true,
   showUnused: true,
   folding: false,
@@ -48,12 +48,14 @@ const defaultOptions :EditorOptions = {
 
   // fontFamily: "iaw-mono-var, iaw-mono, monospace",
 
+  extraEditorClassName: 'scripter-light',
+
   scrollbar: {
     useShadows: false,
     verticalScrollbarSize: 9,
-    verticalSliderSize: 1,
+    verticalSliderSize: 5,
     horizontalScrollbarSize: 9,
-    horizontalSliderSize: 3,
+    horizontalSliderSize: 5,
   },
   minimap: {
     enabled: false,
@@ -112,6 +114,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     if (this._currentModel) {
       let oldModel = this._currentModel
+      this.invalidateDiagnostics(oldModel)
       setTimeout(() => diposeModel(oldModel), 0)
     }
 
@@ -132,7 +135,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
-  onCurrentScriptSave = () => {
+  onCurrentScriptSave = (_ :Script) => {
+    this._currentScriptId = this._currentScript.id  // may have been assigned one
     config.lastOpenScript = this._currentScript.id
     // menu.updateScriptList()
   }
@@ -141,7 +145,12 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   switchToScript(script :Script) {
     this.stopCurrentScript()
     let model = this.setCurrentScript(script)
+    // this.editor.setModel(null)
+    this.clearAllMetaInfo()
     this.editor.setModel(model)
+    this.updateOptions({
+      readOnly: script.readOnly,
+    })
     this.restoreViewState()
     initEditorModel(model)
     this.editor.focus()
@@ -161,6 +170,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       this.editor.focus()
       return
     }
+    dlog(`open script ${id}`)
     this._currentScriptId = id
     this.stopCurrentScript()
     let script = await scriptsData.getScript(id)
@@ -201,14 +211,28 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
   }
 
+  updateOptionsFromConfig() {
+    this.updateOptions({
+      lineNumbers: config.showLineNumbers ? "on" : "off",
+      wordWrap: config.wordWrap ? "on" : "off",
+    })
+  }
+
   updateOptions(options :EditorOptions) :boolean {
     let updated = false
     for (let k in options) {
-      this.options[k] = options[k]
-      updated = true
+      let v = options[k]
+      if (k == "extraEditorClassName") {
+        // prefix with current theme
+        v = `scripter-light ${v}`.trim()
+      }
+      if (this.options[k] !== v) {
+        this.options[k] = v
+        updated = true
+      }
     }
-    if (updated) {
-      this.editor.updateOptions(options)
+    if (updated && this.editor) {
+      this.editor.updateOptions(this.options)
     }
     return updated
   }
@@ -229,6 +253,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   async runCurrentScript() :Promise<void> {
     if (this.runDebounceTimer !== null) { return }
     this.runDebounceTimer = setTimeout(()=>{ this.runDebounceTimer = null }, 100)
+
+    if (this._currentScript.readOnly) {
+      return
+    }
 
     // stop any currently-running script
     this.stopCurrentScript()
@@ -501,12 +529,15 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let script = await loadLastOpenedScript()
     let model = this.setCurrentScript(script)
 
+    // setup options from config
+    this.updateOptionsFromConfig()
+
     // create editor
     this.editor = monaco.editor.create(document.getElementById('editor')!, {
       model,
       theme: 'scripter-light',
       ...this.options,
-      extraEditorClassName: 'scripter-light',
+      readOnly: script.readOnly,
     })
 
     this.initEditorActions()
@@ -523,10 +554,15 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // initialize event handlers
     this.initEditorEventHandlers()
 
-    // if we made a new script for the first time, save it immediately
-    if (this._currentScript.id == 0) {
-      this._currentScript.save()
-    }
+    // // if we made a new script for the first time, save it immediately
+    // if (this._currentScript.id == 0) {
+    //   this._currentScript.save()
+    // }
+
+    // hook up config
+    config.on("change", () => {
+      this.updateOptionsFromConfig()
+    })
 
     // monaco.languages.registerCodeActionProvider("typescript", {
     //   provideCodeActions( model: monaco.editor.ITextModel,
@@ -579,20 +615,21 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       }
     })
 
-    this.editor.addAction({
-      id: "scripter-stop-script",
-      label: "Stop Script",
-      // precondition: "scripter-script-running", // TODO: figure out how this works
-      keybindings: [
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Shift | monaco.KeyCode.KEY_X,
-      ],
-      contextMenuGroupId: "navigation",
-      contextMenuOrder: 0.1,
-      run: editor => {
-        this.stopCurrentScript()
-        return null
-      }
-    })
+    // this.editor.addAction({
+    //   id: "scripter-stop-script",
+    //   label: "Stop Script",
+    //   // precondition: "scripter-script-running", // TODO: figure out how this works
+    //   keybindings: [
+    //     // Note: There's a bug in monaco where the following causes cmd-X to stop working:
+    //     // monaco.KeyMod.CtrlCmd | monaco.KeyCode.Shift | monaco.KeyCode.KEY_X,
+    //   ],
+    //   contextMenuGroupId: "navigation",
+    //   contextMenuOrder: 0,
+    //   run: editor => {
+    //     this.stopCurrentScript()
+    //     return null
+    //   }
+    // })
   }
 
 
@@ -653,7 +690,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           isRestoringModel = false
           isRestoringViewState = false
         } else if (ev.store == "scripts") {
-          print(`TODO: update scriptData in db.on("remotechange"`)
+          dlog(`TODO: update scriptData in db.on("remotechange"`)
           // menu.updateScriptList()
         }
       }
@@ -819,7 +856,8 @@ async function loadLastOpenedScript() :Promise<Script> {
     }
   }
   if (!script) {
-    script = Script.createDefault()
+    script = scriptsData.exampleScripts[0]
+    // script = Script.createDefault()
   }
   return script
 }
