@@ -731,7 +731,7 @@ let jsFooter = `},function(){canceled=true}]`
 let names = Object.keys(env)  //.filter(k => k[0] != "_")
 try {
   // @ts-ignore eval
-  eval(`const {x,y} = {x:1,y:1}`)
+  ;(0,eval)(`const {x,y} = {x:1,y:1}`)
   jsHeader += `const {${names.join(',')}} = __env;`
 } catch (_) {
   jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
