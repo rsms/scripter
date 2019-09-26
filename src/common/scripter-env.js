@@ -17,15 +17,15 @@ function _assertFailure(args) {
 function assert(condition) {
   if (!condition) {
     // separating the handler from the test may allow a JS compiler to inline the test
-    _assertFailure([].slice.call(arguments))
+    _assertFailure([].slice.call(arguments, 1))
   }
 }
 
 // const print = console.log.bind(console)
 
-function _print(reqId, valueFormatter, args) {
+function _print(env, reqId, valueFormatter, args) {
   console.log.apply(console, args)
-  if (!this.scripter.visualizePrint || this.canceled) {
+  if (!env.scripter.visualizePrint || env.canceled) {
     return
   }
 
@@ -54,8 +54,10 @@ function _print(reqId, valueFormatter, args) {
     srcLineOffset: _evalScript.lineOffset,
   }
 
-  let e = new Error()
-  let m = (e.stack.split("\n")[3] || "").match(/:(\d+):(\d+)\)$/)
+  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+  // Note: fig-js stack traces does not include source column information, so we
+  // optionally parse the column if present.
+  let m = (e.stack.split("\n")[2] || "").match(/:(\d+)(:?:(\d+)|)\)$/)
   if (m) {
     let line = parseInt(m[1])
     let column = parseInt(m[2])
@@ -152,6 +154,15 @@ class TimerCancellation extends Error {
   }
 }
 
+// wrappers to work around bug in fig-js where
+// calling clearTimeout with an invalid timer causes a crash.
+function __clearTimeout(id) {
+  try { clearTimeout(id) } catch(_) {}
+}
+function __clearInterval(id) {
+  try { clearInterval(id) } catch(_) {}
+}
+
 function _awaitAsync() {
   _timerDebug(null, "_awaitAsync")
   for (let _ in _timers) {
@@ -166,7 +177,7 @@ function _awaitAsync() {
 }
 
 function _cancelAllTimers(error) {
-  _timerDebug(null, `_cancelAllTimers error=${error}`)
+  _timerDebug(null, `_cancelAllTimers`)
   let timers = _timers
   _timers = {}
   for (let id in timers) {
@@ -175,15 +186,15 @@ function _cancelAllTimers(error) {
       continue
     } else if (t === TIMER_KIND_TIMEOUT) {
       _timerDebug(id, `_cancelAllTimers clearTimeout`)
-      clearTimeout(id)
+      __clearTimeout(id)
     } else if (t === TIMER_KIND_INTERVAL) {
       _timerDebug(id, `_cancelAllTimers clearInterval`)
-      clearInterval(id)
+      __clearInterval(id)
     } else {
       // Promise rejection function
-      clearTimeout(id)
-      clearInterval(id)
       _timerDebug(id, `_cancelAllTimers reject`)
+      __clearTimeout(id)
+      __clearInterval(id)
       try { t(new TimerCancellation()) } catch(_) {}
     }
   }
@@ -205,7 +216,7 @@ function timer(duration, f) {
       f ? () => {
         _clearTimer(id)
         try {
-          f()
+          f(/* canceled */false)
           resolve()
         } catch (e) {
           _timerDebug(id, `exception in handler ${e}`)
@@ -224,7 +235,7 @@ function timer(duration, f) {
   })
 
   p.cancel = () => {
-    clearTimeout(id)
+    __clearTimeout(id)
     let reject = _timers[id]
     if (reject === rejectfun) {
       _clearTimer(id)
@@ -281,7 +292,7 @@ function _clearTimer(id) {
 
 function _setTimeout(f, duration) {
   if (this.canceled) { throw new Error("script canceled") }
-  // let id = setTimeout(() => _wrapTimerFun(f, id, clearTimeout), duration)
+  // let id = setTimeout(() => _wrapTimerFun(f, id, __clearTimeout), duration)
   var id = setTimeout(() => {
     if (id in _timers) {
       _clearTimer(id)
@@ -290,7 +301,7 @@ function _setTimeout(f, duration) {
       f()
     } catch (e) {
       _timerDebug(id, `exception in handler ${e}`)
-      clearTimeout(id)
+      __clearTimeout(id)
       if (_timerWaitPromise) {
         _cancelAllTimers(e)
       }
@@ -309,7 +320,7 @@ function _setInterval(f, interval) {
       f()
     } catch (e) {
       _timerDebug(id, `exception in handler ${e}`)
-      clearInterval(id)
+      __clearInterval(id)
       _clearTimer(id)
       if (_timerWaitPromise) {
         _cancelAllTimers(e)
@@ -324,13 +335,13 @@ function _setInterval(f, interval) {
 
 function _clearTimeout(id) {
   _timerDebug(id, `clearTimeout`)
-  clearTimeout(id)
+  __clearTimeout(id)
   _clearTimer(id)
 }
 
 function _clearInterval(id) {
   _timerDebug(id, `clearInterval`)
-  clearInterval(id)
+  __clearInterval(id)
   _clearTimer(id)
 }
 
@@ -343,7 +354,7 @@ function animate(f) {
     id = setInterval(() => {
       try {
         if (f(Date.now() / 1000) === "STOP") {
-          clearInterval(id)
+          __clearInterval(id)
           _clearTimer(id)
           resolve()
         }
@@ -353,7 +364,7 @@ function animate(f) {
           return
         }
         _timerDebug(`animate: #${id} exception in handler ${e}`)
-        clearInterval(id)
+        __clearInterval(id)
         _clearTimer(id)
         if (_timerWaitPromise) {
           _cancelAllTimers(e)
@@ -366,7 +377,7 @@ function animate(f) {
     _timers[id] = rejectfun = reject
   })
   p.cancel = () => {
-    clearInterval(id)
+    __clearInterval(id)
     let reject = _timers[id]
     if (reject === rejectfun) {
       _clearTimer(id)
@@ -651,13 +662,13 @@ function visit(node, visitor) {
     function visitBranches() {
       let startTime = Date.now()
       while (true) {
-        let b = branches.shift()
-        if (!b) {
-          return resolve()
-        }
         if (Date.now() - startTime > 100) {
           // we've locked the UI for a long time -- yield
           return setTimeout(visitBranches, 0)
+        }
+        let b = branches.shift()
+        if (!b) {
+          return resolve()
         }
         for (let n of b.children) {
           let r = visitor(n)
@@ -714,15 +725,16 @@ env.find = find
 
 // ------------------------------------------------------------------------------------------
 
-let jsHeader = `var canceled=false;[async function script(module,exports,print,Symbol,_e){`
+let jsHeader = `var canceled=false;[async function script(module,exports,Symbol,__env,__print,__reqid,__valfmt){` +
+`function print() { __print(__env, __reqid, __valfmt, Array.prototype.slice.call(arguments)) };`
 let jsFooter = `},function(){canceled=true}]`
 let names = Object.keys(env)  //.filter(k => k[0] != "_")
 try {
   // @ts-ignore eval
   eval(`const {x,y} = {x:1,y:1}`)
-  jsHeader += `const {${names.join(',')}} = _e;`
+  jsHeader += `const {${names.join(',')}} = __env;`
 } catch (_) {
-  jsHeader += "var " + names.map(k => `${k} = _e.${k}`).join(",") + ";"
+  jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
 }
 
 function _evalScript(reqId, valueFormatter, js) {
@@ -741,12 +753,13 @@ function _evalScript(reqId, valueFormatter, js) {
       for (let k in env) {
         if (k != "scripter") {
           let v = env[k]
-          env0[k] = typeof v == "function" ? v.bind(env0) : v
+          if (typeof v == "function") {
+            // bind env
+            // Note: We can't use bind() since that is not supported by fig-js
+            v = (v => function() { return v.apply(env0, arguments) })(v)
+          }
+          env0[k] = v
         }
-      }
-
-      function print0() {
-        _print.call(env0, reqId, valueFormatter, Array.prototype.slice.call(arguments))
       }
 
       let cancelInner = r[1]
@@ -761,13 +774,26 @@ function _evalScript(reqId, valueFormatter, js) {
         }
       }
 
-      return r[0].call(env0, {id:"",exports:{}}, {}, print0, Symbol, env0)
+      //                     module, exports, Symbol, __env, __print, __reqid, __valfmt
+      return r[0].call(env0, {id:"",exports:{}}, {}, Symbol, env0, _print, reqId, valueFormatter)
         .then(result =>
           _awaitAsync().then(() => resolve(result))
         )
         .catch(e => {
           try { _cancelAllTimers(e) } catch(_) {}
-          reject(e)
+
+          // scripterStack is a work-around for limitations in fig-js
+          let e2 = new Error()
+          let stack = e.stack
+          if (stack.substr(0, e.message.length) != e.message) {
+            // fig-js (usually?) doesn't include message in stack trace. Fix that.
+            stack = e.message + "\n" + stack
+          }
+          e2.message = e.message
+          e2.scripterStack = stack
+          e2.stack = stack
+
+          reject(e2)
         })
     } catch(e) {
       _cancelAllTimers(e)

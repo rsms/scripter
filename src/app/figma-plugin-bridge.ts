@@ -38,9 +38,7 @@ export function init() {
   let messageHandler = Eval.setRuntime(runtime)
 
   window.onmessage = ev => {
-    // print("ui received message",
-    //   JSON.stringify({ origin: ev.origin, data: ev.data }, null, "  ")
-    // )
+    dlog("ui received message", JSON.stringify({ origin: ev.origin, data: ev.data }, null, "  "))
     let msg = ev.data
     if (msg && typeof msg == "object") {
       switch (msg.type) {

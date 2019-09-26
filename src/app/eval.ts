@@ -138,7 +138,6 @@ async function handleResponseMsg(msg :EvalResponseMsg) {
 
 
 async function handlePrintMsg(msg :PrintMsg) {
-  // print("handlePrintMsg", msg)
   let t = liveEvalRequests.get(msg.reqId)
   if (!t) {
     return
@@ -146,6 +145,7 @@ async function handlePrintMsg(msg :PrintMsg) {
 
   let pos = msg.srcPos as SourcePos
   if (pos.line == 0 || !t.sourceMapJSON) {
+    dlog("handlePrintMsg: ignoring print with zero srcPos", msg)
     return
   }
 
@@ -199,7 +199,6 @@ async function resolveOrigSourcePos(
   // map1.sources = ["script.ts"]
   let sourceMap1 = await new SourceMapConsumer(map1)
   // print("map1:", JSON.stringify(map1, null, 2))
-
   if (lineOffset == 0) {
     let pos1 = sourceMap1.originalPositionFor(pos)
     sourceMap1.destroy()
@@ -219,11 +218,26 @@ async function resolveOrigSourcePos(
   // print("map2:", JSON.stringify(map2.toJSON(), null, 2));
   let sourceMap2 = await SourceMapConsumer.fromSourceMap(map2)
 
-  let pos2 = sourceMap2.originalPositionFor(pos)
-  // print("sourceMap2.originalPositionFor:", JSON.stringify(pos2, null, 2))
+  // search for column when column is missing in pos
+  let pos2 :SourcePos
+  if (pos.column > 0) {
+    pos2 = sourceMap2.originalPositionFor(pos) as SourcePos
+  } else {
+    let pos1 = {...pos}
+    for (let col = 0; col < 50; col++) {
+      pos1.column += col
+      pos2 = sourceMap2.originalPositionFor(pos1) as SourcePos
+      if (pos2.line !== null) {
+        break
+      }
+    }
+  }
+
+  // dlog("originalPositionFor(" + JSON.stringify(pos) + ")", JSON.stringify(pos2, null, 2))
 
   sourceMap1.destroy()
   sourceMap2.destroy()
 
   return pos2
 }
+

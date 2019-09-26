@@ -134,11 +134,30 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 
 
 s("Timers", `
-// Timers
-
-// Wait for 200ms before printing
+// Timers allows waiting for some time to pass
+// or to execute some code after a delay.
 await timer(200)
 print("200ms passed")
+
+// Timers are promises with a cancel() function
+let t = timer(200)
+print("timer started")
+// cancel the timer before it expires.
+// Comment this line out to see the effect.
+t.cancel()
+// wait for timer
+try {
+  await t
+  print("Rrrriiiiing!")
+} catch (_) {
+  print("timer canceled")
+}
+
+// Timers accept an optional handler function:
+timer(200, canceled => {
+  print("timer expired.", {canceled})
+})
+// .cancel() // uncomment to try canceling
 `),
 
 
@@ -207,7 +226,14 @@ s("Animation", `
 // Create rectangle
 let r = Rect({ fills:[BLACK.paint] })
 try {
-  const size = 500 - r.width // extent of motion in dp
+  // setup viewport
+  viewport.scrollAndZoomIntoView([r])
+  viewport.zoom = 1
+
+  // extent of motion in dp
+  const size = 500 - r.width
+
+  // animation loop
   await animate(time => {
     // This function is called at a high frequency with
     // time incrementing for every call.

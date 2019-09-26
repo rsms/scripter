@@ -8,6 +8,7 @@ import {
   WindowSize,
 } from "../common/messages"
 
+
 // defined by library ../common/scripter-env.js
 type EvalCancelFun = (reason?:Error)=>void
 interface EvalScriptFun {
@@ -52,11 +53,13 @@ figma.showUI(__html__, {
 function fmtErrorResponse(err :Error, response :EvalResponseMsg) {
   response.error = err.message || String(err)
   response.srcLineOffset = evalScript.lineOffset
-  if (typeof err.stack == "string") {
-    let frames = err.stack.split(/[\r\n]+/)
+  let stack :string = (err as any).scripterStack || err.stack
+  if (typeof stack == "string") {
+    let frames = stack.split(/[\r\n]+/)
     let framePos :{line:number,column:number}[] = []
     for (let i = 1; i < frames.length; i++) {
-      let m = frames[i].match(/:(\d+):(\d+)\)$/)
+      // Note: fig-js does not provide source column info
+      let m = frames[i].match(/:(\d+)(:?:(\d+)|)\)$/)
       if (m) {
         let line = parseInt(m[1])
         let column = parseInt(m[2])
@@ -86,7 +89,7 @@ class EvalTransaction {
   }
 
   setError(err :Error) {
-    console.error(err.stack||String(err))
+    console.error("[script]", (err as any).scripterStack || err.stack || String(err))
     fmtErrorResponse(err, this.response)
   }
 
@@ -98,18 +101,20 @@ class EvalTransaction {
     this.cancelFun(reason)
   }
 
-  async eval(maxRetries :number = 10) :Promise<void> {  // never throws
+  // returns time spent evaluating the script (in milliseconds)
+  async eval(maxRetries :number = 10) :Promise<number> {  // never throws
     let triedToFixSnippets = new Set<string>()
     while (true) {
       try {
+        let timeStarted = Date.now()
         await this.tryEval()
-        return
+        return Date.now() - timeStarted
       } catch (err) {
         if (maxRetries-- && await this.retry(err, triedToFixSnippets)) {
           continue
         }
         this.setError(err)
-        return undefined
+        return -1
       }
     }
   }
@@ -168,9 +173,11 @@ async function evalCode(req :EvalRequestMsg) {
   }
 
   activeRequests.set(tx.id, tx)
-  await tx.eval()
+  let timeTaken = await tx.eval()
   activeRequests.delete(tx.id)
   tx.finalize()
+
+  console.log(`script took ${timeTaken}ms`)
 }
 
 
