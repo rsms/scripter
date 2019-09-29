@@ -121,22 +121,27 @@ Img.prototype._guessFromData = function() {
   this.type = fi.type
 
   let meta = {width:0,height:0}
-  switch (fi.type) {
-  case "image/png":
-    meta = pngInfoBuf(buf)
-    break
-  case "image/gif":
-    meta = gifInfoBuf(buf)
-    break
-  case "image/jpeg":
-    meta = jpegInfoBuf(buf)
-    break
-  }
-  this.meta = meta
-
-  if (this.width <= 0 && this.height <= 0) {
-    this.width = meta.width
-    this.height = meta.height
+  try {
+    switch (fi.type) {
+    case "image/png":
+      meta = pngInfoBuf(buf)
+      break
+    case "image/gif":
+      meta = gifInfoBuf(buf)
+      break
+    case "image/jpeg":
+      meta = jpegInfoBuf(buf)
+      break
+    }
+    this.meta = meta
+    if (this.width <= 0 && this.height <= 0) {
+      this.width = meta.width
+      this.height = meta.height
+    }
+  } catch (e) {
+    if (DEBUG) {
+      console.warn("Img._guessFromData:", e.stack || String(e))
+    }
   }
 }
 

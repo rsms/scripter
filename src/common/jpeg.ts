@@ -85,7 +85,7 @@ export function jpegInfoBuf(buf :ArrayLike<byte>) :JpegInfo {
       // case 0xDD: njDecodeDRI
       // case 0xDA: njDecodeScan
       default:
-        // print(`skip section 0x${buf[i-1].toString(16)}`)
+        console.log(`[jpeg] skip section 0x${buf[i-1].toString(16)}`)
         i += njDecodeLength()
     }
   }
