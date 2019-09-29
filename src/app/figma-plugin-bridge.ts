@@ -1,19 +1,28 @@
-import { ClosePluginMsg, WindowConfigMsg } from "../common/messages"
+import {
+  Msg,
+  TransactionalMsg,
+  RPCErrorResponseMsg,
+  ClosePluginMsg,
+  WindowConfigMsg,
+  UIConfirmRequestMsg, UIConfirmResponseMsg,
+  FetchRequestMsg, FetchResponseMsg,
+} from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
 import { dlog, print } from "./util"
 
 
+// const defaultApiVersion = "1.0.0" // used when there's no specific requested version
 
-// let pluginApiVersion :string = defaultPluginApiVersion
+// // try to parse version from URL query string
+// export const apiVersion = (() => {
+//   if (document && document.location) {
+//     let s = document.location.search
+//     dlog(s)
+//   }
+//   return defaultApiVersion
+// })()
 
-function setFigmaApiVersion(version :string) {
-  // TODO: see if we have a resource for the .d.ts file and update editor if we do.
-  // print(`TODO: setFigmaApiVersion "${version}" (current: "${pluginApiVersion}")`)
-  // if (version !== "0.0.0") {
-  //   pluginApiVersion = version
-  // }
-}
 
 
 export class FigmaPluginEvalRuntime implements Eval.Runtime {
@@ -33,23 +42,102 @@ function sendWindowConfigMsg() {
 }
 
 
+async function rcp_reply<T extends TransactionalMsg>(
+  id :string,
+  resType :T["type"],
+  f :() => Promise<Omit<T, "id"|"type">>,
+) {
+  let reply = {}
+  try {
+    reply = await f()
+    parent.postMessage({ type: resType, id, ...reply }, '*')
+  } catch(e) {
+    dlog(`rpc error: ${e.stack||e}`)
+    let m :RPCErrorResponseMsg = {
+      type: "rpc-error-response",
+      responseType: resType,
+      id,
+      name: e.name || "Error",
+      message: e.message || "error",
+      stack: String(e.stack) || "error",
+    }
+    parent.postMessage(m, '*')
+  }
+}
+
+
+function rcp_confirm(req :UIConfirmRequestMsg) {
+  rcp_reply<UIConfirmResponseMsg>(req.id, "ui-confirm-response", async () => {
+    let answer = confirm(req.question)
+    return { answer }
+  })
+}
+
+
+function rcp_fetch(req :FetchRequestMsg) {
+  rcp_reply<FetchResponseMsg>(req.id, "fetch-response", async () => {
+    let r = await fetch(req.input, req.init)
+
+    let headers :Record<string,string> = {}
+    r.headers.forEach((v, k) => {
+      headers[k] = v
+    })
+
+    let body :Uint8Array|null = r.body ? new Uint8Array(await r.arrayBuffer()) : null
+
+    let response = {
+      headers,
+      redirected: r.redirected,
+      status:     r.status,
+      statusText: r.statusText,
+      resType:    r.type,
+      url:        r.url,
+      body,
+    }
+    dlog("fetch response", response)
+    return response
+  })
+}
+
+
 export function init() {
   let runtime = new FigmaPluginEvalRuntime()
   let messageHandler = Eval.setRuntime(runtime)
 
   window.onmessage = ev => {
-    dlog("ui received message", JSON.stringify({ origin: ev.origin, data: ev.data }, null, "  "))
+    // if (DEBUG) {
+    //   let data2 :any = ev.data
+    //   if (ev.data && typeof ev.data == "object") {
+    //     data2 = {}
+    //     for (let k of Object.keys(ev.data)) {
+    //       let v = ev.data[k]
+    //       if (v && typeof v == "object" && v.buffer instanceof ArrayBuffer) {
+    //         v = `[${v.constructor.name} ${v.length}]`
+    //       } else if (v instanceof ArrayBuffer) {
+    //         v = `[ArrayBuffer ${v.byteLength}]`
+    //       }
+    //       data2[k] = v
+    //     }
+    //   }
+    //   dlog("ui received message", JSON.stringify({ origin: ev.origin, data: data2 }, null,"  "))
+    // }
+    dlog("ui received message", ev.data && ev.data.type, { origin: ev.origin, data: ev.data })
+
     let msg = ev.data
     if (msg && typeof msg == "object") {
       switch (msg.type) {
 
-      case "set-figma-api-version":
-        setFigmaApiVersion(msg.api as string)
-        break
-
       case "eval-response":
       case "print":
         messageHandler(msg)
+        break
+
+      case "ui-confirm":
+        rcp_confirm(msg as UIConfirmRequestMsg)
+        break
+
+      case "fetch-request":
+        rcp_fetch(msg as FetchRequestMsg)
         break
 
       }

@@ -53,16 +53,116 @@ interface Animation extends Promise<void> {
 }
 
 /** Set to true if the script was canceled by the user */
-declare const canceled :boolean
+declare var canceled :boolean;
 
 /** Scripter-specific API */
-declare const scripter :ScripterAPI
+declare var scripter :ScripterAPI;
 interface ScripterAPI {
   /** Visualize print() results inline in editor. Defaults to true */
   visualizePrint :bool
 }
 
+/**
+ * Shows a modal dialog with question and yes/no buttons.
+ * Returns true if the user answered "yes".
+ */
+declare function confirm(question: string): Promise<bool>;
 
+
+// ------------------------------------------------------------------------------------
+// fetch
+
+/**
+ * Starts the process of fetching a resource from the network, returning a promise
+ * which is fulfilled once the response is available.
+ */
+declare function fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+
+/** Shorthand for fetch().then(r => r.text()) */
+declare function fetchText(input: RequestInfo, init?: RequestInit): Promise<string>;
+
+/** Shorthand for fetch().then(r => r.json()) */
+declare function fetchJson(input: RequestInfo, init?: RequestInit): Promise<any>;
+
+/** Shorthand for fetch().then(r => r.arrayBuffer()).then(b => new Uint8Array(b)) */
+declare function fetchData(input: RequestInfo, init?: RequestInit): Promise<Uint8Array>;
+
+/** Shorthand for fetchData().then(data => Img(data)) */
+declare function fetchImg(input: RequestInfo, init?: RequestInit): Promise<Img>;
+
+
+// ------------------------------------------------------------------------------------
+// Img
+
+/** Drawable image. Accepts a URL or image data. Can be passed to print for display. */
+declare interface Img<SourceType = string|Uint8Array> {
+  url     :string
+  type    :string      // mime type
+  width   :number      // 0 means "unknown"
+  height  :number      // 0 means "unknown"
+  source  :SourceType  // url or image data
+
+  /** Type-specific metadata. Populated when image data is available. */
+  meta :{[k:string]:any}
+
+  /** Load the image. Resolves immediately if source is Uint8Array. */
+  load() :Promise<Img<Uint8Array>>
+}
+interface ImgOptions {
+  type?   :string  // mime type
+  width?  :number
+  height? :number
+}
+interface ImgConstructor {
+  new(source :string|ArrayBuffer|Uint8Array, optionsOrWidth? :ImgOptions|number): Img;
+  (source :string|ArrayBuffer|Uint8Array, optionsOrWidth? :ImgOptions|number): Img;
+}
+declare var Img: ImgConstructor;
+
+
+// ------------------------------------------------------------------------------------
+// path & file
+
+declare namespace Path {
+  /** Returns the filename extension without ".". Returns "" if none. */
+  function ext(name :string) :string
+
+  /** Returns the directory part of the path. E.g. "/foo/bar/baz" => "/foo/bar" */
+  function dir(path :string) :string
+
+  /** Returns the base of the path. E.g. "/a/b" => "b" */
+  function base(path :string) :string
+
+  /** Cleans up the pathname. E.g. "a/c//b/.." => "a/c" */
+  function clean(path :string) :string
+
+  /** True if the path is absolute */
+  function isAbs(path :string) :bool
+
+  /** Returns a path with paths joined together. E.g. ["foo/", "//bar", "baz"] => "foo/bar/baz" */
+  function join(...paths :string[]) :string
+  function join(paths :string[]) :string
+
+  /** Returns a list of path components. E.g. "/foo//bar/" => ["", "foo", "bar"] */
+  function split(path :string) :string[]
+}
+
+/**
+ * Inspects the header (first ~20 or so bytes) of data to determine the type of file.
+ * Similar to the POSIX "file" program. Returns null if unknown.
+ */
+declare function fileType(data :ArrayLike<byte>|ArrayBuffer) :FileTypeInfo|null
+/** Returns mime type and other information for the file, based on the provided filename. */
+declare function fileType(filename :string) :FileTypeInfo|null
+/** Data returned by the fileType function, describing a type of file data */
+interface FileTypeInfo {
+  type :string    // mime type
+  exts :string[]  // filename extensions
+  description? :string
+}
+
+
+// ------------------------------------------------------------------------------------
 // Figma
 
 /** A node that may have children */
@@ -88,19 +188,25 @@ declare function selection(index :number): SceneNode|null;
 declare function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void;
 
 /** Version of Figma plugin API that is currently in use */
-declare const apiVersion: string
+declare var apiVersion: string
 
-/** Current document in Figma */
-declare const root: DocumentNode
+/** Current document in Figma. Equivalent to figma.root */
+declare var document: DocumentNode
 
 /** Viewport */
-declare const viewport: ViewportAPI
+declare var viewport: ViewportAPI
 
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
-declare const MIXED: symbol
+declare var MIXED: symbol
 
-declare const clientStorage: ClientStorageAPI
-// declare const currentPage: PageNode
+/**
+ * Store data on the user's local machine. Similar to localStorage.
+ * Data may disappear if user clears their web browser cache.
+ */
+declare var clientStorage: ClientStorageAPI
+
+/** Presents a short ambient message to the user, at the bottom of the screen */
+declare function notify(message: string, options?: NotificationOptions): NotificationHandler
 
 /** Create a new group from nodes. Parent defaults to current page's canvas. */
 declare function group(nodes: ReadonlyArray<BaseNode>, parent?: null|ContainerNode, index?: number): FrameNode;
@@ -108,46 +214,82 @@ declare function group(nodes: ReadonlyArray<BaseNode>, parent?: null|ContainerNo
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
 //
-/** Creates a new Page */             declare function Page(props? :Partial<PageNode>): PageNode;
-/** Creates a new Rectangle */        declare function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
-/** Creates a new Rectangle */        declare function Rect(props? :Partial<RectangleNode>) :RectangleNode;
-/** Creates a new Line */             declare function Line(props? :Partial<LineNode>): LineNode;
-/** Creates a new Ellipse */          declare function Ellipse(props? :Partial<EllipseNode>): EllipseNode;
-/** Creates a new Polygon */          declare function Polygon(props? :Partial<PolygonNode>): PolygonNode;
-/** Creates a new Star */             declare function Star(props? :Partial<StarNode>): StarNode;
-/** Creates a new Vector */           declare function Vector(props? :Partial<VectorNode>): VectorNode;
-/** Creates a new Text */             declare function Text(props? :Partial<TextNode>): TextNode;
-/** Creates a new BooleanOperation */ declare function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
-/** Creates a new Frame */            declare function Frame(props? :Partial<FrameNode>): FrameNode;
-/** Creates a new Component */        declare function Component(props? :Partial<ComponentNode>): ComponentNode;
-/** Creates a new Slice */            declare function Slice(props? :Partial<SliceNode>): SliceNode;
-/** Creates a new PaintStyle */       declare function PaintStyle(props? :Partial<PaintStyle>): PaintStyle;
-/** Creates a new TextStyle */        declare function TextStyle(props? :Partial<TextStyle>): TextStyle;
-/** Creates a new EffectStyle */      declare function EffectStyle(props? :Partial<EffectStyle>): EffectStyle;
-/** Creates a new GridStyle */        declare function GridStyle(props? :Partial<GridStyle>): GridStyle;
+/** Creates a new Page */
+declare function Page(props? :Partial<PageNode>): PageNode;
+/** Creates a new Rectangle */
+declare function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
+/** Creates a new Rectangle */
+declare function Rect(props? :Partial<RectangleNode>) :RectangleNode;
+/** Creates a new Line */
+declare function Line(props? :Partial<LineNode>): LineNode;
+/** Creates a new Ellipse */
+declare function Ellipse(props? :Partial<EllipseNode>): EllipseNode;
+/** Creates a new Polygon */
+declare function Polygon(props? :Partial<PolygonNode>): PolygonNode;
+/** Creates a new Star */
+declare function Star(props? :Partial<StarNode>): StarNode;
+/** Creates a new Vector */
+declare function Vector(props? :Partial<VectorNode>): VectorNode;
+/** Creates a new Text */
+declare function Text(props? :Partial<TextNode>): TextNode;
+/** Creates a new BooleanOperation */
+declare function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
+/** Creates a new Frame */
+declare function Frame(props? :Partial<FrameNode>): FrameNode;
+/** Creates a new Component */
+declare function Component(props? :Partial<ComponentNode>): ComponentNode;
+/** Creates a new Slice */
+declare function Slice(props? :Partial<SliceNode>): SliceNode;
+/** Creates a new PaintStyle */
+declare function PaintStyle(props? :Partial<PaintStyle>): PaintStyle;
+/** Creates a new TextStyle */
+declare function TextStyle(props? :Partial<TextStyle>): TextStyle;
+/** Creates a new EffectStyle */
+declare function EffectStyle(props? :Partial<EffectStyle>): EffectStyle;
+/** Creates a new GridStyle */
+declare function GridStyle(props? :Partial<GridStyle>): GridStyle;
 
 
 // Type guards, nodes
 //
-/** Checks if node is of type Document */         declare function isDocument(n :BaseNode|null|undefined) :n is DocumentNode;
-/** Checks if node is of type Page */             declare function isPage(n :BaseNode|null|undefined) :n is PageNode;
-/** Checks if node is of type Rectangle */        declare function isRectangle(n :BaseNode|null|undefined) :n is RectangleNode;
-/** Checks if node is of type Rectangle */        declare function isRect(n :BaseNode|null|undefined) :n is RectangleNode;
-/** Checks if node is of type Line */             declare function isLine(n :BaseNode|null|undefined): n is LineNode;
-/** Checks if node is of type Ellipse */          declare function isEllipse(n :BaseNode|null|undefined): n is EllipseNode;
-/** Checks if node is of type Polygon */          declare function isPolygon(n :BaseNode|null|undefined): n is PolygonNode;
-/** Checks if node is of type Star */             declare function isStar(n :BaseNode|null|undefined): n is StarNode;
-/** Checks if node is of type Vector */           declare function isVector(n :BaseNode|null|undefined): n is VectorNode;
-/** Checks if node is of type Text */             declare function isText(n :BaseNode|null|undefined): n is TextNode;
-/** Checks if node is of type BooleanOperation */ declare function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
-/** Checks if node is of type Frame */            declare function isFrame(n :BaseNode|null|undefined): n is FrameNode & {type:"FRAME"};
-/** Checks if node is of type Group */            declare function isGroup(n :BaseNode|null|undefined): n is FrameNode & {type:"GROUP"};
-/** Checks if node is of type Component */        declare function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
-/** Checks if node is of type Component */        declare function isInstance(n :BaseNode|null|undefined): n is InstanceNode;
-/** Checks if node is of type Slice */            declare function isSlice(n :BaseNode|null|undefined): n is SliceNode;
-/** Checks if node is a type of SceneNode */      declare function isSceneNode(n :BaseNode|null|undefined): n is SceneNode;
-/** Checks if node is a type with children */     declare function isContainerNode(n :BaseNode|null|undefined): n is ContainerNode;
-/** Checks if node is a Shape */                  declare function isShape(n :BaseNode|null|undefined): n is Shape;
+/** Checks if node is of type Document */
+declare function isDocument(n :BaseNode|null|undefined) :n is DocumentNode;
+/** Checks if node is of type Page */
+declare function isPage(n :BaseNode|null|undefined) :n is PageNode;
+/** Checks if node is of type Rectangle */
+declare function isRectangle(n :BaseNode|null|undefined) :n is RectangleNode;
+/** Checks if node is of type Rectangle */
+declare function isRect(n :BaseNode|null|undefined) :n is RectangleNode;
+/** Checks if node is of type Line */
+declare function isLine(n :BaseNode|null|undefined): n is LineNode;
+/** Checks if node is of type Ellipse */
+declare function isEllipse(n :BaseNode|null|undefined): n is EllipseNode;
+/** Checks if node is of type Polygon */
+declare function isPolygon(n :BaseNode|null|undefined): n is PolygonNode;
+/** Checks if node is of type Star */
+declare function isStar(n :BaseNode|null|undefined): n is StarNode;
+/** Checks if node is of type Vector */
+declare function isVector(n :BaseNode|null|undefined): n is VectorNode;
+/** Checks if node is of type Text */
+declare function isText(n :BaseNode|null|undefined): n is TextNode;
+/** Checks if node is of type BooleanOperation */
+declare function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
+/** Checks if node is of type Frame */
+declare function isFrame(n :BaseNode|null|undefined): n is FrameNode & {type:"FRAME"};
+/** Checks if node is of type Group */
+declare function isGroup(n :BaseNode|null|undefined): n is FrameNode & {type:"GROUP"};
+/** Checks if node is of type Component */
+declare function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
+/** Checks if node is of type Component */
+declare function isInstance(n :BaseNode|null|undefined): n is InstanceNode;
+/** Checks if node is of type Slice */
+declare function isSlice(n :BaseNode|null|undefined): n is SliceNode;
+/** Checks if node is a type of SceneNode */
+declare function isSceneNode(n :BaseNode|null|undefined): n is SceneNode;
+/** Checks if node is a type with children */
+declare function isContainerNode(n :BaseNode|null|undefined): n is ContainerNode;
+/** Checks if node is a Shape */
+declare function isShape(n :BaseNode|null|undefined): n is Shape;
 
 /**
  * Returns true if n is a shape with at least one visible image.
@@ -158,16 +300,23 @@ declare function isImage(n :BaseNode) :n is Shape & { fills :ReadonlyArray<Paint
 
 // Type guards, paints
 //
-/** Checks if paint is an image */      declare function isImage(p :Paint|null|undefined) :p is ImagePaint;
-/** Checks if paint is a gradient */    declare function isGradient(p :Paint|null|undefined) :p is GradientPaint;
-/** Checks if paint is a solid color */ declare function isSolidPaint(p :Paint|null|undefined) :p is SolidPaint;
+/** Checks if paint is an image */
+declare function isImage(p :Paint|null|undefined) :p is ImagePaint;
+/** Checks if paint is a gradient */
+declare function isGradient(p :Paint|null|undefined) :p is GradientPaint;
+/** Checks if paint is a solid color */
+declare function isSolidPaint(p :Paint|null|undefined) :p is SolidPaint;
 
 // Type guards, styles
 //
-/** Checks if style is a paint style */  declare function isPaintStyle(s :BaseStyle|null|undefined) :p is PaintStyle;
-/** Checks if style is a text style */   declare function isTextStyle(s :BaseStyle|null|undefined) :p is TextStyle;
-/** Checks if style is a effect style */ declare function isEffectStyle(s :BaseStyle|null|undefined) :p is EffectStyle;
-/** Checks if style is a grid style */   declare function isGridStyle(s :BaseStyle|null|undefined) :p is GridStyle;
+/** Checks if style is a paint style */
+declare function isPaintStyle(s :BaseStyle|null|undefined) :p is PaintStyle;
+/** Checks if style is a text style */
+declare function isTextStyle(s :BaseStyle|null|undefined) :p is TextStyle;
+/** Checks if style is a effect style */
+declare function isEffectStyle(s :BaseStyle|null|undefined) :p is EffectStyle;
+/** Checks if style is a grid style */
+declare function isGridStyle(s :BaseStyle|null|undefined) :p is GridStyle;
 
 interface Color extends RGB { // compatible with RGB interface
   readonly r: number
@@ -212,6 +361,10 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 /** #FF00FF Color(1   , 0   , 1)   */ declare const MAGENTA :Color;
 /** #FFFF00 Color(1   , 1   , 0)   */ declare const YELLOW  :Color;
 /** #FF8000 Color(1   , 0.5 , 0)   */ declare const ORANGE  :Color;
+
+
+// ------------------------------------------------------------------------------------
+// find & visit
 
 /**
  * find traverses the tree represented by node and

@@ -1,16 +1,23 @@
 import { EditorState } from "./editor"
+import { EventEmitter } from "./event"
 import * as monaco from "monaco-editor"
 
 
-export class MsgZones {
+interface MsgZonesEvents {
+  "update": undefined
+}
+
+export class MsgZones extends EventEmitter<MsgZonesEvents> {
 
   readonly editor :EditorState
 
   // msgZones = new Map<number,number>() // line number => view zone ID
   msgZones = new Array<number>() // line number => view zone ID
+  count :number = 0
 
 
   constructor(editor :EditorState) {
+    super()
     this.editor = editor
   }
 
@@ -19,15 +26,30 @@ export class MsgZones {
     if (this.msgZones.length > 0) {
       this.clear(this.msgZones)
       this.msgZones = []
+      this.count = 0
+      this.triggerEvent("update")
     }
   }
 
-  clear(ids :Iterable<number>) {
+  _clear(ids :Iterable<number>) :number {
+    let initCount = this.count
     this.editor.editor.changeViewZones(changeAccessor => {
       for (let id of ids) {
+        let i = this.msgZones.indexOf(id)
         changeAccessor.removeZone(id)
+        if (i != -1) {
+          delete this.msgZones[i]
+          this.count--
+        }
       }
     })
+    return initCount - this.count
+  }
+
+  clear(ids :Iterable<number>) {
+    if (this._clear(ids) > 0) {
+      this.triggerEvent("update")
+    }
   }
 
 
@@ -49,11 +71,13 @@ export class MsgZones {
 
     // offset zones after changed lines
     let msgZones2 :number[] = []
+    let count = 0
     // first, copy unaffected zones
     for (let line = 0; line < startLine; line++) {
       let zoneId = this.msgZones[line]
       if (zoneId !== undefined && !msgZonesToBeRemoved.has(zoneId)) {
         msgZones2[line] = zoneId
+        count++
       }
     }
     // then, copy offset zones
@@ -61,13 +85,15 @@ export class MsgZones {
       let zoneId = this.msgZones[line]
       if (zoneId !== undefined && !msgZonesToBeRemoved.has(zoneId)) {
         msgZones2[line + lineDelta] = zoneId
+        count++
       }
     }
     this.msgZones = msgZones2
+    this.count = count
   }
 
 
-  set(pos :SourcePos, message :string) :number {
+  set(pos :SourcePos, messageHtml :string) :number {
     if (pos.line < 1) {
       return -1
     }
@@ -83,29 +109,34 @@ export class MsgZones {
         existingViewZoneId = undefined
       }
 
-      let heightInLines = message.split("\n").length
-
       let domNode = document.createElement('div')
       domNode.className = "printWidget"
-      if (heightInLines < 2) {
-        if (message.length > 40) {
-          // make room for wrapping text
-          heightInLines = 2
-        } else {
-          domNode.className += " small"
-        }
-      }
+
+      // let heightInLines = message.split("\n").length
+      // if (heightInLines < 2) {
+      //   if (message.length > 40) {
+      //     // make room for wrapping text
+      //     heightInLines = 2
+      //   } else {
+      //     domNode.className += " small"
+      //   }
+      // }
 
       let mainEl = document.createElement('div')
       domNode.appendChild(mainEl)
 
+      // let textEl = document.createElement('p')
+      // textEl.innerText = message
+      // textEl.className = "message monospace"
+      // mainEl.appendChild(textEl)
+
       let textEl = document.createElement('p')
-      textEl.innerText = message
       textEl.className = "message monospace"
+      textEl.innerHTML = messageHtml
       mainEl.appendChild(textEl)
 
       let inlineButtonEl :HTMLElement|null = null
-      if (message != "") {
+      if (messageHtml != "") {
         inlineButtonEl = document.createElement('div')
         inlineButtonEl.innerText = "+"
         inlineButtonEl.title = "Add to script as code"
@@ -158,7 +189,7 @@ export class MsgZones {
 
         this.clear([viewZoneId])
 
-        let insertMessage = "\n" + message
+        let insertMessage = "\n" + messageHtml
         let spaces = "                                                                            "
         if (pos.column > 1) {
           insertMessage = insertMessage.replace(/\n/g, "\n" + spaces.substr(0, pos.column))
@@ -215,6 +246,9 @@ export class MsgZones {
     })
 
     this.editor.startObservingChanges()
+
+    this.count++
+    this.triggerEvent("update")
 
     return viewZoneId
   }

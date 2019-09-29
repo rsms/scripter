@@ -133,6 +133,54 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 `),
 
 
+s("UI messaging", `
+// There are a few ways to show messages
+// in the UI
+
+// alert(message) shows a message dialog.
+// Blocks the UI. Useful for important messages.
+alert("Something very important")
+
+// confirm(question) asks the user a yes or no
+// question via a message dialog. Blocks the UI.
+// Returns true if the user answered "yes".
+print(await confirm("Would you like a kitten?"))
+
+// notify(message, options?) shows a message in
+// the bottom of the user's screen.
+// Does not block the UI.
+notify("Notification", { timeout: 2000 })
+`),
+
+
+s("Working with paths", `
+// The Path library provides functions for working
+// with pathnames.
+let path = "/foo/bar/baz.png"
+print(Path.ext(path))
+print(Path.dir(path))
+print(Path.base(path))
+print(Path.clean("a/c//b/../k"))
+print(Path.isAbs(path))
+print(Path.join("foo", "//bar/", "baz", "internet"))
+print(Path.split(path))
+`),
+
+
+s("Working with files", `
+// Scripter doesn't support interfacing with your file system,
+// but it does provide functions for working with file data.
+
+// fileType can be used to investigate what type of file a
+// filename represents:
+print(fileType("foo/bar.zip"))
+
+// fileType can even guess the file type based on the first
+// few bytes of some file data:
+print(fileType([0xFF, 0xD8, 0xFF])) // JPEG image data
+`),
+
+
 s("Timers", `
 // Timers allows waiting for some time to pass
 // or to execute some code after a delay.

@@ -1,4 +1,3 @@
-import { fmtValue } from "../common/fmtval"
 import {
   EvalRequestMsg,
   EvalCancellationMsg,
@@ -7,12 +6,17 @@ import {
   WindowConfigMsg,
   WindowSize,
 } from "../common/messages"
+import * as rpc from "./rpc"
+import * as scriptLibImpl from "./script-lib"
 
+// scriptLib is a global declared in scripter-env.js
+declare var scriptLib :{[k:string]:any}
+scriptLib = scriptLibImpl
 
 // defined by library ../common/scripter-env.js
 type EvalCancelFun = (reason?:Error)=>void
 interface EvalScriptFun {
-  (reqid :string, valueFormatter :(v:any)=>string, js :string) :[Promise<any>,EvalCancelFun]
+  (reqid :string, js :string) :[Promise<any>,EvalCancelFun]
   readonly lineOffset :number
 }
 declare const evalScript :EvalScriptFun
@@ -104,23 +108,23 @@ class EvalTransaction {
   // returns time spent evaluating the script (in milliseconds)
   async eval(maxRetries :number = 10) :Promise<number> {  // never throws
     let triedToFixSnippets = new Set<string>()
+    let timeStarted = 0
     while (true) {
       try {
-        let timeStarted = Date.now()
+        timeStarted = Date.now()
         await this.tryEval()
-        return Date.now() - timeStarted
       } catch (err) {
         if (maxRetries-- && await this.retry(err, triedToFixSnippets)) {
           continue
         }
         this.setError(err)
-        return -1
       }
+      return Date.now() - timeStarted
     }
   }
 
   async tryEval() {
-    let [p, c] = evalScript(this.id, fmtValue, this.code)
+    let [p, c] = evalScript(this.id, this.code)
     this.cancelFun = c
     let result :any = p
     while (result instanceof Promise) {
@@ -203,7 +207,6 @@ figma.ui.onmessage = msg => {
   case "ui-init":
     // UI is ready. Send info about our figma plugin API version
     figma.ui.show()
-    figma.ui.postMessage({ type: "set-figma-api-version", api: figma.apiVersion })
     break
 
   case "eval":
@@ -223,6 +226,12 @@ figma.ui.onmessage = msg => {
     break
 
   default:
-    dlog(`plugin received unexpected message`, msg)
+    if (
+      typeof msg.type != "string" ||
+      typeof msg.id != "string" ||
+      !rpc.handleTransactionResponse(msg)
+    ) {
+      dlog(`plugin received unexpected message`, msg)
+    }
   }
 }

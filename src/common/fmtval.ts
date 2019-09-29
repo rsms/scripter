@@ -1,3 +1,26 @@
+import { isTypedArray } from "./typed-array"
+
+
+export function fmtPrintArgs(args :any[]) :string {
+  let message = ""
+  let prevWasLinebreak = false
+  for (let i = 0, endindex = args.length - 1; i <= endindex; i++) {
+    let s = fmtValue(args[i])
+    if (s && s[s.length-1] == "\n") {
+      if (message.length && message[message.length-1] == " ") {
+        message = message.substr(0, message.length-1)
+      }
+      prevWasLinebreak = true
+    } else if (prevWasLinebreak) {
+      prevWasLinebreak = false
+    } else if (i != endindex) {
+      s += " "
+    }
+    message += s
+  }
+  return message
+}
+
 export function fmtValue(v :any) :string {
   return _fmtValue(v, "\n", new Set<any>())
 }
@@ -24,6 +47,23 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
   }
 
   if (t == "object") {
+
+    if (v instanceof ArrayBuffer) {
+      return "<ArrayBuffer " + v.byteLength + ">"
+    }
+
+    if (isTypedArray(v)) {
+      let maxlen = 32 / v.BYTES_PER_ELEMENT
+      let v2 = v.length > maxlen ? v.subarray(0, maxlen) : v
+      return (
+        "<" + v.constructor.name + " " + v.length + (
+          v.length == 0 ? ">" :
+          " [" + Array.from(v2).map(v => v.toString(16)).join(" ") +
+          (v2 === v ? "]>" : " ...]>")
+        )
+      )
+    }
+
     if (Array.isArray(v)) {
       if (v.length > 10) {
         return "[" + v.map(v => ln2 + _fmtValue(v, ln2, seen)).join(",") + "]"
@@ -63,10 +103,6 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
 
     if (v instanceof Date) {
       return String(v)
-    }
-
-    if (v instanceof ArrayBuffer) {
-      return "ArrayBuffer{ byteLength: " + v.byteLength + " }"
     }
 
     return "{" + Object.keys(v).map(k => {

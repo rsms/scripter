@@ -6,6 +6,9 @@
 // Note: scripter-env.d.ts is not the definition file for the API of this library,
 // but the definitions of the environment of a script.
 //
+
+// scriptLib is defined in script-lib.ts
+var scriptLib = {};
 const evalScript = (function(){
 
 function _assertFailure(args) {
@@ -21,39 +24,76 @@ function assert(condition) {
   }
 }
 
+function isTypedArray(v) {
+  return v.buffer instanceof ArrayBuffer && v.BYTES_PER_ELEMENT !== undefined
+}
+
 // const print = console.log.bind(console)
 
-function _print(env, reqId, valueFormatter, args) {
+function preClone(v, seen) {
+  if (!v) {
+    return v
+  }
+
+  let v2 = seen.get(v)
+  if (v2 !== undefined) {
+    return v2
+  }
+  seen.set(v, v)
+
+  if (typeof v == "object") {
+    if (v instanceof Array) {
+      return v.map(v => preClone(v, seen))
+    }
+
+    if (v instanceof Date) {
+      return String(v)
+    }
+
+    // make sure we don't send huge chunks of data over ipc.
+    // This number should be slightly larger than the length cap constant in fmtval.ts
+    if (v instanceof ArrayBuffer) {
+      return v.slice(0, 50)
+    }
+    if (isTypedArray(v)) {
+      return v.subarray(0, 50)
+    }
+
+    if ("__scripter_image_marker__" in v) {
+      return v
+    }
+
+    let v2 = {}
+    for (let k in v) {
+      v2[k] = preClone(v[k], seen)
+    }
+    seen.set(v, v2)
+    return v2
+  }
+
+  return v
+}
+
+
+function _print(env, reqId, args) {
   console.log.apply(console, args)
   if (!env.scripter.visualizePrint || env.canceled) {
     return
   }
 
-  let message = ""
-  let prevWasLinebreak = false
-  for (let i = 0, endindex = args.length - 1; i <= endindex; i++) {
-    let s = valueFormatter(args[i])
-    if (s && s[s.length-1] == "\n") {
-      if (message.length && message[message.length-1] == " ") {
-        message = message.substr(0, message.length-1)
-      }
-      prevWasLinebreak = true
-    } else if (prevWasLinebreak) {
-      prevWasLinebreak = false
-    } else if (i != endindex) {
-      s += " "
-    }
-    message += s
-  }
+  let seen = new Map()
+  args = args.map(arg => preClone(arg, seen))
 
   let msg = { // PrintMsg
     type: "print",
-    message: message,
+    message: "",
+    args: args,
     reqId: reqId,
     srcPos: {line:0,column:0},
     srcLineOffset: _evalScript.lineOffset,
   }
 
+  // find origin source location
   let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
   // Note: fig-js stack traces does not include source column information, so we
   // optionally parse the column if present.
@@ -66,20 +106,25 @@ function _print(env, reqId, valueFormatter, args) {
       column: isNaN(column) ? 0 : column,
     }
   }
+
+  // send to ui
   try {
     figma.ui.postMessage(msg)
   } catch (_) {
-    // something that can't be cloned is in msg.
+    // something that can't be cloned
+    delete msg.args
+    msg.message = scriptLib.fmtPrintArgs(args)
+    figma.ui.postMessage(msg)
     // run through json as fallback
-    try {
-      for (let i = 0; i < msg.args.length; i++) {
-        if (typeof msg.args[i] == "function") {
-          msg.args[i] = "[Function]"
-        }
-      }
-      msg.args = JSON.parse(JSON.stringify(msg.args))
-      figma.ui.postMessage(msg)
-    } catch (_) {}
+    // try {
+    //   for (let i = 0; i < msg.args.length; i++) {
+    //     if (typeof msg.args[i] == "function") {
+    //       msg.args[i] = "[Function]"
+    //     }
+    //   }
+    //   msg.args = JSON.parse(JSON.stringify(msg.args))
+    //   figma.ui.postMessage(msg)
+    // } catch (_) {}
   }
 }
 
@@ -412,10 +457,12 @@ const env = {
 
   // shorthand figma.PROP
   apiVersion:    figma.apiVersion,
-  root:          figma.root,
+  root:          figma.root,  // deprecated; not in type defs
+  document:      figma.root,
   viewport:      figma.viewport,
   MIXED,
   clientStorage: figma.clientStorage,
+  notify:        figma.notify,
   // currentPage:   figma.currentPage,
 
   group,
@@ -424,6 +471,7 @@ const env = {
 }
 
 // ------------------------------------------------------------------------------------------
+// Nodes
 
 // shorthand node constructors. figma.createNodeType => NodeType
 const _nodeCtor = c => props => {
@@ -724,31 +772,88 @@ env.visit = visit
 env.find = find
 
 // ------------------------------------------------------------------------------------------
+// Misc functions
+// All defined in scriptLib and initialized at first call to evalScript
 
-let jsHeader = `var canceled=false;[async function script(module,exports,Symbol,__env,__print,__reqid,__valfmt){` +
-`function print() { __print(__env, __reqid, __valfmt, Array.prototype.slice.call(arguments)) };`
-let jsFooter = `},function(){canceled=true}]`
-let names = Object.keys(env)  //.filter(k => k[0] != "_")
-try {
-  // @ts-ignore eval
-  ;(0,eval)(`const {x,y} = {x:1,y:1}`)
-  jsHeader += `const {${names.join(',')}} = __env;`
-} catch (_) {
-  jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
+const F = function() {}
+env.confirm = F
+env.fetch = F
+env.Img = F
+env.Path = F
+env.fileType = F
+
+env.fetchData = function(input, init) {
+  return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
 }
 
-function _evalScript(reqId, valueFormatter, js) {
+env.fetchText = function(input, init) {
+  return scriptLib.fetch(input, init).then(r => res.text())
+}
+
+env.fetchJson = function(input, init) {
+  return scriptLib.fetch(input, init).then(r => res.json())
+}
+
+env.fetchImg = function(input, init) {
+  return env.fetchData(input, init).then(d => env.Img(d))
+}
+
+// ------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------
+// end of env definition
+
+
+const envKeys = Object.keys(env)
+let jsHeader = `var canceled=false;[async function script(` +
+`module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
+`){` +
+`function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };`
+let jsFooter = `},function(){canceled=true}]`
+
+// Note: The following caused a memory-related crash in fig-js when user code
+// replaced one of the variables. For instance:
+//   function animate() {};animate()
+// would crash Figma.
+// This was replaced by a slightly slower and messier solution, which is to pass
+// every single item of the environment as a function argument.
+//
+// let names = Object.keys(env)  //.filter(k => k[0] != "_")
+// try {
+//   // @ts-ignore eval
+//   ;(0,eval)(`var {x,y} = {x:1,y:1}`)
+//   jsHeader += `const {${names.join(',')}} = __env;`
+// } catch (_) {
+//   jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
+// }
+//
+
+let initialized = false
+
+function _evalScript(reqId, js) {
+  if (!initialized) {
+    initialized = true
+    env.Img = scriptLib.Img
+    env.confirm = scriptLib.confirm
+    env.fetch = scriptLib.fetch
+    env.Path = scriptLib.Path
+    env.fileType = scriptLib.fileType
+  }
   var cancelFun
   return [new Promise((resolve, reject) => {
     js = jsHeader + "\n" + js + "\n" + jsFooter
-    // console.log("_evalScript", js)
+    if (DEBUG) { console.log("evalScript", js) }
     try {
       // @ts-ignore eval (indirect call means scope is global)
       let r = (0,eval)(js);
 
+      // create invocation-specific environment
       let env0 = {
         canceled: false,
         scripter: Object.assign({}, env.scripter),
+
+        // TODO: find a better way to add these things to env.
+        // They are constant and are not specific to the invocation.
+        Headers: scriptLib.Headers,
       }
       for (let k in env) {
         if (k != "scripter") {
@@ -762,6 +867,7 @@ function _evalScript(reqId, valueFormatter, js) {
         }
       }
 
+      // create script cancel function
       let cancelInner = r[1]
       cancelFun = reason => {
         env0.canceled = true
@@ -774,8 +880,21 @@ function _evalScript(reqId, valueFormatter, js) {
         }
       }
 
-      //                     module, exports, Symbol, __env, __print, __reqid, __valfmt
-      return r[0].call(env0, {id:"",exports:{}}, {}, Symbol, env0, _print, reqId, valueFormatter)
+      // arguments for script entry function
+      let _module = {id:"",exports:{}}
+      let params = [
+        _module,          // module
+        _module.exports,  // exports
+        Symbol,           // Symbol
+        env0,             // __env
+        _print,           // __print
+        reqId,            // __reqId
+      ].concat(envKeys.map(k => env0[k]))
+      // Note: Important to use envKeys here; same as we use for order of
+      // argument names in jsHeader.
+
+      // call script entry function and handle reply
+      return r[0].apply(env0, params)
         .then(result =>
           _awaitAsync().then(() => resolve(result))
         )

@@ -119,6 +119,11 @@ code b, pre b, tt b { font-weight:540 }
     }
     &.run { background-image: url('./icon-play.svg'); }
     &.run.running { background-image: url("./icon-stop.svg"); }
+    &.clear { background-image: url('./icon-clear.svg'); }
+    &.unavailable {
+      opacity:0.4;
+      &:hover { background-color: inherit; }
+    }
   }
 
   & .runqueue {
@@ -413,6 +418,11 @@ body.showMessage #editor { bottom: var(--messageHeight); }
     & .current-line ~ .line-numbers {
       color: #888;
     }
+  }
+
+  & .detected-link {
+    /*text-decoration: underline rgba(0, 0, 200, 0.1);*/
+    text-decoration: none; /* TODO: support opening links */
   }
 }
 

@@ -1,12 +1,16 @@
 import { editor } from "./editor"
 import { menu } from "./menu"
 import { isMac } from "./util"
+import * as warningMessage from "./warning-message"
 
 
 class ToolbarUI {
   el :HTMLElement
-  runButton :HTMLElement
-  menuButton :HTMLElement
+
+  runButton   :HTMLElement
+  clearButton :HTMLElement
+  menuButton  :HTMLElement
+
   stopCallbacks = new Set<()=>void>()
   isRunning :bool = false
 
@@ -50,7 +54,7 @@ class ToolbarUI {
 
     // run button
     this.runButton = this.el.querySelector('.button.run') as HTMLElement
-    this.runButton.addEventListener("click", ev => {
+    handleClick(this.runButton, () => {
       if (this.isRunning) {
         for (let f of this.stopCallbacks) {
           try {
@@ -62,9 +66,7 @@ class ToolbarUI {
       } else {
         editor.runCurrentScript()
       }
-      ev.preventDefault()
-      ev.stopPropagation()
-    }, {passive:false,capture:true})
+    })
 
     // menu button
     this.menuButton = this.el.querySelector('.button.menu') as HTMLElement
@@ -80,14 +82,37 @@ class ToolbarUI {
       ev.preventDefault()
       ev.stopPropagation()
     }, {passive:false,capture:true})
-
     menu.on("visibility", menuVisible => {
       this.menuButton.classList.toggle("on", menuVisible)
+    })
+
+    // clear button
+    this.clearButton = this.el.querySelector('.button.clear') as HTMLElement
+    this.clearButton.title = "Clear messages  " + (
+      isMac ? "(⌘K)"
+            : "(Ctrl+L)"
+    )
+    handleClick(this.clearButton, () => {
+      warningMessage.hide()
+      editor.clearMessages()
+    })
+    editor.msgZones.on("update", () => {
+      this.clearButton.classList.toggle("unavailable", editor.msgZones.count == 0)
     })
 
     this.updateUI()
   }
 
+}
+
+
+// click handler
+function handleClick(el :HTMLElement, f :()=>void) {
+  el.addEventListener("click", ev => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    f()
+  }, {passive:false,capture:true})
 }
 
 

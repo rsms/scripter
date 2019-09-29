@@ -13,6 +13,7 @@ import { editor, initEditorModel } from "./editor"
 import * as figmaPluginBridge from "./figma-plugin-bridge"
 import toolbar from "./toolbar"
 import { isMac /* , print, dlog */ } from "./util"
+import "../common/filetype"
 
 
 function setupKeyboardHandlers() {
@@ -30,6 +31,11 @@ function setupKeyboardHandlers() {
     // stop script (ctrl-shift-X)
     if ((key == "x" || key == "X") && ev.ctrlKey && ev.shiftKey) {
       return editor.stopCurrentScript(), true
+    }
+
+    // clean up (cmd-K on mac, ctrl-L anywhere)
+    if ((key == "l" && ev.ctrlKey) || (isMac && ev.metaKey && key == "k")) {
+      return editor.clearMessages(), true
     }
 
     // toggle menu

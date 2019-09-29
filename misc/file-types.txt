@@ -1,0 +1,83 @@
+; file type database.
+; comments and blank lines are ignored.
+; extensions field can specify multiple extensions separated by whitespace.
+; EXTENSIONS and DESCRIPTION are optional fields.
+; * or ** can be used to match any byte of the header.
+;
+; image
+; HEADER                               | MIME TYPE        | EXTENSIONS         | DESCRIPTION
+; —————————————————————————————————————+——————————————————+————————————————————+————————————————————
+89 50 4E 47 0D 0A 1A 0A                | image/png        | png                | PNG image
+47 49 46 38 37 61                      | image/gif
+47 49 46 38 39 61                      | image/gif        | gif                | GIF image
+FF D8 FF                               | image/jpeg       | jpg jpeg jfif jpe  | JPEG image
+00 00 00 C0 6A 50 20 20 D0 A0 87 A0 00 | image/jp2        | jp2                | JPEG2000 image
+52 49 46 46 ** ** ** ** 57 45 42 50    | image/webp       | webp               | WebP image
+49 20 49                               | image/tiff
+49 49 2A 00                            | image/tiff
+4D 4D 00 2A                            | image/tiff
+4D 4D 00 2B                            | image/tiff       | tif tiff           | TIFF image
+42 4D                                  | image/bmp        | bmp                | Bitmap image
+00 00 01 00                            | image/x-icon     | ico                | Icon image
+38 42 50 53                            | image/vnd.adobe.photoshop | psd       | Photoshop image
+
+; audio & video
+; HEADER                            | MIME TYPE              | EXTENSIONS    | DESCRIPTION
+; ——————————————————————————————————+————————————————————————+———————————————+————————————————————
+4D 54 68 64                         | audio/midi             | mid midi      | MIDI audio
+49 44 33                            | audio/mp3              | mp3           | MP3 audio
+4F 67 67 53                         | audio/ogg              | ogg           | OGG audio
+52 49 46 46 ** ** ** ** 57 41 56 45 | audio/wav              | wav           | WAV audio
+
+; MPEG4 (so many we give em their own section)
+; HEADER                            | MIME TYPE              | EXTENSIONS    | DESCRIPTION
+; ——————————————————————————————————+————————————————————————+———————————————+————————————————————
+** ** ** ** 66 74 79 70 4D 34 41    | audio/m4a
+;            f  t  y  p  M  4  A
+** ** ** ** 66 74 79 70 4D 34 56    | video/x-m4v            | m4v           | MPEG4 video
+;                        M  4  V
+
+** ** ** ** 66 74 79 70 6D 6D 70 34 | video/mp4              | mp4           | MPEG4 video
+;                        m  m  p  4
+** ** ** ** 66 74 79 70 46 34 50 20 | video/mp4 ; F4P
+** ** ** ** 66 74 79 70 46 34 56 20 | video/mp4 ; F4V
+** ** ** ** 66 74 79 70 4D 53 4E 56 | video/mp4 ; MSNV
+** ** ** ** 66 74 79 70 4E 44 41 53 | video/mp4 ; NDAS
+** ** ** ** 66 74 79 70 4E 44 53 43 | video/mp4 ; NDSC
+** ** ** ** 66 74 79 70 4E 44 53 48 | video/mp4 ; NDSH
+** ** ** ** 66 74 79 70 4E 44 53 4D | video/mp4 ; NDSM
+** ** ** ** 66 74 79 70 4E 44 53 50 | video/mp4 ; NDSP
+** ** ** ** 66 74 79 70 4E 44 53 53 | video/mp4 ; NDSS
+** ** ** ** 66 74 79 70 4E 44 58 43 | video/mp4 ; NDXC
+** ** ** ** 66 74 79 70 4E 44 58 48 | video/mp4 ; NDXH
+** ** ** ** 66 74 79 70 4E 44 58 4D | video/mp4 ; NDXM
+** ** ** ** 66 74 79 70 4E 44 58 50 | video/mp4 ; NDXP
+** ** ** ** 66 74 79 70 4E 44 58 53 | video/mp4 ; NDXS
+** ** ** ** 66 74 79 70 4E 53 44 43 | video/mp4 ; NSDC
+** ** ** ** 66 74 79 70 61 76 63 31 | video/mp4 ; avc1
+** ** ** ** 66 74 79 70 64 61 73 68 | video/mp4 ; dash
+** ** ** ** 66 74 79 70 69 73 6F 32 | video/mp4 ; iso2
+** ** ** ** 66 74 79 70 69 73 6F 33 | video/mp4 ; iso3
+** ** ** ** 66 74 79 70 69 73 6F 34 | video/mp4 ; iso4
+** ** ** ** 66 74 79 70 69 73 6F 35 | video/mp4 ; iso5
+** ** ** ** 66 74 79 70 69 73 6F 36 | video/mp4 ; iso6
+** ** ** ** 66 74 79 70 69 73 6F 6D | video/mp4 ; isom
+** ** ** ** 66 74 79 70 6D 70 34 31 | video/mp4 ; mp41
+** ** ** ** 66 74 79 70 6D 70 34 32 | video/mp4 ; mp42
+** ** ** ** 66 74 79 70 6D 70 34 76 | video/mp4 ; mp4v
+** ** ** ** 66 74 79 70 6D 70 37 31 | video/mp4 ; mp71
+; end of mpeg4
+
+; application
+; HEADER                    | MIME TYPE                       | EXTENSIONS    | DESCRIPTION
+; ——————————————————————————+—————————————————————————————————+———————————————+————————————————————
+00 61 73 6D 01 00 00 00     | application/wasm                | wasm          | WebAssembly module
+50 4B 03 04                 | application/zip
+50 4B 05 06                 | application/zip
+50 4B 07 08                 | application/zip                 | zip           | Zip archive
+50 4B 03 04 14 00 08 00     | application/jar                 | jar           | Java archive
+1F 8B 08                    | application/gzip                | gz            | GZip archive
+75 73 74 61 72              | application/x-tar               | tar           | TAR archive
+1F 9D 90                    | application/x-tar-compressed    | tgz           | Compressed TAR archive
+42 5A 68                    | application/x-bzip2             | bz2           | BZip2 archive
+25 50 44 46                 | application/pdf                 | pdf           | PDF document

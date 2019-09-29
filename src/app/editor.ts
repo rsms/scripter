@@ -242,6 +242,12 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.msgZones.clearAll()
   }
 
+  clearMessages() {
+    this.msgZones.clearAll()
+    this.clearAllDecorations()
+    this.editor.focus()
+  }
+
 
   // ----------------------------------------------------------------------------------
   // Running scripts

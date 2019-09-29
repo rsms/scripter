@@ -1,4 +1,6 @@
 import { EvalRequestMsg, EvalResponseMsg, EvalCancellationMsg, PrintMsg } from "../common/messages"
+import { fmtValue } from "../common/fmtval"
+import * as base64 from "../common/base64"
 import { SourceMapConsumer, SourceMapGenerator } from "../misc/source-map"
 import * as warningMessage from "./warning-message"
 import { editor } from "./editor"
@@ -137,6 +139,17 @@ async function handleResponseMsg(msg :EvalResponseMsg) {
 }
 
 
+let tempEl :HTMLElement|null = null
+
+function htmlEncode(text :string) :string {
+  if (!tempEl) {
+    tempEl = document.createElement("div")
+  }
+  tempEl.innerText = text
+  return tempEl.innerHTML
+}
+
+
 async function handlePrintMsg(msg :PrintMsg) {
   let t = liveEvalRequests.get(msg.reqId)
   if (!t) {
@@ -154,8 +167,45 @@ async function handlePrintMsg(msg :PrintMsg) {
     return
   }
 
+  // html to show in message zone before the text message
+  let htmlPrefix = ""
+
   // format message
-  let message = msg.message
+  let messageHtml = ""
+  if (msg.args) {
+    // extract images
+    let args = []
+    let prevWasText = false
+    for (let arg of msg.args) {
+      if (arg && typeof arg == "object" && "__scripter_image_marker__" in arg) {
+        // the arg is an image
+        let url = ""
+        if (typeof arg.source == "string") {
+          url = arg.source
+        } else {
+          let buf = (
+            arg.source instanceof Uint8Array ? arg.source :
+            new Uint8Array(arg.source)
+          )
+          url = "data:" + arg.type + ";base64," + base64.fromByteArray(buf)
+        }
+        messageHtml += `<img src="${url}"`
+        let displayScale = window.devicePixelRatio || 1
+        if (arg.width) { messageHtml += ` width="${arg.width/displayScale}"` }
+        if (arg.height) { messageHtml += ` height="${arg.height/displayScale}"` }
+        messageHtml += `>`
+        prevWasText = false
+      } else {
+        if (prevWasText) {
+          messageHtml += " "
+        }
+        messageHtml += htmlEncode(fmtValue(arg))
+        prevWasText = true
+      }
+    }
+  } else {
+    messageHtml = htmlEncode(msg.message)
+  }
 
   // TODO: find end of print statement and adjust line if it spans more than one line.
   // Example: Currently this is what happens:
@@ -176,7 +226,7 @@ async function handlePrintMsg(msg :PrintMsg) {
   //   > lines
   //
 
-  editor.msgZones.set(pos, message)
+  editor.msgZones.set(pos, messageHtml)
 }
 
 
