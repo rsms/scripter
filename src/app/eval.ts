@@ -199,11 +199,9 @@ async function handlePrintMsg(msg :PrintMsg) {
           } else {
             if (width <= 0 && arg.pixelWidth) {
               width = arg.pixelWidth / displayScale
-              console.log("width from pixelWidth:", width)
             }
             if (height <= 0 && arg.pixelHeight) {
               height = arg.pixelHeight / displayScale
-              console.log("height from pixelHeight:", height)
             }
           }
         }

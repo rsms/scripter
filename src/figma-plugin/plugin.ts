@@ -6,6 +6,7 @@ import {
   WindowConfigMsg,
   WindowSize,
 } from "../common/messages"
+import * as windowSize from "../common/windowsize"
 import * as rpc from "./rpc"
 import * as scriptLibImpl from "./script-lib"
 
@@ -22,34 +23,11 @@ interface EvalScriptFun {
 declare const evalScript :EvalScriptFun
 
 
-// WindowSize => pixels
-function windowWidth(ws :WindowSize) :number {
-  switch (ws) {
-  case WindowSize.SMALL:  return 300
-  case WindowSize.MEDIUM: return 500
-  case WindowSize.LARGE:  return 700
-  default:
-    console.error(`[plugin] unexpected windowWidth ${ws}`)
-    return 500
-  }
-}
-function windowHeight(ws :WindowSize) :number {
-  switch (ws) {
-  case WindowSize.SMALL:  return 300
-  case WindowSize.MEDIUM: return 500
-  case WindowSize.LARGE:  return 700
-  default:
-    console.error(`[plugin] unexpected windowHeight ${ws}`)
-    return 500
-  }
-}
-
-
 const initialWindowSize = WindowSize.MEDIUM
 
 figma.showUI(__html__, {
-  width: windowWidth(initialWindowSize),
-  height: windowHeight(initialWindowSize),
+  width: windowSize.width(initialWindowSize),
+  height: windowSize.height(initialWindowSize),
   visible: false,
 })
 
@@ -196,7 +174,7 @@ function cancelEval(msg :EvalCancellationMsg) {
 
 
 function windowConfig(c :WindowConfigMsg) {
-  figma.ui.resize(windowWidth(c.width), windowHeight(c.height))
+  figma.ui.resize(windowSize.width(c.width), windowSize.height(c.height))
 }
 
 

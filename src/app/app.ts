@@ -1,5 +1,6 @@
 import "./app.css"
-import { EvalResponseMsg, PrintMsg } from "../common/messages"
+import { WindowSize } from "../common/messages"
+import * as windowSize from "../common/windowsize"
 import resources from "./resources"
 import * as monaco from "monaco-editor"
 // import * as monaco from "./monaco-ambient"
@@ -76,6 +77,35 @@ function setupKeyboardHandlers() {
 }
 
 
+function setupAppEventHandlers() {
+  function updateWindowSize() {
+    let [wz,hz] = config.windowSize
+    let cl = document.body.classList
+    cl.remove("windowWidthSmall")
+    cl.remove("windowWidthMedium")
+    cl.remove("windowWidthLarge")
+    cl.remove("windowHeightSmall")
+    cl.remove("windowHeightMedium")
+    cl.remove("windowHeightLarge")
+    switch (wz) {
+      case WindowSize.SMALL:  cl.add("windowWidthSmall"); break
+      case WindowSize.MEDIUM: cl.add("windowWidthMedium"); break
+      case WindowSize.LARGE:  cl.add("windowWidthLarge"); break
+    }
+    switch (hz) {
+      case WindowSize.SMALL:  cl.add("windowHeightSmall"); break
+      case WindowSize.MEDIUM: cl.add("windowHeightMedium"); break
+      case WindowSize.LARGE:  cl.add("windowHeightLarge"); break
+    }
+  }
+  config.on("change", ev => {
+    if (ev.key == "windowSize") {
+      updateWindowSize()
+    }
+  })
+  updateWindowSize()
+}
+
 
 async function main() {
   await initData()
@@ -85,6 +115,7 @@ async function main() {
   menu.init()
   figmaPluginBridge.init()
   setupKeyboardHandlers()
+  setupAppEventHandlers()
 }
 
 

@@ -37,6 +37,16 @@ body {
   background: transparent;
   color: #222;
   overflow: hidden;
+
+  &.windowWidthSmall {
+    --printMessageWidth: 250px;
+  }
+  &.windowWidthMedium {
+    --printMessageWidth: 450px;
+  }
+  &.windowWidthLarge {
+    --printMessageWidth: 650px;
+  }
 }
 body, .sansSerif {
   font: 12px/16px 'Inter', system-ui, -system-ui, sans-serif;
