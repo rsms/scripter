@@ -13,10 +13,10 @@ fi
 
 GITREV=$(git rev-parse HEAD)
 
-# patch version of iframe src="https://rsms.me/scripter/?v=1"
+# patch version of iframe src="https://scripter.rsms.me/?v=1"
 node <<_JS_
 let fs = require("fs")
 let s = fs.readFileSync("build/figma-plugin/ui.html", "utf8")
-s = s.replace(/(src="https:\\/\\/rsms\\.me\\/scripter\\/\?v=)([^"&]+)/g, "\$1$GITREV")
+s = s.replace(/(src="https:\\/\\/scripter\\.rsms\\.me\\/\?v=)([^"&]+)/g, "\$1$GITREV")
 fs.writeFileSync("build/figma-plugin/ui.html", s, "utf8")
 _JS_
