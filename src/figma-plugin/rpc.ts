@@ -1,10 +1,4 @@
-import {
-  TransactionalMsg,
-  RPCErrorResponseMsg,
-  UIConfirmRequestMsg, UIConfirmResponseMsg,
-  FetchRequestMsg, FetchResponseMsg,
-} from "../common/messages"
-import { FetchResponse, FetchHeaders } from "./rpc_fetch"
+import { TransactionalMsg, RPCErrorResponseMsg } from "../common/messages"
 
 
 interface Transaction<T extends TransactionalMsg = TransactionalMsg> {

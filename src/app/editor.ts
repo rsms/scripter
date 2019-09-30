@@ -862,7 +862,7 @@ async function loadLastOpenedScript() :Promise<Script> {
     }
   }
   if (!script) {
-    script = scriptsData.exampleScripts[0]
+    script = scriptsData.defaultSampleScript
     // script = Script.createDefault()
   }
   return script

@@ -95,12 +95,14 @@ declare function fetchImg(input: RequestInfo, init?: RequestInit): Promise<Img>;
 // Img
 
 /** Drawable image. Accepts a URL or image data. Can be passed to print for display. */
-declare interface Img<SourceType = string|Uint8Array> {
-  url     :string
-  type    :string      // mime type
-  width   :number      // 0 means "unknown"
-  height  :number      // 0 means "unknown"
-  source  :SourceType  // url or image data
+declare interface Img<DataType=null|Uint8Array> {
+  type        :string      // mime type
+  width       :number      // 0 means "unknown"
+  height      :number      // 0 means "unknown"
+  pixelWidth  :number      // 0 means "unknown"
+  pixelHeight :number      // 0 means "unknown"
+  source      :string|Uint8Array // url or image data
+  data        :DataType    // image data if loaded
 
   /** Type-specific metadata. Populated when image data is available. */
   meta :{[k:string]:any}
@@ -114,14 +116,16 @@ interface ImgOptions {
   height? :number
 }
 interface ImgConstructor {
-  new(source :string|ArrayBuffer|Uint8Array, optionsOrWidth? :ImgOptions|number): Img;
-  (source :string|ArrayBuffer|Uint8Array, optionsOrWidth? :ImgOptions|number): Img;
+  new(data :ArrayBufferLike|Uint8Array|ArrayLike<number>, optionsOrWidth? :ImgOptions|number): Img<Uint8Array>;
+  new(url :string, optionsOrWidth? :ImgOptions|number): Img<null>;
+  (data :ArrayBufferLike|Uint8Array|ArrayLike<number>, optionsOrWidth? :ImgOptions|number): Img<Uint8Array>;
+  (url :string, optionsOrWidth? :ImgOptions|number): Img<null>;
 }
 declare var Img: ImgConstructor;
 
 
 // ------------------------------------------------------------------------------------
-// path & file
+// path, file, data
 
 declare namespace Path {
   /** Returns the filename extension without ".". Returns "" if none. */
@@ -160,6 +164,15 @@ interface FileTypeInfo {
   exts :string[]  // filename extensions
   description? :string
 }
+
+
+/**
+ * Returns a Uint8Array of the input.
+ * If the input is a string, it's expected to be a description of bytes, not a literal.
+ * Example: "FF a7 0x9, 4" (whitespace, linebreaks and comma are ignored)
+ * If the input is some kind of list, it is converted if needed to a Uint8Array.
+ */
+declare function Bytes(input :string|ArrayLike<byte>|ArrayBuffer|Iterable<byte>) :Uint8Array
 
 
 // ------------------------------------------------------------------------------------

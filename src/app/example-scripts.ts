@@ -13,7 +13,25 @@ function kb(mac :string, other :string) {
   return isMac ? mac : other
 }
 
-export default [
+export default (samples => {
+  let categories :{[k:string]:ExampleScript[]} = {}
+  for (let s of samples) {
+    let [category, title] = s.name.split("/", 2)
+    if (!title) {
+      title = category
+      category = ""
+    } else {
+      s.name = title
+    }
+    let ss = categories[category]
+    if (ss) {
+      ss.push(s)
+    } else {
+      categories[category] = [ s ]
+    }
+  }
+  return categories
+})([
 
 
 s("Introduction", `
@@ -57,8 +75,7 @@ Keyboard shortcuts
 `),
 
 
-
-s("Create rectangles", `
+s("Figma/Create rectangles", `
 // This script creates some rectangles on the current page
 const numberOfRectangles = 5
 
@@ -76,7 +93,7 @@ viewport.scrollAndZoomIntoView(nodes)
 `),
 
 
-s("Trim whitespace", `
+s("Figma/Trim whitespace", `
 // Select some text and run this script to trim away linebreaks and space.
 for (let n of selection()) {
   if (isText(n)) {
@@ -86,7 +103,7 @@ for (let n of selection()) {
 `),
 
 
-s("Trim line indentation", `
+s("Figma/Trim line indentation", `
 // Select some text and run this script to trim away whitespace from the
 // beginning of lines
 for (let n of selection()) {
@@ -97,7 +114,7 @@ for (let n of selection()) {
 `),
 
 
-s("Select all images", `
+s("Figma/Select all images", `
 let images = await find(n => isImage(n) && n)
 setSelection(images)
 
@@ -123,7 +140,7 @@ setSelection(images)
 `),
 
 
-s("Set images to fit", `
+s("Figma/Set images to fit", `
 // Loop over images in the selection
 for (let shape of await find(selection(), n => isImage(n) && n)) {
   // Update image paints to use "FIT" scale mode
@@ -133,7 +150,7 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 `),
 
 
-s("UI messaging", `
+s("Basics/UI messaging", `
 // There are a few ways to show messages
 // in the UI
 
@@ -153,7 +170,7 @@ notify("Notification", { timeout: 2000 })
 `),
 
 
-s("Working with paths", `
+s("Basics/Working with paths", `
 // The Path library provides functions for working
 // with pathnames.
 let path = "/foo/bar/baz.png"
@@ -167,7 +184,7 @@ print(Path.split(path))
 `),
 
 
-s("Working with files", `
+s("Basics/Working with files", `
 // Scripter doesn't support interfacing with your file system,
 // but it does provide functions for working with file data.
 
@@ -181,7 +198,50 @@ print(fileType([0xFF, 0xD8, 0xFF])) // JPEG image data
 `),
 
 
-s("Timers", `
+s("Basics/Showing images", `
+// The Img function and class can be used to describe images
+// and load image data for a few common image types.
+// Passing an Img to print vizualizes the image.
+
+// Img can take a URL which is then loaded by the web browser
+print(Img("https://rsms.me/scripter/icon.png"))
+
+// We can specify the size if we want
+print(Img("https://rsms.me/scripter/icon.png", {width:128, height:16}))
+
+// Img.load() allows us to load the image data
+let icon = await Img("https://rsms.me/scripter/icon.png").load()
+print(icon.data)
+// A loaded image may also have information that was read from
+// the image data itself, like mime type and bitmap dimensions:
+print(icon, icon.type, icon.meta)
+
+// fetchImg is a shorthand function for loading an Img
+let loadedIcon = await fetchImg("https://rsms.me/scripter/icon.png")
+print(loadedIcon, loadedIcon.meta)
+
+// Img also accepts image data as its input,
+// in common image formats like png, gif and jpeg.
+let gifData = Bytes(\`
+  47 49 46 38 39 61
+  0A 00 0A 00 91 00 00
+  FF FF FF FF 00 00 00 00 FF 00 00 00
+  21 F9 04 00 00 00 00 00
+  2C 00 00 00 00 0A 00 0A 00 00
+  02 16 8C 2D 99 87 2A 1C DC 33 A0 02 75
+  EC 95 FA A8 DE 60 8C 04 91 4C 01 00
+  3B
+\`)
+print(Img(gifData, 32))
+
+// Img also supports JPEG in addition to PNG and GIF
+let im1 = Img("https://rsms.me/scripter/sample/colors.jpg")
+await im1.load()
+print(im1, [im1])
+`),
+
+
+s("Basics/Timers", `
 // Timers allows waiting for some time to pass
 // or to execute some code after a delay.
 await timer(200)
@@ -210,7 +270,47 @@ timer(200, canceled => {
 
 
 
-s("Advanced timers", `
+s("HTTP/Fetch", `
+// fetch can be used to fetch resources across the interwebs.
+// It's the standard fetch API you might already be used to.
+let r = await fetch("https://jsonplaceholder.typicode.com/users/1")
+print(await r.json())
+
+// Scripter provides a few shorthand functions for common tasks:
+print(await fetchJson("https://jsonplaceholder.typicode.com/users/1"))
+print(await fetchText("https://jsonplaceholder.typicode.com/users/1"))
+print(await fetchImg("https://rsms.me/scripter/icon.png"))
+print(await fetchData("https://rsms.me/scripter/icon.png"))
+`),
+
+
+s("HTTP/Figma API", `
+// This script demonstrates accessing the Figma HTTP API
+//
+// First, generate an access token for yourself using the
+// "+ Get personal access token" function on this page:
+// https://www.figma.com/developers/api#access-tokens
+const figmaHttpApiToken = "your_access_token_here"
+
+// We can now fetch JSON representations of files via the HTTP API
+let file = await fetchFigmaFile("jahkK3lhzuegZBQXz5BbL7")
+print(Img(file.thumbnailUrl), file)
+
+// Simple helper function for GETing files from Figma servers
+async function fetchFigmaFile(fileKey :string) :Promise<any> {
+  let json = await fetchJson(
+    "https://api.figma.com/v1/files/" + encodeURIComponent(fileKey),
+    { headers: { "X-FIGMA-TOKEN": figmaHttpApiToken } }
+  )
+  if (json.status && json.err) {
+    throw new Error(\`API error: \${json.err}\`)
+  }
+  return json
+}
+`),
+
+
+s("Advanced/Timers", `
 // Advanced use of multiple timers to implement timeout
 
 // Try changing this from 200 to 300:
@@ -255,7 +355,7 @@ interface CPromise<R> extends Promise<R> { cancel():void }
 `),
 
 
-s("Tick tock, tick tock, tick tock", `
+s("Advanced/Tick tock, tick tock, tick tock", `
 // Demonstrates continously-running scripts.
 // This loops forever until you restart or
 // stop the script.
@@ -267,7 +367,7 @@ for (let i = 1; true; i++) {
 `),
 
 
-s("Animation", `
+s("Advanced/Animation", `
 // Rudimentary animation with animate()
 // Moves a rectangle around in a "figure eight" pattern.
 //
@@ -297,4 +397,4 @@ try {
 `),
 
 
-] as ExampleScript[]
+] as ExampleScript[])

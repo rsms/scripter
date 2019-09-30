@@ -466,6 +466,14 @@ body.showMessage #editor { bottom: var(--messageHeight); }
   /*border-left: 4px solid lightgreen;
   padding-left: 1em;
   background: #eeffee;*/
+
+  & img {
+    object-position: 50% 50%;
+    object-fit: contain;
+    object-fit: scale-down;
+    object-fit: contain;
+    max-width: 100%;
+  }
 }
 
 .monaco-editor .printWidget > div {

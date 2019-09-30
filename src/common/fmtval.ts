@@ -105,12 +105,14 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
       return String(v)
     }
 
-    return "{" + Object.keys(v).map(k => {
-      if (!jsPropNameRe.test(k)) {
-        k = JSON.stringify(k)
+    let pairs :string[] = []
+    for (let k of Object.keys(v)) {
+      if (k != "__scripter_image_marker__") {
+        let ks = jsPropNameRe.test(k) ? k : JSON.stringify(k)
+        pairs.push(ks + ": " + _fmtValue(v[k], ln2, seen))
       }
-      return k + ": " + _fmtValue(v[k], ln2, seen)
-    }).join("," + ln2) + "}"
+    }
+    return "{" + pairs.join("," + ln2) + "}"
   }
 
   if (t == "function") {

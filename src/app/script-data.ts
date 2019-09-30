@@ -17,7 +17,8 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
 
   readonly version = 0
 
-  exampleScripts :Script[] = []
+  defaultSampleScript :Script
+  exampleScripts :{[k:string]:Script[]} = {}
   referenceScripts :Script[] = []
   scripts :Script[] = []
   scriptsById = new Map<number,Script>()  // same order as scripts
@@ -80,8 +81,18 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }, code)
     }
 
-    for (let exampleScript of exampleScripts) {
-      this.exampleScripts.push(mkExample(exampleScript.name, exampleScript.code))
+    for (let category of Object.keys(exampleScripts)) {
+      let cat = this.exampleScripts[category]
+      if (!cat) {
+        this.exampleScripts[category] = cat = []
+      }
+      for (let exampleScript of exampleScripts[category]) {
+        let s = mkExample(exampleScript.name, exampleScript.code)
+        if (!this.defaultSampleScript) {
+          this.defaultSampleScript = s
+        }
+        cat.push(s)
+      }
     }
 
     let externalExampleFiles = [
@@ -158,10 +169,7 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
 
 
   firstNonUserScript() :Script|null {
-    if (this.exampleScripts.length > 0) {
-      return this.exampleScripts[0]
-    }
-    return this.referenceScripts[0] || null
+    return this.defaultSampleScript || this.referenceScripts[0] || null
   }
 
 
@@ -205,7 +213,11 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       )
     }
     // sort scriptsById (also filters out deleted scripts)
-    let scripts = this.scripts.concat(this.exampleScripts).concat(this.referenceScripts)
+    let scripts = this.scripts.slice()
+    for (let cat of Object.keys(this.exampleScripts)) {
+      scripts = scripts.concat(this.exampleScripts[cat])
+    }
+    scripts = scripts.concat(this.referenceScripts)
     this.scriptsById = new Map(scripts.map(s => [s.id, s]))
     ;(this as any).version++
     this.triggerEvent("change")

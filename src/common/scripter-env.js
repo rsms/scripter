@@ -778,20 +778,24 @@ env.find = find
 const F = function() {}
 env.confirm = F
 env.fetch = F
+env.Headers = F
+env.Response = F
+env.Request = F
 env.Img = F
 env.Path = F
 env.fileType = F
+env.Bytes = F
 
 env.fetchData = function(input, init) {
   return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
 }
 
 env.fetchText = function(input, init) {
-  return scriptLib.fetch(input, init).then(r => res.text())
+  return scriptLib.fetch(input, init).then(r => r.text())
 }
 
 env.fetchJson = function(input, init) {
-  return scriptLib.fetch(input, init).then(r => res.json())
+  return scriptLib.fetch(input, init).then(r => r.json())
 }
 
 env.fetchImg = function(input, init) {
@@ -835,8 +839,12 @@ function _evalScript(reqId, js) {
     env.Img = scriptLib.Img
     env.confirm = scriptLib.confirm
     env.fetch = scriptLib.fetch
+    env.Headers = scriptLib.Headers
+    env.Response = scriptLib.Response
+    env.Request = scriptLib.Request
     env.Path = scriptLib.Path
     env.fileType = scriptLib.fileType
+    env.Bytes = scriptLib.Bytes
   }
   var cancelFun
   return [new Promise((resolve, reject) => {

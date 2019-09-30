@@ -189,10 +189,26 @@ async function handlePrintMsg(msg :PrintMsg) {
           )
           url = "data:" + arg.type + ";base64," + base64.fromByteArray(buf)
         }
-        messageHtml += `<img src="${url}"`
-        let displayScale = window.devicePixelRatio || 1
-        if (arg.width) { messageHtml += ` width="${arg.width/displayScale}"` }
-        if (arg.height) { messageHtml += ` height="${arg.height/displayScale}"` }
+        messageHtml += `<img src="${url}" referrerpolicy="no-referrer"`
+        let width = Math.max(0, arg.width || 0)
+        let height = Math.max(0, arg.height || 0)
+        if (width <= 0 && height <= 0) {
+          let displayScale = window.devicePixelRatio || 1
+          if (arg.pixelWidth <= 0 && arg.pixelHeight <= 0) {
+            height = 32  // fallback
+          } else {
+            if (width <= 0 && arg.pixelWidth) {
+              width = arg.pixelWidth / displayScale
+              console.log("width from pixelWidth:", width)
+            }
+            if (height <= 0 && arg.pixelHeight) {
+              height = arg.pixelHeight / displayScale
+              console.log("height from pixelHeight:", height)
+            }
+          }
+        }
+        if (width) { messageHtml += ` width="${width}"` }
+        if (height) { messageHtml += ` height="${height}"` }
         messageHtml += `>`
         prevWasText = false
       } else {

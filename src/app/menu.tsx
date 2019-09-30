@@ -53,7 +53,7 @@ export const menu = new Menu()
 interface MenuProps {}
 interface MenuState {
   scripts :Script[]
-  exampleScripts :Script[]
+  exampleScripts :{[category:string]:Script[]}
   referenceScripts :Script[]
   currentScriptId :number
   configVersion :number
@@ -132,6 +132,20 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     // TODO: consider adding a button to "Reset defaults..." that deletes the database.
     let currentScriptId = this.state.currentScriptId
     let windowSizeVal = config.windowSize.map(v => WindowSize[v]).join(",")
+
+    let examples = <div className="examples">
+      {Object.keys(this.state.exampleScripts).map(cat =>
+        <div key={cat} className="category">
+          <h3>{cat ? cat : "Examples"}</h3>
+          <ul>
+            {this.state.exampleScripts[cat].map(s =>
+              <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} />
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+
     return (
     <div>
       <div className="section">
@@ -141,11 +155,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       {this.state.scripts.map(s =>
         <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} /> )}
       </ul>
-      <h3>Examples</h3>
-      <ul>
-      {this.state.exampleScripts.map(s =>
-        <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} /> )}
-      </ul>
+      {examples}
       <h3>References</h3>
       <ul>
       {this.state.referenceScripts.map(s =>

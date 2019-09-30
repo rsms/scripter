@@ -33,10 +33,24 @@ class FetchReadableStream<R = any> implements ReadableStream<R> {
 export class FetchHeaders implements Headers {
   _headers :{[k:string]:string}
 
-  constructor(headers :object) {
+  constructor(init? :HeadersInit) {
+    // Headers | string[][] | Record<string, string>
     this._headers = {}
-    for (let k of Object.keys(headers)) {
-      this._headers[k] = String(headers[k]).toLowerCase()
+    if (init) {
+      if (Array.isArray(init)) {
+        // string[][]
+        for (let e of init) {
+          this._headers[e[0]] = String(e[1]).toLowerCase()
+        }
+      } else {
+        // Headers | Record<string, string>
+        if (init instanceof FetchHeaders) {
+          init = init._headers
+        }
+        for (let k of Object.keys(init)) {
+          this._headers[k] = String(init[k]).toLowerCase()
+        }
+      }
     }
   }
 
@@ -204,3 +218,113 @@ export class FetchResponse implements Response {
     return Promise.resolve(utf8.decode(this._bodybuf))
   }
 }
+
+
+class FetchAbortSignal /*implements AbortSignal*/ {
+  readonly aborted: boolean = false;
+
+  set onabort(f :((this: AbortSignal, ev: Event)=>any)|null) {
+    throw new Error("AbortSignal unsupported")
+  }
+
+  // EventTarget interface
+  addEventListener(
+    // type: string,
+    // listener: ((ev:Event)=>any)|null,
+    // options?: EventListenerOptions|boolean,
+  ): void {
+    throw new Error("AbortSignal unsupported")
+  }
+
+  dispatchEvent(/*ev: Event*/): boolean {
+    return false
+  }
+
+  removeEventListener(
+    // type: string,
+    // listener: ((ev:Event)=>any)|null | null,
+    // options?: EventListenerOptions|boolean,
+  ): void {
+  }
+}
+
+
+export class FetchRequest implements Request {
+  // Request interface
+  readonly cache: RequestCache;
+  readonly credentials: RequestCredentials;
+  readonly destination: RequestDestination;
+  readonly headers: Headers;
+  readonly integrity: string;
+  readonly isHistoryNavigation: boolean = false
+  readonly isReloadNavigation: boolean = false
+  readonly keepalive: boolean;
+  readonly method: string;
+  readonly mode: RequestMode;
+  readonly redirect: RequestRedirect;
+  readonly referrer: string;
+  readonly referrerPolicy: ReferrerPolicy;
+  readonly signal: AbortSignal;
+  readonly url: string;
+
+  // Body interface
+  readonly bodyUsed: boolean = false
+  readonly body: ReadableStream<Uint8Array>|null = null
+
+
+  constructor(input: RequestInfo, init?: RequestInit) {
+    let p :RequestInit = {}
+    if (typeof input == "string") {
+      this.url = input
+    } else {
+      for (let k of Object.keys(FetchRequest.prototype)) {
+        let v = input[k]
+        if (v !== undefined) {
+          this[k] = v
+        }
+      }
+    }
+
+    this.cache = p.cache || "default"
+    this.credentials = p.credentials || "same-origin"
+    this.destination = ""
+    this.headers = new FetchHeaders(p.headers)
+    this.integrity = p.integrity || ""
+    this.keepalive = !!p.keepalive
+    this.method = p.method || "GET"
+    this.mode = p.mode || "cors"
+    this.redirect = p.redirect || "follow"
+    this.referrer = p.referrer || "about:scripter"
+    this.referrerPolicy = p.referrerPolicy || ""
+    this.signal = new FetchAbortSignal() as AbortSignal
+  }
+
+
+  clone(): Request {
+    // TODO implement
+    throw new Error("clone not supported")
+  }
+
+  // Body interface
+
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return Promise.resolve(new ArrayBuffer(0))
+  }
+
+  blob(): Promise<Blob> {
+    throw new Error("Blob not supported")
+  }
+
+  formData(): Promise<FormData> {
+    return Promise.resolve(new FormData())
+  }
+
+  json(): Promise<any> {
+    return Promise.resolve(null)
+  }
+
+  text(): Promise<string> {
+    return Promise.resolve("")
+  }
+};
+
