@@ -204,20 +204,20 @@ s("Basics/Showing images", `
 // Passing an Img to print vizualizes the image.
 
 // Img can take a URL which is then loaded by the web browser
-print(Img("https://rsms.me/scripter/icon.png"))
+print(Img("https://scripter.rsms.me/icon.png"))
 
 // We can specify the size if we want
-print(Img("https://rsms.me/scripter/icon.png", {width:128, height:16}))
+print(Img("https://scripter.rsms.me/icon.png", {width:128, height:16}))
 
 // Img.load() allows us to load the image data
-let icon = await Img("https://rsms.me/scripter/icon.png").load()
+let icon = await Img("https://scripter.rsms.me/icon.png").load()
 print(icon.data)
 // A loaded image may also have information that was read from
 // the image data itself, like mime type and bitmap dimensions:
 print(icon, icon.type, icon.meta)
 
 // fetchImg is a shorthand function for loading an Img
-let loadedIcon = await fetchImg("https://rsms.me/scripter/icon.png")
+let loadedIcon = await fetchImg("https://scripter.rsms.me/icon.png")
 print(loadedIcon, loadedIcon.meta)
 
 // Img also accepts image data as its input,
@@ -235,7 +235,7 @@ let gifData = Bytes(\`
 print(Img(gifData, 32))
 
 // Img also supports JPEG in addition to PNG and GIF
-let im1 = Img("https://rsms.me/scripter/sample/colors.jpg")
+let im1 = Img("https://scripter.rsms.me/sample/colors.jpg")
 await im1.load()
 print(im1, [im1])
 `),
@@ -279,8 +279,8 @@ print(await r.json())
 // Scripter provides a few shorthand functions for common tasks:
 print(await fetchJson("https://jsonplaceholder.typicode.com/users/1"))
 print(await fetchText("https://jsonplaceholder.typicode.com/users/1"))
-print(await fetchImg("https://rsms.me/scripter/icon.png"))
-print(await fetchData("https://rsms.me/scripter/icon.png"))
+print(await fetchImg("https://scripter.rsms.me/icon.png"))
+print(await fetchData("https://scripter.rsms.me/icon.png"))
 `),
 
 
