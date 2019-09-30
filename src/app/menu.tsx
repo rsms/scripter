@@ -136,7 +136,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       "Restart Scripter when you are done.\n\n" +
       "Continue?"
     )) {
-      document.location.href = "https://rsms.me/scripter-legacy/"
+      document.location.href = `https://rsms.me/scripter-legacy/?v=${BUILD_VERSION}`
     }
   }
 
