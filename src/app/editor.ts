@@ -718,6 +718,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       module: 1, // ts.ModuleKind.CommonJS
       // lib: [ "esnext", "dom" ],
       sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
+      strictNullChecks: true,
 
       // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
       // we disable sourcemaps for now (since it's pointless).
