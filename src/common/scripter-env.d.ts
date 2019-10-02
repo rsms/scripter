@@ -388,7 +388,7 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
  */
 declare function find<R extends BaseNode>(
   node :ContainerNode|ReadonlyArray<BaseNode>,
-  predicate :(n :BaseNode) => R,
+  predicate :(n :BaseNode) => R|false,
   options? :FindOptions,
 ) :Promise<R[]>
 
@@ -406,7 +406,7 @@ declare function find<R extends BaseNode>(
  * but when `node` is an array, predicate is called for each item in `node`.
  */
 declare function find<R extends BaseNode>(
-  predicate :(n :BaseNode) => R,
+  predicate :(n :BaseNode) => R|false,
   options? :FindOptions,
 ) :Promise<R[]>
 
