@@ -281,12 +281,13 @@ print(range(10).array())
 // or use Array.from, since ranges are iterables
 print(Array.from(range(1, 10)))
 
-// range is often useful for graphics. We can represent columns or rows
-// similar to the Layout Grids feature in Figma:
+// range is often useful for graphics. We can represent columns or
+// rows similar to the Layout Grids feature in Figma:
 let columns = range(80, 512, 64)
 print(\`64dp wide columns with 80dp offset: \${columns}\`)
 
-// range() returns a LazySeq type which has an Array-like map function:
+// range() returns a LazySeq, which has several functions commonly
+// found for Array, like for instance map():
 print(range(-4, 4).map(v => \`0x\${(v*10).toString(16)}\`))
 
 // Since the sequence created by range() is lazy, values are allocated
@@ -305,8 +306,8 @@ print(range(0, Infinity, 3).at(1234567918383))
 // that it goes on forever:
 print(range(0, Infinity, 3))
 
-// Calling functions which only makes sense on finite sequences, like
-// map(), array(), or join(), on an infinite sequence throws an error:
+// Calling functions which only makes sense on finite sequences—like
+// map(), array() or join()—on an infinite sequence throws an error:
 try {
   range(0, Infinity).array()
 } catch (e) {
