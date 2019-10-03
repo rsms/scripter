@@ -59,8 +59,11 @@ function preClone(v, seen) {
       return v.subarray(0, 50)
     }
 
-    if ("__scripter_image_marker__" in v) {
-      return v
+    // pass through special objects like Img and LazySeq verbatim
+    for (let k in scriptLib.markerProps) {
+      if (k in v) {
+        return v
+      }
     }
 
     let v2 = {}
@@ -445,7 +448,6 @@ const env = {
   figma: figmaObject,
 
   assert,
-  // print,
   closeScripter,
   timer,
   TimerCancellation,
@@ -457,15 +459,13 @@ const env = {
 
   // shorthand figma.PROP
   apiVersion:    figma.apiVersion,
-  root:          figma.root,  // deprecated; not in type defs
-  document:      figma.root,
+  root:          figma.root,  // DEPRECATED; not in type defs
   viewport:      figma.viewport,
   MIXED,
   clientStorage: figma.clientStorage,
   notify:        figma.notify,
-  // currentPage:   figma.currentPage,
 
-  group,
+  group,  // DEPRECATED; not in type defs
 
   __html__:"", // always empty
 }
@@ -486,10 +486,36 @@ const _nodeCtor = c => props => {
   }
   return n
 }
+const ignoreGroupProps = {
+  index:1,
+  parent:1,
+}
+function createGroup(children, props) {
+  if (children.length == 0) {
+    throw new Error("group without children")
+  }
+  let parent = props.parent
+  if (!parent) {
+    parent = children[0].parent || figma.currentPage
+  }
+  let n = figma.group(children, parent, props.index)
+  try {
+    if (props) for (let k in props) {
+      if (!(k in ignoreGroupProps)) {
+        n[k] = props[k]
+      }
+    }
+  } catch (e) {
+    n.remove()
+    throw e
+  }
+  return n
+}
 env.BooleanOperation = _nodeCtor(figma.createBooleanOperation)
 env.Component        = _nodeCtor(figma.createComponent)
 env.Ellipse          = _nodeCtor(figma.createEllipse)
 env.Frame            = _nodeCtor(figma.createFrame)
+env.Group            = createGroup
 env.Line             = _nodeCtor(figma.createLine)
 env.Page             = _nodeCtor(figma.createPage)
 env.Polygon          = _nodeCtor(figma.createPolygon)
@@ -768,8 +794,48 @@ function find(node, predicate, options) {
   ).then(() => results)
 }
 
+
+// findOne<R extends SceneNode>(
+//   scope :FindScope|((n :SceneNode) => R|false),
+//   predicate? :(n :SceneNode) => R|false,
+// ) :R|null
+function findOne(scope, predicate) {
+  if (predicate === undefined) {
+    predicate = scope
+    scope = figma.currentPage
+  }
+  return scope.findOne(predicate)
+}
+
+
 env.visit = visit
 env.find = find
+env.findOne = findOne
+
+
+// ------------------------------------------------------------------------------------------
+// utilities
+
+// declare function range(start :number, end :number, step? :number) :LazySequence<number>
+
+// interface Iterator<T, TReturn = any, TNext = undefined> {
+//     // NOTE: 'next' is defined using a tuple to ensure we report the correct assignability errors in all places.
+//     next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
+// }
+
+
+// range(start :number, end :number, step? :number) :LazySequence<number>
+// range(end :number) :LazySequence<number>
+env.range = function range(start, end, step) {
+  if (end === undefined) {
+    end = start
+    start = 0
+    step = 1
+  } else if (step === undefined || step < 1) {
+    step = 1
+  }
+  return new scriptLib.LazyNumberSequence(start, end, step)
+}
 
 // ------------------------------------------------------------------------------------------
 // Misc functions

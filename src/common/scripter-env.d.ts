@@ -203,9 +203,6 @@ declare function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|
 /** Version of Figma plugin API that is currently in use */
 declare var apiVersion: string
 
-/** Current document in Figma. Equivalent to figma.root */
-declare var document: DocumentNode
-
 /** Viewport */
 declare var viewport: ViewportAPI
 
@@ -221,8 +218,18 @@ declare var clientStorage: ClientStorageAPI
 /** Presents a short ambient message to the user, at the bottom of the screen */
 declare function notify(message: string, options?: NotificationOptions): NotificationHandler
 
-/** Create a new group from nodes. Parent defaults to current page's canvas. */
-declare function group(nodes: ReadonlyArray<BaseNode>, parent?: null|ContainerNode, index?: number): FrameNode;
+
+/** Frame of type "FRAME" */
+interface FrameFrameNode extends FrameNode {
+  type: "FRAME"
+  clone(): FrameFrameNode
+}
+
+/** Frame of type "GROUP" */
+interface GroupFrameNode extends FrameNode {
+  type: "GROUP"
+  clone(): GroupFrameNode
+}
 
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
@@ -248,7 +255,9 @@ declare function Text(props? :Partial<TextNode>): TextNode;
 /** Creates a new BooleanOperation */
 declare function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
 /** Creates a new Frame */
-declare function Frame(props? :Partial<FrameNode>): FrameNode;
+declare function Frame(props? :Partial<FrameFrameNode>): FrameFrameNode;
+/** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
+declare function Group(children :ReadonlyArray<BaseNode>, props? :Partial<GroupFrameNode & {index :number}>): GroupFrameNode;
 /** Creates a new Component */
 declare function Component(props? :Partial<ComponentNode>): ComponentNode;
 /** Creates a new Slice */
@@ -288,9 +297,9 @@ declare function isText(n :BaseNode|null|undefined): n is TextNode;
 /** Checks if node is of type BooleanOperation */
 declare function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
 /** Checks if node is of type Frame */
-declare function isFrame(n :BaseNode|null|undefined): n is FrameNode & {type:"FRAME"};
+declare function isFrame(n :BaseNode|null|undefined): n is FrameFrameNode;
 /** Checks if node is of type Group */
-declare function isGroup(n :BaseNode|null|undefined): n is FrameNode & {type:"GROUP"};
+declare function isGroup(n :BaseNode|null|undefined): n is GroupFrameNode;
 /** Checks if node is of type Component */
 declare function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
 /** Checks if node is of type Component */
@@ -379,6 +388,20 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 // ------------------------------------------------------------------------------------
 // find & visit
 
+
+/** Returns the first node encountered in scope which the predicate returns */
+function findOne<R extends SceneNode>(scope :BaseNode, p :(n :PageNode|SceneNode) => R|false) :R|null
+/** Returns the first node encountered in scope for which predicate returns a truthy value for */
+function findOne(scope :DocumentNode, p :(n :PageNode|SceneNode) => boolean|undefined) :PageNode|SceneNode|null
+/** Returns the first node encountered in scope for which predicate returns a truthy value for */
+function findOne(scope :PageNode|SceneNode, p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+
+/** Returns the first node on the current page which the predicate returns */
+function findOne<R extends SceneNode>(p :(n :SceneNode) => R|false) :R|null
+/** Returns the first node on the current page for which predicate returns a truthy value for */
+function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+
+
 /**
  * find traverses the tree represented by node and
  * returns a list of all nodes for which predicate returns true.
@@ -392,9 +415,9 @@ declare function find<R extends BaseNode>(
   options? :FindOptions,
 ) :Promise<R[]>
 
-declare function find<R extends BaseNode>(
+declare function find(
   node :ContainerNode|ReadonlyArray<BaseNode>,
-  predicate :(n :BaseNode) => boolean|undefined|void,
+  predicate :(n :BaseNode) => boolean|undefined,
   options? :FindOptions,
 ) :Promise<BaseNode[]>
 
@@ -410,10 +433,10 @@ declare function find<R extends BaseNode>(
   options? :FindOptions,
 ) :Promise<R[]>
 
-declare function find<R extends BaseNode>(
-  predicate :(n :BaseNode) => boolean|undefined|void,
+declare function find(
+  predicate :(n :BaseNode) => boolean|undefined,
   options? :FindOptions,
-) :Promise<R[]>
+) :Promise<BaseNode[]>
 
 
 /**
@@ -423,17 +446,33 @@ declare function find<R extends BaseNode>(
  * node's children will not be visited. This allows efficient searching
  * where you know that you can skip certain branches.
  *
- * Note: visitor is not called for the `node` argument.
+ * Note: visitor is not called for the initial `node` argument.
  */
 declare function visit(
   node :ContainerNode|ReadonlyArray<ContainerNode>,
-  visitor :NodePredicate,
+  visitor :(n :BaseNode) => any,
 ) :Promise<void>;
 
-/** Predicate function for find and visit */
-type NodePredicate = (n :BaseNode) => boolean|undefined|void;
 
 /** Options to find() */
 interface FindOptions {
   includeHidden? :boolean  // include hidden layers
+}
+
+/**
+ * Returns a sequence of numbers in the range [start–end),
+ * incrementing in steps or 1 if steps is not provided.
+ * Note that the last value may be smaller than end, depending on the value of step.
+ */
+declare function range(start :number, end :number, step? :number) :LazySeq<number,number,number>
+
+/** Returns a sequence of numbers in the range [0–end) */
+declare function range(end :number) :LazySeq<number,number,number>
+
+/** Sequence which values are computed lazily; as requested */
+interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Iterable<T> {
+  readonly length :LenT  // Infinity if unbounded
+  map<R>(f :(value :T, index :number)=>R) :R[]
+  array() :T[]
+  at(index :number) :OffsT
 }

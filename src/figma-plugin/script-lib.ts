@@ -9,6 +9,8 @@ import { jpegInfoBuf } from "../common/jpeg"
 import { pngInfoBuf } from "../common/png"
 import * as filetype from "../common/filetype"
 import * as Path from "../common/path"
+import markerProps from "../common/marker-props"
+import { LazyNumberSequence } from "../common/lazyseq"
 
 // type byte = number
 
@@ -39,11 +41,13 @@ export function fetch(input :any, init? :object) :Promise<FetchResponse> {
 }
 
 export {
+  markerProps,
   fmtPrintArgs,
   Path,
   FetchHeaders as Headers,
   FetchResponse as Response,
   FetchRequest as Request,
+  LazyNumberSequence,
 }
 
 export function fileType(nameOrData :ArrayLike<byte>|ArrayBuffer|string) :filetype.Info|null {
@@ -229,3 +233,4 @@ Type 'Iterable<number>' is not assignable to type
 Type 'Iterable<number>' is missing the following properties from type 'SharedArrayBuffer':
   byteLength, length, slice, [Symbol.species], [Symbol.toStringTag]
 */
+

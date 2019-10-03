@@ -1,4 +1,6 @@
 import { isTypedArray } from "./typed-array"
+import { LazyNumberSequence } from "../common/lazyseq"
+import markerProps from "./marker-props"
 
 
 export function fmtPrintArgs(args :any[]) :string {
@@ -71,6 +73,20 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
       return "[" + v.map(v => _fmtValue(v, ln2, seen)).join(", ") + "]"
     }
 
+    if ("__scripter_lazy_seq__" in v) {
+      v.__proto__ = LazyNumberSequence.prototype
+      let s = "LazySeq["
+      let i = 0
+      for (let val of (v as Iterable<number>)) {
+        if (i > 0) {
+          s += ", "
+        }
+        s += val
+        i++
+      }
+      return s + "]"
+    }
+
     // let it = v[]
     if (Symbol.iterator in v) {
       let isMap = v instanceof Map
@@ -107,7 +123,7 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
 
     let pairs :string[] = []
     for (let k of Object.keys(v)) {
-      if (k != "__scripter_image_marker__") {
+      if (!(k in markerProps)) {
         let ks = jsPropNameRe.test(k) ? k : JSON.stringify(k)
         pairs.push(ks + ": " + _fmtValue(v[k], ln2, seen))
       }
