@@ -75,16 +75,7 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
 
     if ("__scripter_lazy_seq__" in v) {
       v.__proto__ = LazyNumberSequence.prototype
-      let s = "LazySeq["
-      let i = 0
-      for (let val of (v as Iterable<number>)) {
-        if (i > 0) {
-          s += ", "
-        }
-        s += val
-        i++
-      }
-      return s + "]"
+      return "LazySeq[" + v.toString() + "]"
     }
 
     // let it = v[]

@@ -475,4 +475,5 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
   map<R>(f :(value :T, index :number)=>R) :R[]
   array() :T[]
   at(index :number) :OffsT
+  join(glue :string) :string
 }

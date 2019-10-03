@@ -270,6 +270,52 @@ timer(200, canceled => {
 
 
 
+s("Basics/Ranges", `
+// The range() function creates a sequence of numbers in the
+// range [start–end), incrementing in steps. Steps defaults to 1.
+print(range(1, 10))
+print(range(1, 10, 3))
+
+// If we want a pre-allocated array, we can call the array() function
+print(range(10).array())
+// or use Array.from, since ranges are iterables
+print(Array.from(range(1, 10)))
+
+// range is often useful for graphics. We can represent columns or rows
+// similar to the Layout Grids feature in Figma:
+let columns = range(80, 512, 64)
+print(\`64dp wide columns with 80dp offset: \${columns}\`)
+
+// range() returns a LazySeq type which has an Array-like map function:
+print(range(-4, 4).map(v => \`0x\${(v*10).toString(16)}\`))
+
+// Since the sequence created by range() is lazy, values are allocated
+// only as needed, making range() feasible to represent very large
+// imaginary ranges.
+// For instance, the following only uses very little memory:
+print(range(0, 90000000, 2).at(1234567))
+
+// We can even use Inifite to descrive never-ending sequences.
+print(range(0, Infinity, 3).at(1234567918383))
+// Be careful when iterating over an infinite sequence since it's easy
+// to lock Figma if you forget to explicitly stop iteration.
+// Scripter will do its best to stop you from doing this: passing an
+// infinite sequence to print() or calling toString() on the sequence
+// will only show the first 50 entries followed by "... ∞" to indicate
+// that it goes on forever:
+print(range(0, Infinity, 3))
+
+// Calling functions which only makes sense on finite sequences, like
+// map(), array(), or join(), on an infinite sequence throws an error:
+try {
+  range(0, Infinity).array()
+} catch (e) {
+  print(""+e)
+}
+`),
+
+
+
 s("HTTP/Fetch", `
 // fetch can be used to fetch resources across the interwebs.
 // It's the standard fetch API you might already be used to.
