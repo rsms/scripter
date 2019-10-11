@@ -384,24 +384,6 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 
 
 // ------------------------------------------------------------------------------------
-// ui
-
-
-interface UI {
-  range(init? :UIRangeInit) :AsyncIterator<number>
-}
-
-interface UIRangeInit {
-  value? :number
-  min?   :number
-  max?   :number
-  step?  :number
-}
-
-declare var ui :UI
-
-
-// ------------------------------------------------------------------------------------
 // find & visit
 
 
@@ -492,4 +474,56 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
   array() :T[]
   at(index :number) :OffsT
   join(glue :string) :string
+}
+
+
+// ------------------------------------------------------------------------------------
+// ui
+
+declare namespace libui {
+
+  function rangeInput(init? :UIRangeInit) :AsyncIterator<number>
+
+  interface UIRangeInit {
+    value? :number
+    min?   :number
+    max?   :number
+    step?  :number
+  }
+}
+
+
+// ------------------------------------------------------------------------------------
+// ui
+
+
+declare namespace libgeometry {
+  class Rect {
+    x      :number
+    y      :number
+    width  :number
+    height :number
+
+    constructor(x :number, y :number, width :number, height :number)
+
+    position() :Vec
+    containsPoint(v :Vec)
+    translate(v :Vec)
+  }
+
+  class Vec implements Vector {
+    x :number
+    y :number
+
+    constructor(x :number, y :number)
+    constructor(v :Vector)
+
+    isInside(r :Rect) :bool
+    distanceTo(v :Vec) :number
+    sub(v :Vec|number) :Vec
+    add(v :Vec|number) :Vec
+    mul(v :Vec|number) :Vec
+    div(v :Vec|number) :Vec
+  }
+
 }

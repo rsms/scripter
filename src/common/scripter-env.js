@@ -837,6 +837,8 @@ env.Img = F
 env.Path = F
 env.fileType = F
 env.Bytes = F
+env.libgeometry = F
+env.libui = F
 
 env.fetchData = function(input, init) {
   return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
@@ -853,8 +855,6 @@ env.fetchJson = function(input, init) {
 env.fetchImg = function(input, init) {
   return env.fetchData(input, init).then(d => env.Img(d))
 }
-
-env.ui = F
 
 // ------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------
@@ -899,6 +899,7 @@ function _evalScript(reqId, js) {
     env.Path = scriptLib.Path
     env.fileType = scriptLib.fileType
     env.Bytes = scriptLib.Bytes
+    env.libgeometry = scriptLib.libgeometry
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
@@ -922,7 +923,7 @@ function _evalScript(reqId, js) {
         env0[k] = v
       }
       env0.scripter = Object.assign({}, env.scripter)
-      env0.ui = new scriptLib.UI(reqId)
+      env0.libui = scriptLib.createUILib(reqId)
 
       // create script cancel function
       let cancelInner = r[1]

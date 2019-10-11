@@ -12,6 +12,7 @@ import * as filetype from "../common/filetype"
 import * as Path from "../common/path"
 import markerProps from "../common/marker-props"
 import { LazyNumberSequence } from "../common/lazyseq"
+import * as libgeometry from "./script-lib-geometry"
 
 
 export function getSourcePos(stackOffset :number = 0) :M.SourcePos {
@@ -68,6 +69,7 @@ export {
   FetchResponse as Response,
   FetchRequest as Request,
   LazyNumberSequence,
+  libgeometry,
 }
 
 export function fileType(nameOrData :ArrayLike<byte>|ArrayBuffer|string) :filetype.Info|null {
@@ -255,15 +257,12 @@ Type 'Iterable<number>' is missing the following properties from type 'SharedArr
 */
 
 
+
 // one instance per script invocation
-export class UI {
-  readonly scriptReqId :string
+export function createUILib(scriptReqId :string) {
+  return {
 
-  constructor(scriptReqId :string) {
-    this.scriptReqId = scriptReqId
-  }
-
-  range(init? :M.UIRangeInputInit): AsyncIterable<number> {
+  rangeInput(init? :M.UIRangeInputInit): AsyncIterable<number> {
     if (init) {
       let step = "step" in init ? init.step as number : 1
       let min  = "min" in init ? init.min as number : 0
@@ -273,14 +272,14 @@ export class UI {
       if (step < 0 && max > min) { throw new Error("max > min") }
     }
     let srcPos = getSourcePos()
-    let scriptReqId = this.scriptReqId
     return {
       [Symbol.asyncIterator]() {
         return new UIRangeInputIterator(init, srcPos, scriptReqId)
       }
     }
-  }
+  },
 
+  }
 }
 
 
