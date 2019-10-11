@@ -115,6 +115,18 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     }
   }
 
+  onChangeSettingNum = (ev :any) => {
+    ev.persist()
+    let input = ev.target as HTMLInputElement
+    const configPrefix = "config."
+    if (input.name.startsWith(configPrefix)) {
+      let value = parseFloat(input.value)
+      if (!isNaN(value)) {
+        ;(config as any)[input.name.substr(configPrefix.length)] = value
+      }
+    }
+  }
+
   onChangeWindowSize = (ev :any) => {
     let s = ev.target.value.split(",")
     if (s.length > 1) {
@@ -189,19 +201,58 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  onChange={this.onChangeSettingBool} />
           Word wrap
         </label>
-        <label>
-          Window size:
+        <label title="Use a monospace font instead of Quattro">
+          <input type="checkbox"
+                 name="config.monospaceFont"
+                 checked={config.monospaceFont}
+                 onChange={this.onChangeSettingBool} />
+          Monospace font
+        </label>
+        <label title="Enables suggestions as you type">
+          <input type="checkbox"
+                 name="config.quickSuggestions"
+                 checked={config.quickSuggestions}
+                 onChange={this.onChangeSettingBool} />
+          Quick suggestions
+        </label>
+        <label className={"dependant" + (config.quickSuggestions ? "" : " disabled")}>
+          <div className="icon delay" title="Quick suggestions delay" />
+          <input type="number"
+                 step="100"
+                 min="0" max="10000"
+                 readOnly={!config.quickSuggestions}
+                 name="config.quickSuggestionsDelay"
+                 value={config.quickSuggestionsDelay}
+                 onChange={this.onChangeSettingNum} />
+           <span>ms</span>
+        </label>
+        <label title="Enables code folding; a way to collapse blocks of code">
+          <input type="checkbox"
+                 name="config.codeFolding"
+                 checked={config.codeFolding}
+                 onChange={this.onChangeSettingBool} />
+          Code folding
+        </label>
+        <label title="Enables a minimap for navigating large scripts">
+          <input type="checkbox"
+                 name="config.minimap"
+                 checked={config.minimap}
+                 onChange={this.onChangeSettingBool} />
+          Minimap
+        </label>
+        <label title="Size of Scripter window">
+          <div className="icon window" />
           <select name="config.windowSize" value={windowSizeVal} onChange={this.onChangeWindowSize}>
-          <option disabled={true}>W×H</option>
-          <option value={"SMALL,SMALL"}>S×S</option>
-          <option value={"SMALL,MEDIUM"}>S×M</option>
-          <option value={"SMALL,LARGE"}>S×L</option>
-          <option value={"MEDIUM,SMALL"}>M×S</option>
-          <option value={"MEDIUM,MEDIUM"}>M×M</option>
-          <option value={"MEDIUM,LARGE"}>M×L</option>
-          <option value={"LARGE,SMALL"}>L×S</option>
-          <option value={"LARGE,MEDIUM"}>L×M</option>
-          <option value={"LARGE,LARGE"}>L×L</option>
+          <option disabled={true}>Window W×H</option>
+          <option value={"SMALL,SMALL"}  >S×S window</option>
+          <option value={"SMALL,MEDIUM"} >S×M window</option>
+          <option value={"SMALL,LARGE"}  >S×L window</option>
+          <option value={"MEDIUM,SMALL"} >M×S window</option>
+          <option value={"MEDIUM,MEDIUM"}>M×M window</option>
+          <option value={"MEDIUM,LARGE"} >M×L window</option>
+          <option value={"LARGE,SMALL"}  >L×S window</option>
+          <option value={"LARGE,MEDIUM"} >L×M window</option>
+          <option value={"LARGE,LARGE"}  >L×L window</option>
           </select>
         </label>
       </div>

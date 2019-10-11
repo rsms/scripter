@@ -31,6 +31,7 @@ a, a:active, a:visited { color: inherit; }
   --colorFeedback: #f5f5f5;
   --colorSelected: #e9e9e9;
   --printMessageWidth: 450px;
+  --sansFontFamily: "Inter";
 }
 
 body {
@@ -49,11 +50,11 @@ body {
   }
 }
 body, .sansSerif {
-  font: 12px/16px 'Inter', system-ui, -system-ui, sans-serif;
+  font: 12px/16px var(--sansFontFamily), system-ui, -system-ui, sans-serif;
   font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
 }
 @supports (font-variation-settings: normal) {
-  body, .sansSerif { font-family: 'Inter var', system-ui, sans-serif; }
+  :root { --sansFontFamily: 'Inter var' }
 }
 
 b, strong { font-weight:600 }
@@ -322,6 +323,19 @@ code b, pre b, tt b { font-weight:540 }
     padding: 0 8px 0 16px;
     user-select: none;
 
+    & .icon {
+      width: var(--menuItemHeight);
+      height: var(--menuItemHeight);
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-size: contain;
+      opacity: 0.8;
+      margin-left: -6px;
+      &.delay { background-image: url('./icon-delay.svg'); }
+      /*&.window-size { background-image: url('./icon-window-size.svg'); }*/
+      &.window { background-image: url('./icon-window.svg'); }
+    }
+
     & label {
       display: block;
       height: var(--menuItemHeight);
@@ -329,14 +343,49 @@ code b, pre b, tt b { font-weight:540 }
       display:flex;
       align-items:center;
 
+      &.disabled {
+        opacity:0.4;
+      }
+
+      /*&.vertical {
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        height: calc(var(--menuItemHeight) * 2);
+      }*/
+
+      &.dependant {
+        margin-left:19px;
+        margin-bottom: 8px;
+        transition: all 100ms ease-out;
+        /*overflow: hidden;*/
+        &.disabled {
+          height: 0px;
+          opacity:0;
+          pointer-events:none;
+          margin-bottom: 0;
+        }
+      }
+
       & input[type="checkbox"] {
         margin-right: 6px;
         margin-left: 0;
       }
 
+      & input[type="number"] {
+        max-width:64px;
+        margin: 0 4px;
+        border: 1px solid #555;
+        border-radius: 2px;
+        padding: 0 4px;
+        height: calc(var(--menuItemHeight) - 4px);
+        background: white;
+        box-sizing: border-box;
+      }
+
       & select[name="config.windowSize"] {
         flex: 1 1 auto;
-        margin-left: 8px;
+        /*margin-left: 8px;*/
       }
     }
   }
@@ -435,6 +484,11 @@ body.showMessage #editor { bottom: var(--messageHeight); }
     /*text-decoration: underline rgba(0, 0, 200, 0.1);*/
     text-decoration: none; /* TODO: support opening links */
   }
+
+  & .lines-content .cigra {
+    /* active indentGuide */
+    box-shadow: 1px 0 0 0 #ddd inset !important;
+  }
 }
 
 /*body.menuVisible .monaco-editor {
@@ -463,20 +517,11 @@ body.showMessage #editor { bottom: var(--messageHeight); }
   background-color: rgba(0, 200, 255, 0.1);
 }
 
-.monaco-editor .printWidget {
+.monaco-editor .inlineWidget {
+  --inlineWidgetLeftPadding: 0.5em;
+
   z-index: 99;
-  /*width: 500px;*/
   overflow: auto;
-
-  /*box-sizing: border-box;
-  border: 0.5em solid white;
-  padding: 0.5em;
-  border-radius: 13px;
-  background-color: rgba(0, 0, 0, 0.1);*/
-
-  /*border-left: 4px solid lightgreen;
-  padding-left: 1em;
-  background: #eeffee;*/
 
   & img {
     object-position: 50% 50%;
@@ -485,69 +530,169 @@ body.showMessage #editor { bottom: var(--messageHeight); }
     object-fit: contain;
     max-width: 100%;
   }
+
+  & > div {
+    display: flex;
+    align-items: flex-start;
+    height: 100%;
+    width: var(--printMessageWidth);
+
+    border-left: 4px solid lightblue;
+    padding-left: 0.5em;
+    margin-right: 2em;
+    background: #EEF3FF;
+
+    & > .button {
+      cursor: default;
+      width:16px;
+      height:16px;
+      text-align: center;
+      line-height:16px;
+      font-size:12px;
+      flex: 0 0 auto;
+      opacity:0.5;
+      user-select: none;
+      pointer-events: all;
+      color: black;
+      border-radius: 2px;
+      font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'case' 1;
+      margin:1px;
+
+      &:hover {
+        opacity:0.99;
+        background: rgba(0,0,0,0.1);
+      }
+
+      /*&:last-child {
+        margin-right: 0.0;
+        padding-right: 0.5em;
+      }*/
+
+      /*&.closeButton {}*/
+    }
+
+  }
+}
+
+.monaco-editor .inputWidget {
+  overflow: initial;
+
+  & > div {
+    pointer-events: all;
+    & input {
+      flex: 1 1 auto;
+      user-select: all;
+      pointer-events: all;
+      overflow: auto;
+    }
+  }
 }
 
 .monaco-editor .printWidget > div {
-  background: lightpink;
-  display: flex;
-  align-items: flex-start;
-  height: 100%;
-  width: var(--printMessageWidth);
-
-  border-left: 4px solid lightgreen;
-  padding-left: 0.5em;
-  margin-right: 2em;
+  border-color: lightgreen;
   background: #eeffee;
+
+  & .message {
+    flex: 1 1 auto;
+    white-space: pre-wrap;
+    user-select: all;
+    overflow: auto;
+  }
 }
 
-body.menuVisible .monaco-editor .printWidget > div {
+body.menuVisible .monaco-editor .inlineWidget > div {
   width: calc(var(--printMessageWidth) - var(--menuWidth));
 }
 
-.monaco-editor .printWidget > div .message {
+
+
+.rangeControl {
+  --rangeHeight: 16px;
+  --rangeTrackHeight: 2px;
+  --rangeKnobSize: 8px;
+  --rangeMaxWidth: 100%;
+
   flex: 1 1 auto;
-  white-space: pre-wrap;
-  user-select: all;
-  overflow: auto;
-}
-
-.monaco-editor .printWidget > div .button {
+  min-width: 128px;
+  max-width: var(--rangeMaxWidth);
+  height: var(--rangeHeight);
+  /*background: lightpink;*/
   cursor: default;
-  /*padding: 0.5em 0.125em;*/
-  /*margin: 0 0.125em;*/
-  width:14px;
-  height:14px;
-  text-align: center;
-  line-height:14px;
-  font-size:12px;
-  flex: 0 0 auto;
-  opacity:0.5;
-  user-select: none;
-  pointer-events: all;
-  /*background: transparent;*/
-  /*background: rgba(0,0,0,0);*/
-  /*background: black;*/
-  color: black;
-  border: 1px solid rgba(0,0,0,0);
-  border-radius: 2px;
-  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'case' 1;
+  position: relative;
+  margin: 1px 0 1px calc(var(--inlineWidgetLeftPadding) * -1);
 
-  /*padding:1px;*/
-  margin:1px;
-}
-/*.monaco-editor .printWidget > div .button:last-child {
-  margin-right: 0.0;
-  padding-right: 0.5em;
-}*/
-.monaco-editor .printWidget > div .button:hover {
-  opacity:0.99;
-  border-color: black;
-  /*background: rgba(0,0,0,0.1);*/
-}
-.monaco-editor .printWidget > div .button.closeButton {}
-.monaco-editor .printWidget.empty > div .button.inlineButton {}
+  &.uninit .knob {
+    /* disable transitions while the input is uninitialized */
+    transition: none !important;
+  }
 
-/*.monaco-editor .printWidget.small > div .button {
-  padding:1px;
-  margin:0 1px 0 0;
-}*/
+  & .track {
+    background: rgba(0,0,0,0.4);
+    height: var(--rangeTrackHeight);
+    margin: calc(calc(var(--rangeHeight) - var(--rangeTrackHeight)) / 2);
+    position: relative;
+    border-radius: calc(var(--rangeTrackHeight) / 2);
+
+    & .knob {
+      background: black;
+      /*box-shadow: 0 0 0 1px rgba(0,0,0,0.5);*/
+      width: var(--rangeKnobSize);
+      height: var(--rangeKnobSize);
+      border-radius: var(--rangeKnobSize);
+      position: absolute;
+      left: 0;
+      top: calc(calc(var(--rangeTrackHeight) - var(--rangeKnobSize)) / 2);
+      pointer-events: none;
+      transition: transform 100ms linear;
+
+      background: white;
+      box-sizing: border-box;
+      border: calc((var(--rangeKnobSize) / 2) - 1px) solid black;
+
+      &.dragging {
+        transition: none;
+      }
+
+      &.changing {
+        box-shadow: 0 0 0 1px rgba(0,0,0,1);
+      }
+      &.changing .tooltip {
+        opacity: 1;
+        transition-delay: 1ms;
+      }
+
+      & .tooltip {
+        position: absolute;
+        bottom: calc(
+          var(--rangeKnobSize) + 4px  /* TODO: calc the 4px */
+        );
+        left: calc(
+          calc(var(--rangeKnobSize) / 4) +
+          calc(var(--rangeMaxWidth) / -2)
+        );
+        width: var(--rangeMaxWidth);
+        height: 24px;
+        z-index: 999;
+        display: flex;
+        justify-content: center;
+        /*background: rgba(255,100,0,0.2);*/
+        opacity: 0;
+        transition: opacity 100ms ease-out;
+        transition-delay: 200ms;
+
+        & > div { /* label */
+          flex: 0 1 auto;
+          background: #333;
+          color: white;
+          line-height: 16px;
+          height: 16px;
+          padding: 0 4px;
+          font-family: var(--sansFontFamily);
+          font-size:11px;
+          letter-spacing: 0.01em;
+          border-radius: 2px;
+        }
+      }
+    }
+  }
+}

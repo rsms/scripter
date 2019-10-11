@@ -8,13 +8,18 @@ import { WindowSize } from "../common/messages"
 
 class Data {
   // values define new-user defaults
-  lastOpenScript  :number = 0
-  editorViewState :monaco.editor.ICodeEditorViewState|null = null
-  menuVisible     :bool = false
-  fontSize?       :number = undefined
-  showLineNumbers :bool = false
-  wordWrap        :bool = true
-  windowSize      :[WindowSize,WindowSize] = [WindowSize.MEDIUM,WindowSize.MEDIUM]
+  lastOpenScript        :number = 0
+  editorViewState       :monaco.editor.ICodeEditorViewState|null = null
+  menuVisible           :bool = false
+  fontSize?             :number = undefined
+  showLineNumbers       :bool = false
+  wordWrap              :bool = true
+  monospaceFont         :bool = false
+  codeFolding           :bool = false
+  minimap               :bool = false
+  quickSuggestions      :bool = true
+  quickSuggestionsDelay :number = 500 // ms
+  windowSize            :[WindowSize,WindowSize] = [WindowSize.MEDIUM,WindowSize.MEDIUM]
 }
 
 interface ConfigEvents {
@@ -52,6 +57,21 @@ class Config extends EventEmitter<ConfigEvents> {
 
   get wordWrap() :bool { return this.data.wordWrap }
   set wordWrap(v :bool) { this._set("wordWrap", v) }
+
+  get monospaceFont() :bool { return this.data.monospaceFont }
+  set monospaceFont(v :bool) { this._set("monospaceFont", v) }
+
+  get codeFolding() :bool { return this.data.codeFolding }
+  set codeFolding(v :bool) { this._set("codeFolding", v) }
+
+  get minimap() :bool { return this.data.minimap }
+  set minimap(v :bool) { this._set("minimap", v) }
+
+  get quickSuggestions() :bool { return this.data.quickSuggestions }
+  set quickSuggestions(v :bool) { this._set("quickSuggestions", v) }
+
+  get quickSuggestionsDelay() :number { return this.data.quickSuggestionsDelay }
+  set quickSuggestionsDelay(v :number) { this._set("quickSuggestionsDelay", v) }
 
   get windowSize() :[WindowSize,WindowSize] { return this.data.windowSize }
   set windowSize(v :[WindowSize,WindowSize]) { this._set("windowSize", v) }

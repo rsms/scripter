@@ -1,3 +1,4 @@
+/// <reference path="./evalscript.d.ts" />
 import * as M from "../common/messages"
 import { fmtPrintArgs } from "../common/fmtval"
 import * as base64 from "../common/base64"
@@ -12,7 +13,26 @@ import * as Path from "../common/path"
 import markerProps from "../common/marker-props"
 import { LazyNumberSequence } from "../common/lazyseq"
 
-// type byte = number
+
+export function getSourcePos(stackOffset :number = 0) :M.SourcePos {
+  // find origin source location
+  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+  // Note: fig-js stack traces does not include source column information, so we
+  // optionally parse the column if present.
+  let frameidx = 2 + stackOffset
+  let frame = e.stack.split("\n")[frameidx] || ""
+  let m = frame.match(/:(\d+)(:?:(\d+)|)\)$/)
+  if (m) {
+    let line = parseInt(m[1])
+    let column = parseInt(m[2])
+    return {
+      line: isNaN(line) ? 0 : line,
+      column: isNaN(column) ? 0 : column,
+    }
+  }
+  return { line: 0, column: 0 }
+}
+
 
 export function base64Encode(data :Uint8Array|ArrayBuffer|string) :string {
   return base64.fromByteArray(
@@ -233,4 +253,77 @@ Type 'Iterable<number>' is not assignable to type
 Type 'Iterable<number>' is missing the following properties from type 'SharedArrayBuffer':
   byteLength, length, slice, [Symbol.species], [Symbol.toStringTag]
 */
+
+
+// one instance per script invocation
+export class UI {
+  readonly scriptReqId :string
+
+  constructor(scriptReqId :string) {
+    this.scriptReqId = scriptReqId
+  }
+
+  range(init? :M.UIRangeInputInit): AsyncIterable<number> {
+    if (init) {
+      let step = "step" in init ? init.step as number : 1
+      let min  = "min" in init ? init.min as number : 0
+      let max  = "max" in init ? init.max as number : 1
+      if (step == 0) { throw new Error("zero step") }
+      if (step > 0 && max < min) { throw new Error("max < min") }
+      if (step < 0 && max > min) { throw new Error("max > min") }
+    }
+    let srcPos = getSourcePos()
+    let scriptReqId = this.scriptReqId
+    return {
+      [Symbol.asyncIterator]() {
+        return new UIRangeInputIterator(init, srcPos, scriptReqId)
+      }
+    }
+  }
+
+}
+
+
+class UIRangeInputIterator {
+  readonly init :M.UIRangeInputInit|undefined
+  readonly srcPos :M.SourcePos
+  readonly scriptReqId :string
+
+  value = 0
+  done = false
+
+  constructor(init :M.UIRangeInputInit|undefined, srcPos :M.SourcePos, scriptReqId :string) {
+    this.init = init
+    this.srcPos = srcPos
+    this.scriptReqId = scriptReqId
+  }
+
+  async next(...args: []): Promise<IteratorResult<number>> {
+    if (this.done) {
+      return { value: this.value, done: true }
+    }
+    let timestamp = Date.now()
+    let r = await rpc<M.UIInputRequestMsg,M.UIInputResponseMsg>(
+      "ui-input-request", "ui-input-response",
+      {
+        controllerType: "range",
+        srcPos: this.srcPos,
+        srcLineOffset: evalScript.lineOffset,
+        scriptReqId: this.scriptReqId,
+        timestamp,
+        init: this.init,
+      }
+    )
+    if (r.done) {
+      this.done = true
+      if (this.value == r.value) {
+        // no tail value
+        return { value: this.value, done: true }
+      }
+    }
+    this.value = r.value
+    return { value: this.value, done: false }
+  }
+
+}
 

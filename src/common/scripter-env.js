@@ -92,22 +92,8 @@ function _print(env, reqId, args) {
     message: "",
     args: args,
     reqId: reqId,
-    srcPos: {line:0,column:0},
+    srcPos: scriptLib.getSourcePos(/* stackOffset */1),
     srcLineOffset: _evalScript.lineOffset,
-  }
-
-  // find origin source location
-  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
-  // Note: fig-js stack traces does not include source column information, so we
-  // optionally parse the column if present.
-  let m = (e.stack.split("\n")[2] || "").match(/:(\d+)(:?:(\d+)|)\)$/)
-  if (m) {
-    let line = parseInt(m[1])
-    let column = parseInt(m[2])
-    msg.srcPos = {
-      line: isNaN(line) ? 0 : line,
-      column: isNaN(column) ? 0 : column,
-    }
   }
 
   // send to ui
@@ -519,7 +505,7 @@ env.Group            = createGroup
 env.Line             = _nodeCtor(figma.createLine)
 env.Page             = _nodeCtor(figma.createPage)
 env.Polygon          = _nodeCtor(figma.createPolygon)
-env.Rectangle        = _nodeCtor(figma.createRectangle) ; env.Rect = env.Rectangle
+env.Rectangle        = _nodeCtor(figma.createRectangle)
 env.Slice            = _nodeCtor(figma.createSlice)
 env.Star             = _nodeCtor(figma.createStar)
 env.Text             = _nodeCtor(figma.createText)
@@ -868,6 +854,8 @@ env.fetchImg = function(input, init) {
   return env.fetchData(input, init).then(d => env.Img(d))
 }
 
+env.ui = F
+
 // ------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------
 // end of env definition
@@ -923,23 +911,18 @@ function _evalScript(reqId, js) {
       // create invocation-specific environment
       let env0 = {
         canceled: false,
-        scripter: Object.assign({}, env.scripter),
-
-        // TODO: find a better way to add these things to env.
-        // They are constant and are not specific to the invocation.
-        Headers: scriptLib.Headers,
       }
       for (let k in env) {
-        if (k != "scripter") {
-          let v = env[k]
-          if (typeof v == "function") {
-            // bind env
-            // Note: We can't use bind() since that is not supported by fig-js
-            v = (v => function() { return v.apply(env0, arguments) })(v)
-          }
-          env0[k] = v
+        let v = env[k]
+        if (typeof v == "function") {
+          // bind env
+          // Note: We can't use bind() since that is not supported by fig-js
+          v = (v => function() { return v.apply(env0, arguments) })(v)
         }
+        env0[k] = v
       }
+      env0.scripter = Object.assign({}, env.scripter)
+      env0.ui = new scriptLib.UI(reqId)
 
       // create script cancel function
       let cancelInner = r[1]

@@ -1,3 +1,8 @@
+export interface SourcePos {
+  line   :number
+  column :number
+}
+
 export interface Msg {
   type :string
 }
@@ -42,7 +47,7 @@ export interface EvalResponseMsg extends TransactionalMsg {
 
   // when error
   error?   :string  // response is error when not undefined
-  srcPos?  :{line:number,column:number}[]  // source code position of each stack frame
+  srcPos?  :SourcePos[]  // source code position of each stack frame
   srcLineOffset? :number  // line offset of source code (for sourcemap)
 }
 
@@ -51,7 +56,7 @@ export interface PrintMsg extends Msg {
   message :string
   args?   :any[]   // raw input args. undefined if unable to clone
   reqId   :string  // eval request ID
-  srcPos  :{line:number,column:number}  // source code position where error originated
+  srcPos  :SourcePos  // source code position where error originated
   srcLineOffset :number  // line offset of source code (for sourcemap)
 }
 
@@ -88,6 +93,30 @@ export interface FetchResponseMsg extends TransactionalMsg {
   body       : Uint8Array|null
   // trailer    : Promise<Headers>  // TODO add support?
 }
+
+export interface UIRangeInputInit {
+  value? :number
+  min?   :number
+  max?   :number
+  step?  :number
+}
+
+export interface UIInputRequestMsg extends TransactionalMsg {
+  type  :"ui-input-request"
+  scriptReqId    :string  // script invocation id. == EvalRequestMsg.id
+  controllerType :"range"
+  srcPos         :SourcePos
+  srcLineOffset  :number  // line offset of source code (for sourcemap)
+  timestamp      :number
+  init?          :UIRangeInputInit
+}
+
+export interface UIInputResponseMsg extends TransactionalMsg {
+  type       : "ui-input-response"
+  value      : any
+  done?      : boolean
+}
+
 
 // export interface ShowImageRequestMsg extends TransactionalMsg {
 //   type   :"show-image-request"

@@ -6,10 +6,16 @@ import {
   WindowConfigMsg,
   UIConfirmRequestMsg, UIConfirmResponseMsg,
   FetchRequestMsg, FetchResponseMsg,
+  UIInputRequestMsg, UIInputResponseMsg,
 } from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
+import { resolveOrigSourcePos } from "./srcpos"
 import { dlog, print } from "./util"
+import { editor } from "./editor"
+import { MsgZoneType } from "./editor-msg-zones"
+import { UIInput } from "./ui-input"
+import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version
@@ -42,7 +48,7 @@ function sendWindowConfigMsg() {
 }
 
 
-async function rcp_reply<T extends TransactionalMsg>(
+async function rpc_reply<T extends TransactionalMsg>(
   id :string,
   resType :T["type"],
   f :() => Promise<Omit<T, "id"|"type">>,
@@ -66,16 +72,16 @@ async function rcp_reply<T extends TransactionalMsg>(
 }
 
 
-function rcp_confirm(req :UIConfirmRequestMsg) {
-  rcp_reply<UIConfirmResponseMsg>(req.id, "ui-confirm-response", async () => {
+function rpc_confirm(req :UIConfirmRequestMsg) {
+  rpc_reply<UIConfirmResponseMsg>(req.id, "ui-confirm-response", async () => {
     let answer = confirm(req.question)
     return { answer }
   })
 }
 
 
-function rcp_fetch(req :FetchRequestMsg) {
-  rcp_reply<FetchResponseMsg>(req.id, "fetch-response", async () => {
+function rpc_fetch(req :FetchRequestMsg) {
+  rpc_reply<FetchResponseMsg>(req.id, "fetch-response", async () => {
     let r = await fetch(req.input, req.init)
 
     let headers :Record<string,string> = {}
@@ -98,6 +104,103 @@ function rcp_fetch(req :FetchRequestMsg) {
     return response
   })
 }
+
+
+function createUIInput(msg :UIInputRequestMsg) :UIInput {
+  // for now, assume msg.controllerType == "range"
+  if (msg.init) {
+    if ("value" in msg.init) {
+      let v = msg.init.value as number
+      if (typeof v != "number") {
+        v = parseFloat(v)
+        if (isNaN(v)) {
+          v = undefined
+        }
+      }
+      if (v === undefined) {
+        delete msg.init.value
+      } else {
+        msg.init.value = v
+      }
+    }
+  }
+  return new UIRangeInput(msg.init)
+}
+
+
+function rpc_ui_input(msg :UIInputRequestMsg) {
+  rpc_reply<UIInputResponseMsg>(msg.id, "ui-input-response", async () => {
+
+    let pos = msg.srcPos as SourcePos
+    if (pos.line == 0) {
+      dlog("[rpc ui-input-response]: ignoring; zero srcPos", msg)
+      return { value: 0, done: true }
+    }
+
+    let sourceMapJson = Eval.getSourceMapForRequest(msg.scriptReqId)
+    if (!sourceMapJson) {
+      throw new Error("no source map found for script invocation #" + msg.scriptReqId)
+    }
+
+    pos = await resolveOrigSourcePos(pos, msg.srcLineOffset, sourceMapJson)
+    if (pos.line == 0) {
+      return { value: 0, done: true }
+    }
+
+    let viewZone = editor.msgZones.get(pos) // :monaco.editor.IViewZone|null
+    if (!viewZone) {
+      let input = createUIInput(msg)
+
+      let viewZoneId = editor.msgZones.set(pos, input.el, MsgZoneType.INPUT)
+      viewZone = editor.msgZones.viewZones.get(viewZoneId)
+
+      // requestAnimationFrame(() => input.onDidMountElement())
+
+      let done = false
+
+      let resolvePromise = (value :any) => {
+        let resolve = (viewZone as any).inputResolveFun
+        if (resolve) {
+          ;(resolve as (v:Omit<UIInputResponseMsg,"id"|"type">)=>void)({
+            value,
+            done,
+          })
+          ;(viewZone as any).inputResolveFun = null
+        }
+      }
+
+      let timer :any = null
+
+      let sendValue = () => {
+        clearTimeout(timer) ; timer = null
+        resolvePromise(input.value)
+      }
+
+      let onInput = value => {
+        if (timer === null) {
+          sendValue()
+          timer = setTimeout(sendValue, 1000/30)
+        }
+      }
+
+      input.on("change", sendValue)  // triggered only when changes to an input commit
+      input.on("input", onInput) // triggered continously as the input changes
+
+      ;(viewZone as any).onRemoveViewZone = () => {
+        // input.onWillUnmountElement()
+        input.removeListener("change", sendValue)
+        input.removeListener("input", onInput)
+        done = true
+        sendValue()
+      }
+    }
+
+    return new Promise(resolve => {
+      ;(viewZone as any).inputResolveFun = resolve
+    })
+  })
+}
+
 
 
 export function init() {
@@ -133,11 +236,15 @@ export function init() {
         break
 
       case "ui-confirm":
-        rcp_confirm(msg as UIConfirmRequestMsg)
+        rpc_confirm(msg as UIConfirmRequestMsg)
         break
 
       case "fetch-request":
-        rcp_fetch(msg as FetchRequestMsg)
+        rpc_fetch(msg as FetchRequestMsg)
+        break
+
+      case "ui-input-request":
+        rpc_ui_input(msg as UIInputRequestMsg)
         break
 
       }

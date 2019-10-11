@@ -24,6 +24,9 @@ const kOnUnlock = Symbol("OnUnlock")
 
 const defaultFontSize = 11
 
+const varspaceFontFamily = "iaw-quattro-var, iaw-quattro, 'Roboto Mono', 'IBM Plex Mono', monospace"
+const monospaceFontFamily = "iaw-mono-var, iaw-mono, monospace"
+
 // default monaco editor options
 const defaultOptions :EditorOptions = {
   automaticLayout: true,
@@ -43,12 +46,38 @@ const defaultOptions :EditorOptions = {
   renderLineHighlight: "none",
   fontSize: defaultFontSize,
 
-  fontFamily: "iaw-quattro-var, iaw-quattro, 'Roboto Mono', 'IBM Plex Mono', monospace",
+  fontFamily: varspaceFontFamily,
   disableMonospaceOptimizations: true, // required for non-monospace fonts
 
-  // fontFamily: "iaw-mono-var, iaw-mono, monospace",
-
   extraEditorClassName: 'scripter-light',
+
+  quickSuggestions: true,
+  quickSuggestionsDelay: 800, // ms
+  acceptSuggestionOnEnter: "smart",
+  suggestSelection: "recentlyUsedByPrefix", // first | recentlyUsed | recentlyUsedByPrefix
+
+  suggest: {
+    // Enable graceful matching. Defaults to true.
+    // filterGraceful?: boolean;
+
+    // Prevent quick suggestions when a snippet is active. Defaults to true.
+    // snippetsPreventQuickSuggestions?: boolean;
+
+    // Favours words that appear close to the cursor.
+    localityBonus: true,
+
+    // Enable using global storage for remembering suggestions.
+    shareSuggestSelections: true,
+
+    // Enable or disable icons in suggestions. Defaults to true.
+    // showIcons: false,
+
+    // Max suggestions to show in suggestions. Defaults to 12.
+    maxVisibleSuggestions: 9 as unknown as boolean,  // bad monaco typedefs
+
+    // Names of suggestion types to filter.
+    // filteredTypes?: Record<string, boolean>;
+  },
 
   scrollbar: {
     useShadows: false,
@@ -212,10 +241,22 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
   updateOptionsFromConfig() {
-    this.updateOptions({
+    let options :EditorOptions = {
       lineNumbers: config.showLineNumbers ? "on" : "off",
-      wordWrap: config.wordWrap ? "on" : "off",
-    })
+      wordWrap:    config.wordWrap ? "on" : "off",
+      quickSuggestions: config.quickSuggestions,
+      quickSuggestionsDelay: config.quickSuggestionsDelay,
+      folding: config.codeFolding,
+    }
+    options.minimap = {...this.options.minimap, enabled: config.minimap }
+    if (config.monospaceFont) {
+      options.fontFamily = monospaceFontFamily
+      options.disableMonospaceOptimizations = false
+    } else {
+      options.fontFamily = varspaceFontFamily
+      options.disableMonospaceOptimizations = true
+    }
+    this.updateOptions(options)
   }
 
   updateOptions(options :EditorOptions) :boolean {
@@ -271,9 +312,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.clearAllMetaInfo()
 
     let stopCallback = () => {
-      if (this.currentEvalPromise) {
-        this.currentEvalPromise.cancel()
-      }
+      this.stopCurrentScript()
     }
     toolbar.addStopCallback(stopCallback)
 
@@ -303,9 +342,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   stopCurrentScript() {
+    dlog("stopCurrentScript")
     if (this.currentEvalPromise) {
       this.currentEvalPromise.cancel()
     }
+    this.msgZones.clearAllUIInputs()
   }
 
 
@@ -821,6 +862,10 @@ export function initEditorModel(model :EditorModel) {
           markers.splice(i, 1)
           continue
         }
+      } else if (m.message.indexOf("'for-await-of'") != -1) {
+        // top-level for-await-of e.g. "for await (let r of asyncIterable()) { ... }"
+        markers.splice(i, 1)
+        continue
       }
 
       // keep

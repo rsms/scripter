@@ -26,7 +26,7 @@ monaco.editor.defineTheme('scripter-light', {
     // 'editorLineNumber.foreground': '#008800',
     // 'editor.inactiveSelectionBackground': '#88000015'
 
-    'editorIndentGuide.background': "#eeeeee",
+    'editorIndentGuide.background': "#f8f8f8",
 
     // 'widget.shadow': '#00000011', // Shadow color of widgets such as find/replace inside the editor.
     // 'editorWidget.background': "#fffadd", // Background color of editor widgets, such as find/replace.
