@@ -238,8 +238,6 @@ interface GroupFrameNode extends FrameNode {
 declare function Page(props? :Partial<PageNode>): PageNode;
 /** Creates a new Rectangle */
 declare function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
-/** Creates a new Rectangle */
-declare function Rect(props? :Partial<RectangleNode>) :RectangleNode;
 /** Creates a new Line */
 declare function Line(props? :Partial<LineNode>): LineNode;
 /** Creates a new Ellipse */
@@ -383,6 +381,24 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 /** #FF00FF Color(1   , 0   , 1)   */ declare const MAGENTA :Color;
 /** #FFFF00 Color(1   , 1   , 0)   */ declare const YELLOW  :Color;
 /** #FF8000 Color(1   , 0.5 , 0)   */ declare const ORANGE  :Color;
+
+
+// ------------------------------------------------------------------------------------
+// ui
+
+
+interface UI {
+  range(init? :UIRangeInit) :AsyncIterator<number>
+}
+
+interface UIRangeInit {
+  value? :number
+  min?   :number
+  max?   :number
+  step?  :number
+}
+
+declare var ui :UI
 
 
 // ------------------------------------------------------------------------------------
