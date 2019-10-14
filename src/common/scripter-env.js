@@ -153,24 +153,13 @@ const figmaObject = Object.create(figma, {
   // closePlugin is fine, but closeScripter is portable -- show a warning.
   closePlugin: {
     value: function closePlugin(message) {
-      console.warn("Consider using closeScripter(message?:string) instead of figma.closePlugin")
+      console.warn("Consider using scripter.close(message?:string) instead of figma.closePlugin")
       return figma.closePlugin(message)
     },
     enumerable: true
   },
 })
 
-
-function closeScripter(message) {
-  if (this.canceled) { throw new Error("script canceled") }
-  if (typeof figma != "undefined") {
-    figma.closePlugin(message)
-  } else if (typeof window != "undefined") {
-    window.close()
-  } else {
-    throw new Error("can't close Scripter")
-  }
-}
 
 // ------------------------------------------------------------------------------------------
 // Timers
@@ -442,7 +431,6 @@ const env = {
   figma: figmaObject,
 
   assert,
-  closeScripter,
   timer,
   TimerCancellation,
   setTimeout:    _setTimeout,
@@ -710,6 +698,16 @@ env.ORANGE  = new Color(1   , 0.5 , 0)
 
 env.scripter = {
   visualizePrint: true,
+
+  close(message) {
+    if (typeof figma != "undefined") {
+      figma.closePlugin(message)
+    } else if (typeof window != "undefined") {
+      window.close()
+    } else {
+      throw new Error("can't close Scripter")
+    }
+  },
 }
 
 // ------------------------------------------------------------------------------------------
@@ -870,11 +868,17 @@ env.fetchImg = function(input, init) {
 
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
-let jsHeader = `var canceled=false;[async function __scripter_script_main(` +
-`module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
-`){` +
-`function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };`
-let jsFooter = `},function(){canceled=true}]`
+let jsHeader = (
+  `var canceled=false;[function (` +
+  `module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
+  `){\n` +
+  `function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };\n` +
+  `return (async function __scripter_script_main(){`
+)
+let jsFooter = (
+  `})();` +
+  `},function(){canceled=true}]`
+)
 
 // Note: The following caused a memory-related crash in fig-js when user code
 // replaced one of the variables. For instance:
