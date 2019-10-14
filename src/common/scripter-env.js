@@ -457,7 +457,6 @@ const env = {
   viewport:      figma.viewport,
   MIXED,
   clientStorage: figma.clientStorage,
-  notify:        figma.notify,
 
   group,  // DEPRECATED; not in type defs
 

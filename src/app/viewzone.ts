@@ -157,7 +157,8 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
   onWillAddToEditor(editor :EditorState) {
     ;(this as any).editor = editor
     ;(this as any).sourceLine = this.afterLineNumber  // copy; conceptually same value
-    this.heightInPx = Math.max(16, this.editor.measureHTMLElement(this.domNode).height)
+    let size = this.editor.measureHTMLElement(this.domNode)
+    this.heightInPx = Math.max(16, size.height)
     this.onWillMount()
   }
 

@@ -364,6 +364,20 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
     }
   }
 
+  function deleteScript() {
+    if (s.id > 0 && confirm(`Delete script "${s.name}"?`)) {
+      // TODO: move this logic to editor or maybe script-data?
+      let otherScriptToOpen = scriptsData.scriptAfterOrBefore(s.id)
+      if (!otherScriptToOpen) {
+        // deleted last script -- we must always have one script, so make a new one
+        editor.newScript()
+      } else {
+        editor.openScript(otherScriptToOpen.id)
+      }
+      s.delete()
+    }
+  }
+
   let didCommitEditing = false
 
   function commitEditing(newName :string) :void {
@@ -373,17 +387,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
     didCommitEditing = true
     newName = newName.trim()
     if (newName.length == 0) {
-      if (s.id > 0 && confirm(`Delete script "${s.name}"?`)) {
-        // TODO: move this logic to editor or maybe script-data?
-        let otherScriptToOpen = scriptsData.scriptAfterOrBefore(s.id)
-        if (!otherScriptToOpen) {
-          // deleted last script -- we must always have one script, so make a new one
-          editor.newScript()
-        } else {
-          editor.openScript(otherScriptToOpen.id)
-        }
-        s.delete()
-      }
+      deleteScript()
     } else {
       // Note: Scripts which are unsaved are only created when the body is non-empty.
       // This means that if we create a new script, which starts out empty, and then
@@ -413,13 +417,24 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       await editor.openScript(s.id)
       editor.runCurrentScript()
     }
+
     buttons = [
       // U+2009 THIN SPACE offsets U+25B6 BLACK RIGHT-POINTING TRIANGLE
-      <MenuItemButton key="play"
-                      title={"\u2009▶"}
+      <MenuItemButton key="play" className="play" title={"\u2009▶"}
                       tooltip={props.isActive ? "Run script" : "Open & Run script"}
-                      onClick={onClickPlayButton} />
+                      onClick={onClickPlayButton} />,
     ]
+
+    if (s.id > 0) {
+      async function onClickDeleteButton(ev :React.MouseEvent<HTMLDivElement>) {
+        deleteScript()
+      }
+      buttons.unshift(
+        <MenuItemButton key="delete" className="delete" title={"✗"}
+                        tooltip="Delete script"
+                        onClick={onClickDeleteButton} />
+      )
+    }
   }
 
   return (
@@ -432,13 +447,18 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
 
 
 interface MenuItemButtonProps {
-  title    :string
-  tooltip? :string
-  onClick  :(e:React.MouseEvent<HTMLDivElement>)=>void
+  title     :string
+  className :string
+  tooltip?  :string
+  onClick   :(e:React.MouseEvent<HTMLDivElement>)=>void
 }
 
 function MenuItemButton(props :MenuItemButtonProps) :JSX.Element {
-  return <div className="button" onClick={props.onClick} title={props.tooltip}>{props.title}</div>
+  return <div
+    className={"button " + props.className}
+    onClick={props.onClick}
+    title={props.tooltip}
+    >{props.title}</div>
 }
 
 

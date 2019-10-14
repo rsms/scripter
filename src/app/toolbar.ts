@@ -119,10 +119,9 @@ class ToolbarUI {
     titleEl.onclick = () => {
       menu.toggle(/* closeOnSelection */ true)
     }
-    editor.on("modelchange", () => {
-      titleEl.innerText = editor.currentScript.name
-    })
-
+    let updateTitle = () => { titleEl.innerText = editor.currentScript.name }
+    scriptsData.on("change", updateTitle)
+    // editor.on("modelchange", updateTitle)
 
     this.updateUI()
   }

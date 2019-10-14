@@ -72,10 +72,17 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
     })
 
-    let nextExampleId = -1
-    const mkExample = (name :string, code :string) => {
+    let seenExampleIds = new Set<number>()
+    const mkExample = (id :number, name :string, code :string) => {
+      if (id >= 0) {
+        throw new Error(`invalid example script id ${id}`)
+      }
+      if (seenExampleIds.has(id)) {
+        throw new Error(`duplicate example script id ${id}`)
+      }
+      seenExampleIds.add(id)
       return Script.create({
-        id: nextExampleId--,
+        id,
         name: name,
         modifiedAt: new Date("2000-01-01 00:00:00"),
       }, code)
@@ -87,7 +94,11 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
         this.exampleScripts[category] = cat = []
       }
       for (let exampleScript of exampleScripts[category]) {
-        let s = mkExample(exampleScript.name, exampleScript.code)
+        // id [-10000000..-20000000) is reserved for externalExampleFiles
+        if (exampleScript.id <= -10000000 && exampleScript.id > -20000000) {
+          throw new Error(`reserved example script id ${exampleScript.id}`)
+        }
+        let s = mkExample(exampleScript.id, exampleScript.name, exampleScript.code)
         if (!this.defaultSampleScript) {
           this.defaultSampleScript = s
         }
@@ -95,13 +106,14 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
     }
 
-    let externalExampleFiles = [
-      ["figma.d.ts", "Figma API"],
-      ["scripter-env.d.ts", "Scripter API"],
+    let externalExampleFiles :[number,string,string][] = [
+      [-10000000, "figma.d.ts", "Figma API"],
+      [-10000001, "scripter-env.d.ts", "Scripter API"],
     ]
-    Promise.all(externalExampleFiles.map(name => resources[name[0]])).then(codes => {
+    Promise.all(externalExampleFiles.map(name => resources[name[1]])).then(codes => {
       for (let i = 0; i < codes.length; i++) {
-        let s = mkExample(externalExampleFiles[i][1], codes[i])
+        let [id, name] = externalExampleFiles[i]
+        let s = mkExample(id, name, codes[i])
         s.readOnly = true
         this.referenceScripts.push(s)
       }

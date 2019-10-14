@@ -81,11 +81,12 @@ interface ScripterAPI {
   visualizePrint :bool
 }
 
-/** @DEPRECATED use libui.confirm instead */
+/**
+ * Shows a modal dialog with question and yes/no buttons.
+ *
+ * Returns true if the user answered "yes".
+ */
 declare function confirm(question: string): Promise<bool>;
-
-/** @DEPRECATED use libui.notify instead */
-declare function notify(message: string, options?: NotificationOptions): NotificationHandler
 
 
 // ------------------------------------------------------------------------------------
@@ -504,13 +505,6 @@ interface UIInputIterator<T> extends AsyncIterable<T> {
 
 
 declare namespace libui {
-
-  /**
-   * Shows a modal dialog with question and yes/no buttons.
-   *
-   * Returns true if the user answered "yes".
-   */
-  function confirm(question: string): Promise<bool>;
 
   /** Presents a short ambient message to the user, at the bottom of the screen */
   function notify(message: string, options?: NotificationOptions): NotificationHandler

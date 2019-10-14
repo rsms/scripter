@@ -1,12 +1,13 @@
 import { isMac } from "./util"
 
 interface ExampleScript {
+  id   :number
   name :string
   code :string
 }
 
-function s(name :string, code :string) :ExampleScript {
-  return { name, code: code.replace(/^\s*\n|\n\s*$/, "") }
+function s(id :number, name :string, code :string) :ExampleScript {
+  return { id: -id, name, code: code.replace(/^\s*\n|\n\s*$/, "") }
 }
 
 function kb(mac :string, other :string) {
@@ -34,7 +35,7 @@ export default (samples => {
 })([
 
 
-s("Introduction", `
+s(100, "Introduction", `
 /*
 Hello hi and welcome to Scripter.
 
@@ -75,7 +76,10 @@ Keyboard shortcuts
 `),
 
 
-s("Figma/Create rectangles", `
+//------------------------------------------------------------------------------------------------
+
+
+s(200, "Figma/Create rectangles", `
 // This script creates some rectangles on the current page
 const numberOfRectangles = 5
 
@@ -93,7 +97,7 @@ viewport.scrollAndZoomIntoView(nodes)
 `),
 
 
-s("Figma/Trim whitespace", `
+s(201, "Figma/Trim whitespace", `
 // Select some text and run this script to trim away linebreaks and space.
 for (let n of selection()) {
   if (isText(n)) {
@@ -103,7 +107,7 @@ for (let n of selection()) {
 `),
 
 
-s("Figma/Trim line indentation", `
+s(202, "Figma/Trim line indentation", `
 // Select some text and run this script to trim away whitespace from the
 // beginning of lines
 for (let n of selection()) {
@@ -114,7 +118,7 @@ for (let n of selection()) {
 `),
 
 
-s("Figma/Select all images", `
+s(203, "Figma/Select all images", `
 let images = await find(n => isImage(n) && n)
 setSelection(images)
 
@@ -140,7 +144,7 @@ setSelection(images)
 `),
 
 
-s("Figma/Set images to fit", `
+s(204, "Figma/Set images to fit", `
 // Loop over images in the selection
 for (let shape of await find(selection(), n => isImage(n) && n)) {
   // Update image paints to use "FIT" scale mode
@@ -150,27 +154,10 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 `),
 
 
-s("Basics/UI messaging", `
-// There are a few ways to show messages
-// in the UI
-
-// alert(message) shows a message dialog.
-// Blocks the UI. Useful for important messages.
-alert("Something very important")
-
-// confirm(question) asks the user a yes or no
-// question via a message dialog. Blocks the UI.
-// Returns true if the user answered "yes".
-print(await confirm("Would you like a kitten?"))
-
-// notify(message, options?) shows a message in
-// the bottom of the user's screen.
-// Does not block the UI.
-notify("Notification", { timeout: 2000 })
-`),
+//------------------------------------------------------------------------------------------------
 
 
-s("Basics/Working with paths", `
+s(300, "Basics/Working with paths", `
 // The Path library provides functions for working
 // with pathnames.
 let path = "/foo/bar/baz.png"
@@ -184,7 +171,7 @@ print(Path.split(path))
 `),
 
 
-s("Basics/Working with files", `
+s(301, "Basics/Working with files", `
 // Scripter doesn't support interfacing with your file system,
 // but it does provide functions for working with file data.
 
@@ -198,7 +185,7 @@ print(fileType([0xFF, 0xD8, 0xFF])) // JPEG image data
 `),
 
 
-s("Basics/Showing images", `
+s(302, "Basics/Showing images", `
 // The Img function and class can be used to describe images
 // and load image data for a few common image types.
 // Passing an Img to print vizualizes the image.
@@ -241,7 +228,7 @@ print(im1, [im1])
 `),
 
 
-s("Basics/Timers", `
+s(303, "Basics/Timers", `
 // Timers allows waiting for some time to pass
 // or to execute some code after a delay.
 await timer(200)
@@ -270,7 +257,7 @@ timer(200, canceled => {
 
 
 
-s("Basics/Ranges", `
+s(304, "Basics/Ranges", `
 // The range() function creates a sequence of numbers in the
 // range [start–end), incrementing in steps. Steps defaults to 1.
 print(range(1, 10))
@@ -316,13 +303,40 @@ try {
 `),
 
 
+//------------------------------------------------------------------------------------------------
 
-s("UI input/Range sliders", `
+
+s(400, "UI input/Dialogs & Messaging", `
+const { notify } = libui
+
+// alert(message) shows a message dialog.
+// Blocks the UI. Useful for important messages.
+alert("Something very important")
+
+// confirm(question) asks the user a yes or no
+// question via a message dialog. Blocks the UI.
+// Returns true if the user answered "yes".
+print(await confirm("Would you like a kitten?"))
+
+// notify(message, options?) shows a message in
+// the bottom of the user's screen.
+// Does not block the UI.
+notify("Notification", { timeout: 2000 })
+`),
+
+
+
+s(401, "UI input/Range sliders", `
 // Example of using interactive range slider control to move a rectangle
 const { rangeInput } = libui
 
 // Create a rectangle
-let r = Rectangle({ fills:[BLACK.paint], cornerRadius:8 })
+let r = Rectangle({
+  fills: [RED.paint],
+  cornerRadius: 8,
+  opacity: 0.5,
+})
+
 try {
   // setup viewport
   viewport.scrollAndZoomIntoView([r])
@@ -341,7 +355,7 @@ try {
 `),
 
 
-s("UI input/Async generators", `
+s(402, "UI input/Async generators", `
 // Async generator functions allows creation of iterators which
 // may take some amount of time to produce their results.
 //
@@ -360,8 +374,10 @@ for await (const meows of meowGenerator(10)) {
 `),
 
 
+//------------------------------------------------------------------------------------------------
 
-s("HTTP/Fetch", `
+
+s(500, "HTTP/Fetch", `
 // fetch can be used to fetch resources across the interwebs.
 // It's the standard fetch API you might already be used to.
 let r = await fetch("https://jsonplaceholder.typicode.com/users/1")
@@ -375,7 +391,7 @@ print(await fetchData("https://scripter.rsms.me/icon.png"))
 `),
 
 
-s("HTTP/Figma API", `
+s(501, "HTTP/Figma API", `
 // This script demonstrates accessing the Figma HTTP API
 //
 // First, generate an access token for yourself using the
@@ -401,7 +417,10 @@ async function fetchFigmaFile(fileKey :string) :Promise<any> {
 `),
 
 
-s("Advanced/Timers", `
+//------------------------------------------------------------------------------------------------
+
+
+s(600, "Advanced/Timers", `
 // Advanced use of multiple timers to implement timeout
 
 // Try changing this from 200 to 300:
@@ -446,7 +465,7 @@ interface CPromise<R> extends Promise<R> { cancel():void }
 `),
 
 
-s("Advanced/Tick tock, tick tock, tick tock", `
+s(601, "Advanced/Tick tock, tick tock, tick tock", `
 // Demonstrates continously-running scripts.
 // This loops forever until you restart or
 // stop the script.
@@ -458,7 +477,7 @@ for (let i = 1; true; i++) {
 `),
 
 
-s("Advanced/Animation", `
+s(602, "Advanced/Animation", `
 // Rudimentary animation with animate()
 // Moves a rectangle around in a "figure eight" pattern.
 //

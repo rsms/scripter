@@ -291,8 +291,8 @@ code b, pre b, tt b { font-weight:540 }
       color: #444;
       font-weight:500;
 
-      &:hover { background: var(--colorFeedback); }
-      &.active { background: var(--colorSelected); }
+      &:hover { color: black; /*background: var(--colorFeedback);*/ }
+      &.active { color: black; background: var(--colorSelected); }
       &.unsaved {
         & span {
           font-style:italic;
@@ -329,23 +329,38 @@ code b, pre b, tt b { font-weight:540 }
         width: var(--inlineButtonSize);
         height: var(--inlineButtonSize);
         line-height: var(--inlineButtonSize);
-        border-radius: 100%;
         font-size: 8px;
-        border: var(--inlineButtonBorder) solid rgba(0,0,0,0.4);
+        /*border-radius: 100%;
+        border: var(--inlineButtonBorder) solid rgba(0,0,0,0.4);*/
+        /*background: lightpink;*/
         color: black;
         opacity: 0.2;
         font-weight:600;
+        display:none;
 
-        visibility: hidden; /* shown on hover over sidebar */
+        &.delete {
+          font-size:14px;
+          font-weight:400;
+        }
 
         &:hover {
           border-color: black;
-          background-color: inherit;
-          opacity: 0.8;
+          background-color: rgba(0,0,0,0.1);
+          opacity: 1;
         }
       }
+
+      &:hover .button {
+        display: flex;
+      }
+
     }
   }
+
+  /*&:hover ul .button {
+    visibility: visible;
+    display: flex;
+  }*/
 
   & > .section {
     height: var(--menuItemHeight);
@@ -362,10 +377,6 @@ code b, pre b, tt b { font-weight:540 }
     border:none;
     background:rgba(0,0,0,0.1);
     margin: 8px;
-  }
-
-  &:hover ul .button {
-    visibility: visible;
   }
 
   & .settings {
@@ -453,18 +464,6 @@ code b, pre b, tt b { font-weight:540 }
 }
 
 
-#editor {
-  position: absolute;
-  left: 0; top: 0; right:0; bottom: 0;
-  /* for blur effect */
-  /*overflow:hidden;*/
-}
-
-body.menuVisible #editor {
-  left: var(--menuWidth);
-}
-
-
 #message {
   position: absolute;
   left: 0; right:0; bottom: var(--toolbarHeight);
@@ -510,10 +509,19 @@ body.showMessage #message { display: flex }
 body.showMessage #editor { bottom: var(--messageHeight); }
 
 
+#editor {
+  position: absolute;
+  left: 0; top: 0; right:0; bottom: 0;
+  /* for blur effect */
+  /*overflow:hidden;*/
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
+}
+
+body.menuVisible #editor {
+  left: var(--menuWidth);
+}
 
 .monaco-editor {
-  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
-
   /*& .invisible scrollbar vertical fade*/
   /*& .visible.scrollbar vertical */
   & .scrollbar {
@@ -568,7 +576,7 @@ body.showMessage #editor { bottom: var(--messageHeight); }
   background-color: rgba(0, 200, 255, 0.1);
 }
 
-.monaco-editor .inlineWidget {
+.inlineWidget {
   --inlineWidgetLeftPadding: 0.5em;
   --inlineWidgetLeftBorderWidth: 4px;
 
@@ -639,11 +647,11 @@ body.showMessage #editor { bottom: var(--messageHeight); }
   }
 }
 
-body.menuVisible .monaco-editor .inlineWidget > div {
+body.menuVisible .inlineWidget > div {
   width: calc(var(--inlineWidgetWidth) - var(--menuWidth) - 8px);
 }
 
-.monaco-editor .printWidget > div {
+.printWidget > div {
   border-color: lightgreen;
   background: #eeffee;
   /*padding: 0.3em;*/
@@ -656,7 +664,7 @@ body.menuVisible .monaco-editor .inlineWidget > div {
   }
 }
 
-.monaco-editor .inputWidget {
+.inputWidget {
   overflow: initial;
   height: 16px;
   z-index: 3;

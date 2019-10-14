@@ -256,6 +256,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // for real.
     this._isSwitchingModel = true
     this.editor.getModel().setValue(" ")
+
+    // init new model right away so that we receive events for things like TS feedback
+    initEditorModel(model)
+
     requestAnimationFrame(() => {
       this._isSwitchingModel = false
 
@@ -266,7 +270,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         readOnly: script.readOnly,
       })
       this.restoreViewState()
-      initEditorModel(model)
       this.editor.focus()
       config.lastOpenScript = this._currentScript.id
     })
@@ -754,12 +757,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   measureHTMLElement(el :HTMLElement) :{width:number, height:number} {
     let measureEl = this._measureEl
     if (!measureEl) {
-      let edel = this.editor.getDomNode()
       measureEl = document.createElement("div")
       measureEl.style.position = "absolute"
       measureEl.style.visibility = "hidden"
       measureEl.style.pointerEvents = "none"
-      edel.appendChild(measureEl)
+      document.getElementById("editor").appendChild(measureEl)
       this._measureEl = measureEl
     }
     if (measureEl.children.length > 0) {
