@@ -327,30 +327,29 @@ notify("Notification", { timeout: 2000 })
 
 
 s(401, "UI input/Range sliders", `
-// Example of using interactive range slider control to move a rectangle
+// Example of using interactive range slider to move a rectangle
 const { rangeInput } = libui
 
-// Create a rectangle
-let r = Rectangle({
-  fills: [RED.paint],
-  cornerRadius: 8,
-  opacity: 0.5,
-})
-
+// Save viewport and create a red rectangle
+let origViewport = { zoom: viewport.zoom, center: viewport.center }
+let r = Rectangle({ fills: [RED.paint], cornerRadius: 8, opacity: 0.5 })
 try {
-  // setup viewport
-  viewport.scrollAndZoomIntoView([r])
+  // Set viewport to focus on the rectangle
   viewport.zoom = 1
+  viewport.center = {y: r.y, x: r.x}
 
   // Show a slider and move rectangle as it changes
   let x = r.x
   for await (let v of rangeInput({min:-200, max:200})) {
     r.x = x + v
-    viewport.center = {...viewport.center, x: -v}
+    viewport.center = {y: viewport.center.y, x: -v}
   }
 } finally {
   // When the script is stopped, remove the rectangle
   r.remove()
+  // Restore viewport
+  viewport.center = origViewport.center
+  viewport.zoom = origViewport.zoom
 }
 `),
 
