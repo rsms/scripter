@@ -4,6 +4,25 @@
 // What's declared in there is available to scripts in their global namespace.
 //
 
+
+// Patch TS env since Monaco doesn't seem to work with "libs" in TS compiler settigs.
+interface SymbolConstructor {
+  readonly asyncIterator: symbol;
+}
+interface AsyncIterator<T, TReturn = any, TNext = undefined> {
+  next(...args: [] | [TNext | PromiseLike<TNext>]): Promise<IteratorResult<T, TReturn>>;
+  return?(value?: TReturn | PromiseLike<TReturn>): Promise<IteratorResult<T, TReturn>>;
+  throw?(e?: any): Promise<IteratorResult<T, TReturn>>;
+}
+interface AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+interface AsyncIterableIterator<T> extends AsyncIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterableIterator<T>;
+}
+
+
+
 // symbolic type aliases
 type int   = number
 type float = number
@@ -64,6 +83,7 @@ interface ScripterAPI {
 
 /**
  * Shows a modal dialog with question and yes/no buttons.
+ *
  * Returns true if the user answered "yes".
  */
 declare function confirm(question: string): Promise<bool>;
@@ -215,9 +235,6 @@ declare var MIXED: symbol
  */
 declare var clientStorage: ClientStorageAPI
 
-/** Presents a short ambient message to the user, at the bottom of the screen */
-declare function notify(message: string, options?: NotificationOptions): NotificationHandler
-
 
 /** Frame of type "FRAME" */
 interface FrameFrameNode extends FrameNode {
@@ -238,8 +255,6 @@ interface GroupFrameNode extends FrameNode {
 declare function Page(props? :Partial<PageNode>): PageNode;
 /** Creates a new Rectangle */
 declare function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
-/** Creates a new Rectangle */
-declare function Rect(props? :Partial<RectangleNode>) :RectangleNode;
 /** Creates a new Line */
 declare function Line(props? :Partial<LineNode>): LineNode;
 /** Creates a new Ellipse */
@@ -462,6 +477,7 @@ interface FindOptions {
 /**
  * Returns a sequence of numbers in the range [start–end),
  * incrementing in steps or 1 if steps is not provided.
+ *
  * Note that the last value may be smaller than end, depending on the value of step.
  */
 declare function range(start :number, end :number, step? :number) :LazySeq<number,number,number>
@@ -476,4 +492,72 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
   array() :T[]
   at(index :number) :OffsT
   join(glue :string) :string
+}
+
+
+// ------------------------------------------------------------------------------------
+// ui
+
+
+interface UIInputIterator<T> extends AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T,T>;
+}
+
+
+declare namespace libui {
+
+  /** Presents a short ambient message to the user, at the bottom of the screen */
+  function notify(message: string, options?: NotificationOptions): NotificationHandler
+
+  /**
+   * Shows a range slider inline with the code.
+   *
+   * Yields values as the user interacts with the slider. Iteration ends when the user
+   * either closes the UI control or stops the script.
+   */
+  function rangeInput(init? :UIRangeInit) :UIInputIterator<number>
+
+  /** Initial options for rangeInput */
+  interface UIRangeInit {
+    value? :number
+    min?   :number
+    max?   :number
+    step?  :number
+  }
+}
+
+
+// ------------------------------------------------------------------------------------
+// ui
+
+
+declare namespace libgeometry {
+  class Rect {
+    x      :number
+    y      :number
+    width  :number
+    height :number
+
+    constructor(x :number, y :number, width :number, height :number)
+
+    position() :Vec
+    containsPoint(v :Vec)
+    translate(v :Vec)
+  }
+
+  class Vec implements Vector {
+    x :number
+    y :number
+
+    constructor(x :number, y :number)
+    constructor(v :Vector)
+
+    isInside(r :Rect) :bool
+    distanceTo(v :Vec) :number
+    sub(v :Vec|number) :Vec
+    add(v :Vec|number) :Vec
+    mul(v :Vec|number) :Vec
+    div(v :Vec|number) :Vec
+  }
+
 }
