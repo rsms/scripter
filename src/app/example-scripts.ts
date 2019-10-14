@@ -81,7 +81,7 @@ const numberOfRectangles = 5
 
 let nodes: SceneNode[] = []
 for (let i = 0; i < numberOfRectangles; i++) {
-  let r = Rect({ x: i * 150, fills: [ ORANGE.paint ] })
+  let r = Rectangle({ x: i * 150, fills: [ ORANGE.paint ] })
   nodes.push(r)
 }
 
@@ -317,6 +317,50 @@ try {
 
 
 
+s("UI input/Range sliders", `
+// Example of using interactive range slider control to move a rectangle
+const { rangeInput } = libui
+
+// Create a rectangle
+let r = Rectangle({ fills:[BLACK.paint], cornerRadius:8 })
+try {
+  // setup viewport
+  viewport.scrollAndZoomIntoView([r])
+  viewport.zoom = 1
+
+  // Show a slider and move rectangle as it changes
+  let x = r.x
+  for await (let v of rangeInput({min:-200, max:200})) {
+    r.x = x + v
+    viewport.center = {...viewport.center, x: -v}
+  }
+} finally {
+  // When the script is stopped, remove the rectangle
+  r.remove()
+}
+`),
+
+
+s("UI input/Async generators", `
+// Async generator functions allows creation of iterators which
+// may take some amount of time to produce their results.
+//
+// In this example we use a range input control to generate lists
+// of strings upon user moving the slider
+async function* meowGenerator(max :number) {
+  for await (let count of libui.rangeInput({max, value:1, step:1})) {
+    yield range(0, count).map(() => "Meow")
+  }
+}
+
+// We can now use our meow generator like this:
+for await (const meows of meowGenerator(10)) {
+  print(meows)
+}
+`),
+
+
+
 s("HTTP/Fetch", `
 // fetch can be used to fetch resources across the interwebs.
 // It's the standard fetch API you might already be used to.
@@ -419,7 +463,7 @@ s("Advanced/Animation", `
 // Moves a rectangle around in a "figure eight" pattern.
 //
 // Create rectangle
-let r = Rect({ fills:[BLACK.paint] })
+let r = Rectangle({ fills:[BLACK.paint] })
 try {
   // setup viewport
   viewport.scrollAndZoomIntoView([r])

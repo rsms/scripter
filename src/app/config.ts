@@ -8,19 +8,49 @@ import { WindowSize } from "../common/messages"
 
 class Data {
   // values define new-user defaults
+  //
+  // function value means that on load, the actual stored value is passed through the function.
+  // if said function returns undefined, the values is removed from local storage.
+  //
+  //                    DEFAULT VALUE
   lastOpenScript        :number = 0
   editorViewState       :monaco.editor.ICodeEditorViewState|null = null
   menuVisible           :bool = false
-  fontSize?             :number = undefined
+  uiScale               :number = 1
   showLineNumbers       :bool = false
   wordWrap              :bool = true
   monospaceFont         :bool = false
   codeFolding           :bool = false
+  showWhitespace        :bool = false
+  indentGuides          :bool = true
   minimap               :bool = false
   quickSuggestions      :bool = true
   quickSuggestionsDelay :number = 500 // ms
+  hoverCards            :bool = true
   windowSize            :[WindowSize,WindowSize] = [WindowSize.MEDIUM,WindowSize.MEDIUM]
+
+  // -------------------------------------------------
+  // Deprecated data properties.
+  //
+  // When stored data for one of these properties is discovered on load, the corresponding
+  // function is called _after_ all non-deprecated data values has been read.
+  // The function can inspect and modify `data` to migrate information.
+
+  fontSize = (data :Data, value :any) => {
+    // convert fontSize to uiScale
+    data.uiScale = (
+      value > 22 ? 2 :
+      value > 18 ? 1.75 :
+      value > 16 ? 1.5 :
+      value > 15 ? 1.4 :
+      value > 13 ? 1.3 :
+      value > 12 ? 1.2 :
+      value > 11 ? 1.1 :
+      1
+    )
+  }
 }
+
 
 interface ConfigEvents {
   "change": {key:string}
@@ -46,8 +76,9 @@ class Config extends EventEmitter<ConfigEvents> {
   get lastOpenScript() :number { return this.data.lastOpenScript }
   set lastOpenScript(v :number) { if (v != 0) { this._set("lastOpenScript", v) } }
 
-  get fontSize() :number|undefined { return this.data.fontSize }
-  set fontSize(v :number|undefined) { this._set("fontSize", v) }
+  // @DEPRECATED -> uiScale
+  get uiScale() :number { return this.data.uiScale }
+  set uiScale(v :number) { this._set("uiScale", v) }
 
   get menuVisible() :bool { return this.data.menuVisible }
   set menuVisible(v :bool) { this._set("menuVisible", v) }
@@ -64,6 +95,12 @@ class Config extends EventEmitter<ConfigEvents> {
   get codeFolding() :bool { return this.data.codeFolding }
   set codeFolding(v :bool) { this._set("codeFolding", v) }
 
+  get showWhitespace() :bool { return this.data.showWhitespace }
+  set showWhitespace(v :bool) { this._set("showWhitespace", v) }
+
+  get indentGuides() :bool { return this.data.indentGuides }
+  set indentGuides(v :bool) { this._set("indentGuides", v) }
+
   get minimap() :bool { return this.data.minimap }
   set minimap(v :bool) { this._set("minimap", v) }
 
@@ -72,6 +109,9 @@ class Config extends EventEmitter<ConfigEvents> {
 
   get quickSuggestionsDelay() :number { return this.data.quickSuggestionsDelay }
   set quickSuggestionsDelay(v :number) { this._set("quickSuggestionsDelay", v) }
+
+  get hoverCards() :bool { return this.data.hoverCards }
+  set hoverCards(v :bool) { this._set("hoverCards", v) }
 
   get windowSize() :[WindowSize,WindowSize] { return this.data.windowSize }
   set windowSize(v :[WindowSize,WindowSize]) { this._set("windowSize", v) }
@@ -97,13 +137,47 @@ class Config extends EventEmitter<ConfigEvents> {
   }
 
   async load() {
-    await db.read(["config"],
-      ...Object.keys(this.data).map(k =>
-        (s :xdb.ObjectStore) => s.get(k).then(v => {
+    let keys = Object.keys(this.data)
+    let migrate :([string,()=>void])[] = []
+    await db.read(["config"], ...keys.map(k =>
+      // callback function for each value
+      (s :xdb.ObjectStore) => s.get(k).then(v => {
+        let handler = this.data[k]
+        if (handler && typeof handler == "function") {
+          if (v !== undefined) {
+            migrate.push([k, () => handler(this.data, v)])
+          }
+        } else {
           this.data[k] = v === undefined ? this.data[k] : v
+        }
+      })
+    ))
+    // migrate old data?
+    if (migrate.length > 0) {
+      let keys = migrate.map(e => e[0])
+      let rmkeys :string[] = []
+      console.log(`[scripter] migrating config keys ${keys}`)
+      for (let [key, fn] of migrate) {
+        try {
+          let value = fn()
+          if (value === undefined) {
+            rmkeys.push(key)
+          } else {
+            this.data[key] = value
+          }
+        } catch (err) {
+          console.warn(`[scripter] migration for config "${key}" failed: ${err.stack|err}`)
+        }
+      }
+      // clear deprecated data from db
+      if (rmkeys.length > 0) {
+        await db.modify(["config"], async s => {
+          for (let k of rmkeys) {
+            s.delete(k)
+          }
         })
-      )
-    )
+      }
+    }
   }
 
   async saveDirty() {

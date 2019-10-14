@@ -1,6 +1,7 @@
 import { editor } from "./editor"
 import { menu } from "./menu"
-import { isMac } from "./util"
+import { scriptsData } from "./script-data"
+import { isMac, dlog } from "./util"
 import * as warningMessage from "./warning-message"
 
 
@@ -52,21 +53,6 @@ class ToolbarUI {
   init() {
     this.el = document.getElementById('toolbar') as HTMLElement
 
-    // run button
-    this.runButton = this.el.querySelector('.button.run') as HTMLElement
-    handleClick(this.runButton, () => {
-      if (this.isRunning) {
-        for (let f of this.stopCallbacks) {
-          try {
-            f()
-          } catch (e) {
-            console.error(`[toolbar] error in stopCallback: ${e.stack||e}`)
-          }
-        }
-      } else {
-        editor.runCurrentScript()
-      }
-    })
 
     // menu button
     this.menuButton = this.el.querySelector('.button.menu') as HTMLElement
@@ -86,6 +72,16 @@ class ToolbarUI {
       this.menuButton.classList.toggle("on", menuVisible)
     })
 
+
+    // new button
+    let newButton = this.el.querySelector('.button.new') as HTMLElement
+    newButton.addEventListener("click", ev => {
+      editor.newScript({ name: scriptsData.nextNewScriptName() })
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+
+
     // clear button
     this.clearButton = this.el.querySelector('.button.clear') as HTMLElement
     this.clearButton.title = "Clear messages  " + (
@@ -96,9 +92,37 @@ class ToolbarUI {
       warningMessage.hide()
       editor.clearMessages()
     })
-    editor.msgZones.on("update", () => {
-      this.clearButton.classList.toggle("unavailable", editor.msgZones.count == 0)
+    editor.viewZones.on("update", () => {
+      this.clearButton.classList.toggle("unavailable", editor.viewZones.count == 0)
     })
+
+
+    // run button
+    this.runButton = this.el.querySelector('.button.run') as HTMLElement
+    handleClick(this.runButton, () => {
+      if (this.isRunning) {
+        for (let f of this.stopCallbacks) {
+          try {
+            f()
+          } catch (e) {
+            console.error(`[toolbar] error in stopCallback: ${e.stack||e}`)
+          }
+        }
+      } else {
+        editor.runCurrentScript()
+      }
+    })
+
+
+    // title
+    let titleEl = this.el.querySelector('.title') as HTMLElement
+    titleEl.onclick = () => {
+      menu.toggle(/* closeOnSelection */ true)
+    }
+    editor.on("modelchange", () => {
+      titleEl.innerText = editor.currentScript.name
+    })
+
 
     this.updateUI()
   }

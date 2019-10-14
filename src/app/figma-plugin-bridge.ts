@@ -6,14 +6,14 @@ import {
   WindowConfigMsg,
   UIConfirmRequestMsg, UIConfirmResponseMsg,
   FetchRequestMsg, FetchResponseMsg,
-  UIInputRequestMsg, UIInputResponseMsg,
+  UIInputRequestMsg, UIInputResponseMsg, isUIRangeInputRequest,
 } from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
 import { resolveOrigSourcePos } from "./srcpos"
 import { dlog, print } from "./util"
 import { editor } from "./editor"
-import { MsgZoneType } from "./editor-msg-zones"
+import { InputViewZone } from "./viewzone"
 import { UIInput } from "./ui-input"
 import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 
@@ -107,96 +107,75 @@ function rpc_fetch(req :FetchRequestMsg) {
 
 
 function createUIInput(msg :UIInputRequestMsg) :UIInput {
-  // for now, assume msg.controllerType == "range"
-  if (msg.init) {
-    if ("value" in msg.init) {
-      let v = msg.init.value as number
+  if (isUIRangeInputRequest(msg)) {
+    if (msg.init && "value" in msg.init) {
+      let v = msg.init.value
       if (typeof v != "number") {
         v = parseFloat(v)
         if (isNaN(v)) {
-          v = undefined
+          delete msg.init.value
+        } else {
+          msg.init.value = v
         }
       }
-      if (v === undefined) {
-        delete msg.init.value
-      } else {
-        msg.init.value = v
-      }
     }
+    return new UIRangeInput(msg.init)
+  } else {
+    throw new Error(`unknown input type "${msg.controllerType}"`)
   }
-  return new UIRangeInput(msg.init)
 }
+
+
+let uiInputInstances = new Map<string,InputViewZone>()
 
 
 function rpc_ui_input(msg :UIInputRequestMsg) {
   rpc_reply<UIInputResponseMsg>(msg.id, "ui-input-response", async () => {
-
-    let pos = msg.srcPos as SourcePos
-    if (pos.line == 0) {
-      dlog("[rpc ui-input-response]: ignoring; zero srcPos", msg)
-      return { value: 0, done: true }
-    }
-
-    let sourceMapJson = Eval.getSourceMapForRequest(msg.scriptReqId)
-    if (!sourceMapJson) {
-      throw new Error("no source map found for script invocation #" + msg.scriptReqId)
-    }
-
-    pos = await resolveOrigSourcePos(pos, msg.srcLineOffset, sourceMapJson)
-    if (pos.line == 0) {
-      return { value: 0, done: true }
-    }
-
-    let viewZone = editor.msgZones.get(pos) // :monaco.editor.IViewZone|null
+    let viewZone = uiInputInstances.get(msg.instanceId)
     if (!viewZone) {
+
+      let pos = msg.srcPos as SourcePos
+      if (pos.line == 0) {
+        dlog("[rpc ui-input-response]: ignoring; zero srcPos", msg)
+        return { value: 0, done: true }
+      }
+
+      let sourceMapJson = Eval.getSourceMapForRequest(msg.scriptReqId)
+      if (!sourceMapJson) {
+        throw new Error("no source map found for script invocation #" + msg.scriptReqId)
+      }
+
+      pos = await resolveOrigSourcePos(pos, msg.srcLineOffset, sourceMapJson)
+      if (pos.line == 0) {
+        return { value: 0, done: true }
+      }
+
+      // DISABLED: replacing view zone can lead to infinite loops
+      // viewZone = editor.viewZones.get(pos) as InputViewZone|null
+      // if (viewZone && !((viewZone as any) instanceof InputViewZone)) {
+      //   // replace other view zone on same line
+      //   viewZone.removeFromEditor()
+      //   viewZone = null
+      // }
+
       let input = createUIInput(msg)
-
-      let viewZoneId = editor.msgZones.set(pos, input.el, MsgZoneType.INPUT)
-      viewZone = editor.msgZones.viewZones.get(viewZoneId)
-
-      // requestAnimationFrame(() => input.onDidMountElement())
-
-      let done = false
-
-      let resolvePromise = (value :any) => {
-        let resolve = (viewZone as any).inputResolveFun
-        if (resolve) {
-          ;(resolve as (v:Omit<UIInputResponseMsg,"id"|"type">)=>void)({
-            value,
-            done,
-          })
-          ;(viewZone as any).inputResolveFun = null
-        }
+      viewZone = new InputViewZone(pos.line, input)
+      if (editor.viewZones.add(viewZone) == -1) {
+        // existing view zone conflict
+        return { value: input.value, done: true }
       }
 
-      let timer :any = null
-
-      let sendValue = () => {
-        clearTimeout(timer) ; timer = null
-        resolvePromise(input.value)
-      }
-
-      let onInput = value => {
-        if (timer === null) {
-          sendValue()
-          timer = setTimeout(sendValue, 1000/30)
-        }
-      }
-
-      input.on("change", sendValue)  // triggered only when changes to an input commit
-      input.on("input", onInput) // triggered continously as the input changes
-
-      ;(viewZone as any).onRemoveViewZone = () => {
-        // input.onWillUnmountElement()
-        input.removeListener("change", sendValue)
-        input.removeListener("input", onInput)
-        done = true
-        sendValue()
-      }
+      // associate instanceId with the new viewZone
+      uiInputInstances.set(msg.instanceId, viewZone)
+      viewZone.addListener("remove", () => {
+        // Note: view zone cleans up all listeners after the remove event,
+        // so no need for us to removeListener here.
+        uiInputInstances.delete(msg.instanceId)
+      })
     }
 
     return new Promise(resolve => {
-      ;(viewZone as any).inputResolveFun = resolve
+      viewZone.enqueueResolver(resolve)
     })
   })
 }
@@ -208,24 +187,6 @@ export function init() {
   let messageHandler = Eval.setRuntime(runtime)
 
   window.onmessage = ev => {
-    // if (DEBUG) {
-    //   let data2 :any = ev.data
-    //   if (ev.data && typeof ev.data == "object") {
-    //     data2 = {}
-    //     for (let k of Object.keys(ev.data)) {
-    //       let v = ev.data[k]
-    //       if (v && typeof v == "object" && v.buffer instanceof ArrayBuffer) {
-    //         v = `[${v.constructor.name} ${v.length}]`
-    //       } else if (v instanceof ArrayBuffer) {
-    //         v = `[ArrayBuffer ${v.byteLength}]`
-    //       }
-    //       data2[k] = v
-    //     }
-    //   }
-    //   dlog("ui received message", JSON.stringify({ origin: ev.origin, data: data2 }, null,"  "))
-    // }
-    dlog("ui received message", ev.data && ev.data.type, { origin: ev.origin, data: ev.data })
-
     let msg = ev.data
     if (msg && typeof msg == "object") {
       switch (msg.type) {
@@ -245,10 +206,29 @@ export function init() {
 
       case "ui-input-request":
         rpc_ui_input(msg as UIInputRequestMsg)
+        // return  // return to avoid logging these high-frequency messages
         break
 
       }
     }
+
+    // if (DEBUG) {
+    //   let data2 :any = ev.data
+    //   if (ev.data && typeof ev.data == "object") {
+    //     data2 = {}
+    //     for (let k of Object.keys(ev.data)) {
+    //       let v = ev.data[k]
+    //       if (v && typeof v == "object" && v.buffer instanceof ArrayBuffer) {
+    //         v = `[${v.constructor.name} ${v.length}]`
+    //       } else if (v instanceof ArrayBuffer) {
+    //         v = `[ArrayBuffer ${v.byteLength}]`
+    //       }
+    //       data2[k] = v
+    //     }
+    //   }
+    //   dlog("ui received message", JSON.stringify({ origin: ev.origin, data: data2 }, null,"  "))
+    // }
+    dlog("ui received message", ev.data && ev.data.type, { origin: ev.origin, data: ev.data })
   }
 
   // hook up config event observation
@@ -269,8 +249,23 @@ export function init() {
   // When ESC is pressed at least twice within this time window, the plugin closes.
   const escapeToCloseThreshold = 150
 
+  let isClosing = false
+
   function closePlugin() {
-    runtime.send<ClosePluginMsg>({type:"close-plugin"})
+    if (isClosing) {
+      return
+    }
+    isClosing = true
+    let sendCloseSignal = () => {
+      runtime.send<ClosePluginMsg>({type:"close-plugin"})
+    }
+    if (editor.isScriptRunning()) {
+      // stop the running script and give it a few milliseconds to finish
+      editor.stopCurrentScript()
+      setTimeout(sendCloseSignal, 50)
+    } else {
+      sendCloseSignal()
+    }
   }
 
   function onKeydown(ev :KeyboardEvent, key :string) :bool|undefined {
@@ -283,6 +278,7 @@ export function init() {
         lastEscapeKeypress = ev.timeStamp
       }
     } else if (ev.keyCode == 80 /*P*/ && (ev.metaKey || ev.ctrlKey) && ev.altKey) {
+      // meta-alt-P
       closePlugin()
       return true
     }

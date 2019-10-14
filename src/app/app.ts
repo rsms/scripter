@@ -13,8 +13,55 @@ import { menu } from "./menu"
 import { editor, initEditorModel } from "./editor"
 import * as figmaPluginBridge from "./figma-plugin-bridge"
 import toolbar from "./toolbar"
-import { isMac /* , print, dlog */ } from "./util"
+import { isMac, dlog } from "./util"
 import "../common/filetype"
+
+
+const uiScaleSteps = (steps => {
+  return steps.slice(0, steps.length-1).map((v, i) => {
+    return [v, steps[i+1]]
+  })
+})([
+  0.5,
+  0.75,
+  0.8,
+  0.9,
+  1,
+  1.1,
+  1.2,
+  1.3,
+  1.4,
+  1.5,
+  1.75,
+  2,
+  2.5,
+  3,
+])
+
+
+const uiScale = {
+  zoomIn() {
+    let v = config.uiScale
+    for (let step of uiScaleSteps) {
+      if (v <= step[0]) {
+        config.uiScale = step[1]
+        break
+      }
+    }
+  },
+  zoomOut() {
+    let v = config.uiScale
+    for (let step of uiScaleSteps) {
+      if (v <= step[1]) {
+        config.uiScale = step[0]
+        break
+      }
+    }
+  },
+  resetZoom() {
+    config.uiScale = 1
+  },
+}
 
 
 function setupKeyboardHandlers() {
@@ -45,26 +92,14 @@ function setupKeyboardHandlers() {
       return menu.toggle(), true
     }
 
-    // editor options
-    let updatedOptions :monaco.editor.IEditorOptions = {}
+    // uiScale
     if (key == "=" || key == "+") {
-      updatedOptions.fontSize = Math.min(30, editor.options.fontSize + 1)
+      uiScale.zoomIn()
     } else if (key == "-") {
-      updatedOptions.fontSize = Math.max(8, editor.options.fontSize - 1)
+      uiScale.zoomOut()
     } else if (key == "0") {
-      updatedOptions.fontSize = editor.defaultFontSize
+      uiScale.resetZoom()
     }
-    if (updatedOptions.fontSize !== undefined) {
-      document.body.style.fontSize = `${updatedOptions.fontSize}px`
-    }
-    if (editor.updateOptions(updatedOptions)) {
-      if ("fontSize" in updatedOptions) {
-        editor.clearAllMetaInfo() // since font size changing casues visual bugs
-        config.fontSize = updatedOptions.fontSize
-      }
-      return true
-    }
-
   }
 
   window.addEventListener("keydown", ev => {
@@ -101,15 +136,24 @@ function setupAppEventHandlers() {
   config.on("change", ev => {
     if (ev.key == "windowSize") {
       updateWindowSize()
+    } else if (ev.key == "uiScale") {
+      updateUIScaleCssVar()
+      // editor.clearAllMetaInfo() // changing font size casues visual bugs
     }
   })
   updateWindowSize()
 }
 
 
+function updateUIScaleCssVar() {
+  document.body.style.setProperty("--uiScale", String(config.uiScale))
+}
+
+
 async function main() {
   await initData()
   await config.load()
+  updateUIScaleCssVar()
   toolbar.init()
   editor.init()
   menu.init()

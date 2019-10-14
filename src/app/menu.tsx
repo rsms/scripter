@@ -10,6 +10,15 @@ import { dlog } from "./util"
 import { WindowSize } from "../common/messages"
 
 
+function scrollIntoView(e :HTMLElement) {
+  if ((e as any).scrollIntoViewIfNeeded) {
+    ;(e as any).scrollIntoViewIfNeeded()
+  } else {
+    e.scrollIntoView()
+  }
+}
+
+
 interface MenuEvents {
   "visibility": boolean
 }
@@ -19,9 +28,20 @@ class Menu extends EventEmitter<MenuEvents> {
 
   _uiel = document.getElementById('menu')
 
-  toggle() {
+
+  _resolveMenuUIMountPromise :(()=>void)|null
+  menuUIMountPromise = new Promise<void>(resolve => {
+    this._resolveMenuUIMountPromise = resolve
+  })
+
+
+  closeOnSelection = false
+
+
+  toggle(closeOnSelection :bool = false) {
     ;(this as any).isVisible = this._uiel.classList.toggle("visible", !this.isVisible)
     document.body.classList.toggle("menuVisible", this.isVisible)
+    this.closeOnSelection = closeOnSelection
     if (this.isVisible) {
       ReactDOM.render(<MenuUI />, this._uiel)
     } else if (editor.editor) {
@@ -40,10 +60,20 @@ class Menu extends EventEmitter<MenuEvents> {
     }
   }
 
-  // readonly ui :MenuUI|null = null
-  // _setUI(ui :MenuUI|null) {
-  //   (this as any).ui = ui
-  // }
+  scrollToActiveItem() {
+    function focusActiveItem() :boolean {
+      let activeItem = document.querySelector("#menu .active") as HTMLElement|null
+      if (!activeItem) {
+        return false
+      }
+      scrollIntoView(activeItem)
+      return true
+    }
+    if (!focusActiveItem()) {
+      requestAnimationFrame(focusActiveItem)
+    }
+  }
+
 }
 
 
@@ -72,9 +102,9 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     }
   }
 
-  onNewScript = () => {
-    editor.newScript({ name: scriptsData.nextNewScriptName() })
-  }
+  // onNewScript = () => {
+  //   editor.newScript({ name: scriptsData.nextNewScriptName() })
+  // }
 
   scriptsDataChangeCallback = () => {
     this.setState({
@@ -96,6 +126,8 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     scriptsData.on("change", this.scriptsDataChangeCallback)
     editor.on("modelchange", this.onEditorModelChange)
     config.on("change", this.onConfigChange)
+    menu._resolveMenuUIMountPromise()
+    menu._resolveMenuUIMountPromise = null
   }
 
   componentWillUnmount() {
@@ -160,7 +192,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     let examples = <div className="examples">
       {Object.keys(this.state.exampleScripts).map(cat =>
         <div key={cat} className="category">
-          <h3>{cat ? cat : "Examples"}</h3>
+          {cat ? <h4>{cat}</h4> : <h3>Examples</h3>}
           <ul>
             {this.state.exampleScripts[cat].map(s =>
               <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} />
@@ -170,15 +202,22 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       )}
     </div>
 
+    /*
+    <div className="section">
+      <div className="button new" title="New script" onClick={this.onNewScript}></div>
+    </div>
+    */
+
     return (
     <div>
-      <div className="section">
-        <div className="button new" title="New script" onClick={this.onNewScript}></div>
-      </div>
-      <ul>
-      {this.state.scripts.map(s =>
-        <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} /> )}
-      </ul>
+      {this.state.scripts.length > 0 ?
+        <ul>
+        {this.state.scripts.map(s =>
+          <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} />
+        )}
+        </ul> :
+        null
+      }
       {examples}
       <h3>References</h3>
       <ul>
@@ -207,6 +246,27 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  checked={config.monospaceFont}
                  onChange={this.onChangeSettingBool} />
           Monospace font
+        </label>
+        <label title="Visualize otherwise-invisible characters like spaces and tabs">
+          <input type="checkbox"
+                 name="config.showWhitespace"
+                 checked={config.showWhitespace}
+                 onChange={this.onChangeSettingBool} />
+          Show whitespace
+        </label>
+        <label title="Show vertical indentation guides">
+          <input type="checkbox"
+                 name="config.indentGuides"
+                 checked={config.indentGuides}
+                 onChange={this.onChangeSettingBool} />
+          Indentation guides
+        </label>
+        <label title="Enables information cards shown when hovering over code snippets">
+          <input type="checkbox"
+                 name="config.hoverCards"
+                 checked={config.hoverCards}
+                 onChange={this.onChangeSettingBool} />
+          Hover cards
         </label>
         <label title="Enables suggestions as you type">
           <input type="checkbox"
@@ -256,21 +316,12 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           </select>
         </label>
       </div>
-      <h3>Misc</h3>
+      <h4>Misc</h4>
       <ul>
         <li onClick={this.onClickLegacy}>Access old scripts...</li>
       </ul>
     </div>
     )
-  }
-}
-
-
-function scrollIntoView(e :HTMLElement) {
-  if ((e as any).scrollIntoViewIfNeeded) {
-    ;(e as any).scrollIntoViewIfNeeded()
-  } else {
-    e.scrollIntoView()
   }
 }
 
@@ -286,6 +337,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
   const [isEditing, setIsEditing] = useState(false)
 
   let attrs :{[k:string]:any} = {
+    // tabIndex: 0,
     className: (
       (props.isActive ? "active" : "") +
       (s.id == 0 ? " unsaved" : "")
@@ -294,6 +346,9 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
 
   if (!isEditing) {
     function onMouseDown(ev :Event) {
+      if (menu.closeOnSelection) {
+        menu.toggle()
+      }
       editor.openScript(s.id)
       scrollIntoView(ev.target as HTMLElement)
     }
@@ -367,26 +422,8 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
     ]
   }
 
-  // const liRef = useRef<HTMLLIElement>(null)
-  // useEffect(() => {
-  //   if (!isEditing && props.isActive) {
-  //     let e = liRef.current
-  //     if ((e as any).scrollIntoViewIfNeeded) {
-  //       ;(e as any).scrollIntoViewIfNeeded()
-  //     } else {
-  //       e.scrollIntoView()
-  //     }
-  //   }
-  // })
-
-  const liRef = useCallback(e => {
-    if (e !== null) {
-      scrollIntoView(e as HTMLElement)
-    }
-  }, [])
-
   return (
-    <li ref={liRef} {...attrs}>
+    <li {...attrs}>
       <MenuItemValue {...valueProps} />
       {buttons}
     </li>

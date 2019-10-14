@@ -1,7 +1,8 @@
 import { EventEmitter } from "./event"
 import { UIInput } from "./ui-input"
 import { UIRangeInputInit } from "../common/messages"
-import { dlog } from "./util"
+import { dlog, hostEnv } from "./util"
+import { config } from "./config"
 
 export { UIRangeInputInit }
 
@@ -22,8 +23,9 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
   readonly min  :number = 0
   readonly max  :number = 100
   readonly step :number = 0
-  readonly _scale :number
-  readonly _prec  :number = 0
+
+  readonly _prec  :number = 0  // number of decimals of step
+  readonly _scale :number  // user space (= max - min)
 
   readonly knobSize = 8 // dp; should match css var --rangeKnobSize
   readonly overshoot = Math.round(this.knobSize / 4)  // how much the knob overshoots the track
@@ -38,9 +40,13 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
   dragged = false
   _lastInputTimestamp = 0
   _pointerDownX = 0  // position at last pointerdown event
+  _trackPageXOffset = 0 // track offset in page coordinates
+  _knobPointerXOffset = 0 // offset knob-to-pointer
 
   knobX = 0  // current position of knob in display point units
-  _value = 0  // scaled value
+  _value = 0  // scaled value in range [min - max]
+  _startValue = 0  // _value at start of pointer session
+  _bigJumpTimer :any = null  // timer used by _setKnobX for enabling animation
 
   constructor(init? :UIRangeInputInit) {
     super()
@@ -63,13 +69,20 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
     let tooltipLabel = this.tooltipLabel = document.createElement("div")
     tooltip.appendChild(tooltipLabel)
 
-    el.addEventListener("pointerdown", this.onPointerDown, captureEvent)
-    el.addEventListener("pointerup", this.onPointerUp, captureEvent)
+    if (hostEnv.hasPointerEvents) {
+      el.addEventListener("pointerdown", this.onPointerDown, captureEvent)
+      el.addEventListener("pointerup", this.onPointerUp, captureEvent)
+    } else {
+      // Note: Safari <=12 (ships with macOS 10.14) does not have pointer events.
+      // Pointer events arrived in Safari 13 (macOS 10.15).
+      el.addEventListener("mousedown", this.onPointerDown, captureEvent)
+      el.addEventListener("mouseup", this.onPointerUp, captureEvent)
+    }
 
     if (init) {
       if ("min" in init) { this.min = init.min }
       if ("max" in init) { this.max = init.max }
-      if ("step" in init) { this.step = init.step }
+      if ("step" in init) { this.step = Math.abs(init.step) }
       if ("value" in init) {
         this._value = Math.min(this.max, Math.max(this.min, Number(init.value)))
       }
@@ -77,60 +90,91 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
     this._scale = this.max - this.min
 
     if (this.step == 0) {
-      // nice default step.
-      // 0-0.1 => 0.001
-      // 0-1   => 0.01
-      // 0-10  => 0.1
-      // 0-100 => 1
-      let x = Math.abs(this._scale) / 100
-      let m = (
-        x < 0.01 ? 1000 :
-        100
+      // nice default step. Divvy up the track in 1000 parts
+      let x = Math.abs(this._scale) / 1000
+      this.step = (
+        x < 0.0001 ? 0.0001 :
+        x < 0.001 ? 0.001 :
+        x < 0.01 ? 0.01 :
+        x < 0.1 ? 0.1 :
+        1
       )
-      this.step = Math.min(1, Math.round(x * m) / m)
+    } else {
+      // step must not be larger than 50% of the scale
+      this.step = Math.min(this.step, Math.round(this._scale / 2))
     }
 
-    let changecount = 0
-    var observer = new MutationObserver((mutationsList, observer) => {
-      if (document.body.contains(this.el)) {
-        if (++changecount == 2) {
-          // 2 since it's first added to a hidden div to be measured
-          this.initDOM()
-          observer.disconnect()
-        }
-      }
-    })
-    observer.observe(document.querySelector(".monaco-editor"), {
-      childList: true,
-      subtree: true,
-    })
-
-    // TODO: update knob position when size of element changes
-
-    if (Math.round(this.step) != this.step) {
-      this._prec = String(this.step).split(".", 2)[1].length
-    }
+    // decimal precision
+    this._prec = Math.max(
+      Math.round(this.step) != this.step ? String(this.step).split(".", 2)[1].length : 0,
+      Math.max(
+        Math.round(this.min) != this.min ? String(this.min).split(".", 2)[1].length : 0,
+        Math.round(this.max) != this.max ? String(this.max).split(".", 2)[1].length : 0
+      )
+    )
 
     tooltipLabel.innerText = this._value.toFixed(this._prec)
   }
 
   get value() { return this._value }
-  // TODO: set value(v :number) { ... }
+  set value(v :number) { this.setValue(v) }
 
-  initDOM() {
+  layout() {
+    let findPageOffset = (el :HTMLElement) => (
+      (el.offsetLeft - el.scrollLeft + el.clientLeft) +
+      (el.offsetParent && el.offsetParent !== document.documentElement ?
+        findPageOffset(el.offsetParent as HTMLElement) :
+        0
+      )
+    )
+    this._trackPageXOffset = findPageOffset(this.track)
+
+    this._knobPointerXOffset = Math.round((this.knobSize + this.knob.clientWidth) / 3)
+
     this.maxOffset = this.track.clientWidth - (this.knobSize - this.overshoot)
     let vpercent = (this._value - this.min) / this._scale
     let dp = vpercent * (this.maxOffset - this.minOffset)
     this.knobX = dp
-    this.knob.style.transform = `translate(${dp}px)`
-    requestAnimationFrame(() => this.el.classList.remove("uninit"))
+    this.knob.style.transform = `translate(${dp}px, 0)`
+  }
+
+  onMountDOM() {
+    // for some strange reason, we can't measure our element until the next frame...
+    requestAnimationFrame(() => {
+      this.layout()
+      requestAnimationFrame(() => this.el.classList.remove("uninit"))
+    })
+    config.addListener("change", this.onConfigChange)
+  }
+
+  onUnmountDOM() {
+    config.removeListener("change", this.onConfigChange)
+  }
+
+  onConfigChange = (ev:{key:string}) => {
+    const keysAffectingEditorSize = {
+      windowSize: 1,
+      uiScale: 1,
+      showLineNumbers: 1,
+      codeFolding: 1,
+      menuVisible: 1,
+    }
+    if (ev.key in keysAffectingEditorSize) {
+      this.layout()
+    }
   }
 
   onPointerDown = (ev :PointerEvent) => {
     ev.stopPropagation()
     ev.preventDefault()
-    this.track.onpointermove = this.onPointerMove
-    this.track.setPointerCapture(ev.pointerId)
+
+    if (hostEnv.hasPointerEvents) {
+      this.track.onpointermove = this.onPointerMove
+      this.track.setPointerCapture(ev.pointerId)
+    } else {
+      document.onmousemove = this.onPointerMove
+      document.onmouseup = this.onPointerUp
+    }
 
     // this.trackRect = this.track.getBoundingClientRect() as ClientRect
     this.maxOffset = this.track.clientWidth - (this.knobSize - this.overshoot)
@@ -138,12 +182,15 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
     this.dragged = false
     this._lastInputTimestamp = ev.timeStamp
     this._pointerDownX = this.knobX // knobX BEFORE pointerdown
+    this._startValue = this._value
 
-    let x = ev.offsetX
-    if (ev.target == this.el) {
-      x = x - this.track.offsetLeft
-    }
-    this.moveKnob(x)
+    // let x = ev.offsetX
+    // if (ev.target == this.el) {
+    //   x = x - this.track.offsetLeft
+    // }
+    // this.moveKnob(x)
+
+    this.moveKnob(ev)
     this.knob.classList.add("changing")
   }
 
@@ -151,19 +198,26 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
     if (!this.dragged) {
       this.dragged = true
       this.knob.classList.add("dragging")
+      this.knob.classList.add("dragging-fine")
     }
-    this.moveKnob(ev.offsetX)
+    this.moveKnob(ev)
     this._lastInputTimestamp = ev.timeStamp
   }
 
   onPointerUp = (ev :PointerEvent) => {
-    this.track.onpointermove = null
-    this.track.releasePointerCapture(ev.pointerId)
+    if (hostEnv.hasPointerEvents) {
+      this.track.onpointermove = null
+      this.track.releasePointerCapture(ev.pointerId)
+    } else {
+      document.onmousemove = null
+      document.onmouseup = null
+    }
     ev.stopPropagation()
     ev.preventDefault()
     if (this.dragged) {
       this.dragged = false
       this.knob.classList.remove("dragging")
+      this.knob.classList.remove("dragging-fine")
     }
 
     // time since last input
@@ -175,50 +229,106 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
       // and the knob moved more than or equal to snapThreshold.
       if (this.knobX - this.minOffset < this.snapThreshold) {
         // snap knob to 0%
-        this._setKnobX(this.minOffset)
+        this.setValue(this.min)
         changedValue = true
       } else if (this.maxOffset - this.knobX < this.snapThreshold) {
         // snap knob to 100%
-        this._setKnobX(this.maxOffset)
+        this.setValue(this.max)
         changedValue = true
       }
     }
     if (!changedValue) {
-      let x = ev.offsetX
-      if (ev.target == this.el) {
-        x = x - this.track.offsetLeft
-      }
-      this.moveKnob(x)
+      this.moveKnob(ev)
     }
 
     this.knob.classList.remove("changing")
-    this.triggerEvent("change", this._value)
-  }
-
-  moveKnob(x :number) {
-    x = x - this.knobSize / 2
-    x = Math.min(this.maxOffset, Math.max(this.minOffset, x))
-    x = Math.round(x * this.displayScale) / this.displayScale  // round to pixels
-    if (this._setKnobX(x)) {
-      this.triggerEvent("input", this._value)
+    if (this._startValue != this._value) {
+      this.triggerEvent("change", this._value)
     }
   }
 
-  _setKnobX(dp :number) :boolean {  // true if changed
-    this.knobX = dp
-    this.knob.style.transform = `translate(${dp}px)`
-    let value = (
-      this.min + (
-        ( (dp - this.minOffset) / (this.maxOffset - this.minOffset) ) * this._scale
+  moveKnob(ev :PointerEvent) {
+    let x = Math.min(
+      this.maxOffset,
+      Math.max(
+        this.minOffset,
+        // convert: pointer position in page space -> track space
+        (ev.pageX - this._trackPageXOffset) - this._knobPointerXOffset
       )
     )
-    let str = value.toFixed(this._prec)
-    value = parseFloat(str)
-    if (this._value != value) {
-      this._value = value
-      this.tooltipLabel.innerText = str
-      return true
+
+    // convert: track space -> percent [0-1]
+    let v = (x - this.minOffset) / (this.maxOffset - this.minOffset)
+
+    // convert: percent -> user space
+    this.setValue((v * this._scale) + this.min, ev.shiftKey)
+  }
+
+  // setValueUnscaled sets value by unscaled percentage. v should be in the range [0–1]
+  // returns true if value was updated
+  //
+  setValueUnscaled(v :number, snap? :bool) :bool {
+    // convert: percent -> user space
+    return this.setValue((v * this._scale) + this.min, snap)
+  }
+
+  // setValue sets value in current scale. v should be in the range [this.min–this.max)
+  // returns true if value was updated
+  //
+  setValue(value :number, snap? :bool) :bool {
+    let prec = this._prec
+    if (value != this.max && value != this.min) {
+      // round to step (snap=SHIFT -- snap to 10th step)
+      let stepinv :number
+      if (snap) {
+        prec = Math.max(0, this._prec - 1)
+        stepinv = 0.1 / this.step
+      } else {
+        stepinv = 1 / this.step
+      }
+      value = Math.round(value * stepinv) / stepinv
+      value = Math.max(this.min, Math.min(this.max, Number(value.toFixed(this._prec))))
     }
-    return false
+
+    // skip update if value is identical
+    if (this._value == value) {
+      return false
+    }
+
+    this._value = value
+
+    // update tooltip, rounding number to current step
+    // Note: _prec is set in constructor to number of decimals of step
+    this.tooltipLabel.innerText = value.toFixed(prec)
+
+    // convert: user value -> percent
+    let vp = (value - this.min) / this._scale
+
+    // convert: percent -> track space
+    let knobX = (vp * (this.maxOffset - this.minOffset)) + this.minOffset
+    this._setKnobX(knobX)
+
+    this.triggerEvent("input", this._value)
+    return true
+  }
+
+  _setKnobX(dp :number) {  // true if changed
+    dp = Math.round(dp * this.displayScale) / this.displayScale  // round to pixels
+    if (this.dragged) {
+      if (Math.abs(this.knobX - dp) > 10) {
+        // big jump
+        clearTimeout(this._bigJumpTimer)
+        this.knob.classList.remove("dragging-fine")
+        this._bigJumpTimer = setTimeout(() => {
+          this._bigJumpTimer = null
+          this.knob.classList.add("dragging-fine")
+        }, 100)
+      } else if (this._bigJumpTimer !== null) {
+        clearTimeout(this._bigJumpTimer)
+        this.knob.classList.add("dragging-fine")
+      }
+    }
+    this.knobX = dp
+    this.knob.style.transform = `translate(${dp}px, 0)`
   }
 }

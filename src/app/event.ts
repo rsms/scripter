@@ -26,6 +26,14 @@ export class EventEmitter<EventMap = {[k:string]:any}> {
     }
   }
 
+  removeListeners<K extends keyof EventMap>(e :K) {
+    this._events.delete(e)
+  }
+
+  removeAllListeners() {
+    this._events.clear()
+  }
+
   triggerEvent<K extends keyof EventMap>(e :K, data? :EventMap[K]) {
     let s = this._events.get(e)
     if (s) for (let handler of s) {

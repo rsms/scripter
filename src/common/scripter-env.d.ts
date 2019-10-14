@@ -4,6 +4,25 @@
 // What's declared in there is available to scripts in their global namespace.
 //
 
+
+// Patch TS env since Monaco doesn't seem to work with "libs" in TS compiler settigs.
+interface SymbolConstructor {
+  readonly asyncIterator: symbol;
+}
+interface AsyncIterator<T, TReturn = any, TNext = undefined> {
+  next(...args: [] | [TNext | PromiseLike<TNext>]): Promise<IteratorResult<T, TReturn>>;
+  return?(value?: TReturn | PromiseLike<TReturn>): Promise<IteratorResult<T, TReturn>>;
+  throw?(e?: any): Promise<IteratorResult<T, TReturn>>;
+}
+interface AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+interface AsyncIterableIterator<T> extends AsyncIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterableIterator<T>;
+}
+
+
+
 // symbolic type aliases
 type int   = number
 type float = number
@@ -62,11 +81,11 @@ interface ScripterAPI {
   visualizePrint :bool
 }
 
-/**
- * Shows a modal dialog with question and yes/no buttons.
- * Returns true if the user answered "yes".
- */
+/** @DEPRECATED use libui.confirm instead */
 declare function confirm(question: string): Promise<bool>;
+
+/** @DEPRECATED use libui.notify instead */
+declare function notify(message: string, options?: NotificationOptions): NotificationHandler
 
 
 // ------------------------------------------------------------------------------------
@@ -214,9 +233,6 @@ declare var MIXED: symbol
  * Data may disappear if user clears their web browser cache.
  */
 declare var clientStorage: ClientStorageAPI
-
-/** Presents a short ambient message to the user, at the bottom of the screen */
-declare function notify(message: string, options?: NotificationOptions): NotificationHandler
 
 
 /** Frame of type "FRAME" */
@@ -460,6 +476,7 @@ interface FindOptions {
 /**
  * Returns a sequence of numbers in the range [start–end),
  * incrementing in steps or 1 if steps is not provided.
+ *
  * Note that the last value may be smaller than end, depending on the value of step.
  */
 declare function range(start :number, end :number, step? :number) :LazySeq<number,number,number>
@@ -480,10 +497,33 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
 // ------------------------------------------------------------------------------------
 // ui
 
+
+interface UIInputIterator<T> extends AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T,T>;
+}
+
+
 declare namespace libui {
 
-  function rangeInput(init? :UIRangeInit) :AsyncIterator<number>
+  /**
+   * Shows a modal dialog with question and yes/no buttons.
+   *
+   * Returns true if the user answered "yes".
+   */
+  function confirm(question: string): Promise<bool>;
 
+  /** Presents a short ambient message to the user, at the bottom of the screen */
+  function notify(message: string, options?: NotificationOptions): NotificationHandler
+
+  /**
+   * Shows a range slider inline with the code.
+   *
+   * Yields values as the user interacts with the slider. Iteration ends when the user
+   * either closes the UI control or stops the script.
+   */
+  function rangeInput(init? :UIRangeInit) :UIInputIterator<number>
+
+  /** Initial options for rangeInput */
   interface UIRangeInit {
     value? :number
     min?   :number

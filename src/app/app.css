@@ -30,8 +30,9 @@ a, a:active, a:visited { color: inherit; }
   --menuWidth: 160px;
   --colorFeedback: #f5f5f5;
   --colorSelected: #e9e9e9;
-  --printMessageWidth: 450px;
+  --inlineWidgetWidth: 450px;
   --sansFontFamily: "Inter";
+  --uiScale: 1;  /* user-configurable */
 }
 
 body {
@@ -40,13 +41,13 @@ body {
   overflow: hidden;
 
   &.windowWidthSmall {
-    --printMessageWidth: 250px;
+    --inlineWidgetWidth: 260px;
   }
   &.windowWidthMedium {
-    --printMessageWidth: 450px;
+    --inlineWidgetWidth: 460px;
   }
   &.windowWidthLarge {
-    --printMessageWidth: 650px;
+    --inlineWidgetWidth: 660px;
   }
 }
 body, .sansSerif {
@@ -104,6 +105,15 @@ code b, pre b, tt b { font-weight:540 }
 }
 
 
+.button {
+  &.new { background-image: url("./icon-add.svg") }
+  &.menu { background-image: url('./icon-menu.svg') }
+  &.run { background-image: url('./icon-play.svg') }
+  &.run.running { background-image: url("./icon-stop.svg") }
+  &.clear { background-image: url('./icon-clear.svg') }
+}
+
+
 #toolbar {
   position: absolute;
   left: 0; right:0; bottom: 0;
@@ -116,28 +126,47 @@ code b, pre b, tt b { font-weight:540 }
   border-bottom-left-radius: 2px; /* match figma dialog corner radius */
   border-bottom-right-radius: 2px; /* match figma dialog corner radius */
 
+  & .title {
+    position: absolute;
+    top:2px;
+    bottom:2px;
+    left: calc(var(--toolbarHeight) * 2);
+    right: calc(var(--toolbarHeight) * 2);
+    /*text-align: center;*/
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+    cursor: default;
+    font-weight: 500;
+    color: #333;
+    border-radius:4px;
+
+    &:hover {
+      color: black;
+    }
+  }
+
   & .button {
     &:hover { opacity:1; background-color: #ddd; }
     &:active { opacity:1; background-color: #aaa; }
     &:first-child { border-bottom-left-radius:2px; } /* fit figma window */
     &:last-child { border-bottom-right-radius:2px; } /* fit figma window */
-    &.menu { background-image: url('./icon-menu.svg'); }
     &.menu.on {
       opacity:1;
       background-color: #ddd;
       &:hover { background-color: #ccc; }
       &:active { background-color: #bbb; }
     }
-    &.run { background-image: url('./icon-play.svg'); }
-    &.run.running { background-image: url("./icon-stop.svg"); }
-    &.clear { background-image: url('./icon-clear.svg'); }
     &.unavailable {
       opacity:0.4;
       &:hover { background-color: inherit; }
     }
   }
 
-  & .runqueue {
+  & .spacer { flex: 1 1 auto; }
+
+  /*& .runqueue {
     flex: 1 1 auto;
     display: flex;
     justify-content: center;
@@ -166,13 +195,12 @@ code b, pre b, tt b { font-weight:540 }
       &.ok { background-image: url("./icon-success.svg"); }
       &.err { background-image: url("./icon-error.svg"); }
       &.hide {
-        /*min-width: 0px;
-        width: 0;*/
         transform: translate(0, calc(var(--toolbarHeight) / 2));
         opacity: 0;
       }
     }
-  }
+  }*/
+
 } /* #toolbar */
 
 
@@ -214,7 +242,7 @@ code b, pre b, tt b { font-weight:540 }
     }
   }
 
-  & h3 {
+  & h3, & h4 {
     padding: 0 16px;
     margin-top: 16px;
     height: var(--menuItemHeight);
@@ -223,6 +251,29 @@ code b, pre b, tt b { font-weight:540 }
     color: #bbb;
     user-select: none;
     cursor: default;
+  }
+  /*& h3 {
+    font-size: 8px;
+    line-height: 16px;
+    height:16px;
+    background: #eee;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    padding-top:0;
+    padding-bottom:0;
+  }*/
+  & h3 {
+    color: #333;
+    border-top: 1px solid #ddd;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-weight:600;
+  }
+  & .examples:first-child h3 {
+    border-top:0;
+    margin-top:0;
   }
 
   & ul {
@@ -519,9 +570,13 @@ body.showMessage #editor { bottom: var(--messageHeight); }
 
 .monaco-editor .inlineWidget {
   --inlineWidgetLeftPadding: 0.5em;
+  --inlineWidgetLeftBorderWidth: 4px;
 
-  z-index: 99;
+  z-index: 2;
   overflow: auto;
+  width: var(--inlineWidgetWidth);
+  line-height: 1.45em;
+  font-size: calc(11px * var(--uiScale));
 
   & img {
     object-position: 50% 50%;
@@ -531,66 +586,67 @@ body.showMessage #editor { bottom: var(--messageHeight); }
     max-width: 100%;
   }
 
-  & > div {
+  & > div {  /* container */
     display: flex;
-    align-items: flex-start;
+    align-items: flex-start; /* top */
     height: 100%;
-    width: var(--printMessageWidth);
+    flex: 1 1 auto;
 
-    border-left: 4px solid lightblue;
-    padding-left: 0.5em;
-    margin-right: 2em;
+    border-left: var(--inlineWidgetLeftBorderWidth) solid lightblue;
+    padding-left: var(--inlineWidgetLeftPadding);
+    /*margin-right: 2em;*/
     background: #EEF3FF;
 
-    & > .button {
-      cursor: default;
-      width:16px;
-      height:16px;
-      text-align: center;
-      line-height:16px;
-      font-size:12px;
+    & > .content {
+      flex: 1 1 auto;
+    }
+
+    & > .buttons {
       flex: 0 0 auto;
-      opacity:0.5;
-      user-select: none;
-      pointer-events: all;
-      color: black;
-      border-radius: 2px;
-      font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'case' 1;
-      margin:1px;
+      display: flex;
+      flex-direction: row-reverse;  /* newly-added buttons appear to the left */
 
-      &:hover {
-        opacity:0.99;
-        background: rgba(0,0,0,0.1);
+      & > .button {
+        cursor: default;
+        width:16px;
+        height:16px;
+        text-align: center;
+        line-height:16px;
+        font-size:12px;
+        flex: 0 0 auto;
+        opacity:0.5;
+        user-select: none;
+        pointer-events: all;
+        color: black;
+        font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1, 'case' 1;
+        /*border-radius: 2px;*/
+        /*margin:1px;*/
+
+        &:hover {
+          opacity:0.99;
+          background: rgba(0,0,0,0.1);
+        }
+
+        /*&:last-child {
+          margin-right: 0.0;
+          padding-right: 0.5em;
+        }*/
+
+        /*&.closeButton {}*/
       }
-
-      /*&:last-child {
-        margin-right: 0.0;
-        padding-right: 0.5em;
-      }*/
-
-      /*&.closeButton {}*/
     }
 
   }
 }
 
-.monaco-editor .inputWidget {
-  overflow: initial;
-
-  & > div {
-    pointer-events: all;
-    & input {
-      flex: 1 1 auto;
-      user-select: all;
-      pointer-events: all;
-      overflow: auto;
-    }
-  }
+body.menuVisible .monaco-editor .inlineWidget > div {
+  width: calc(var(--inlineWidgetWidth) - var(--menuWidth) - 8px);
 }
 
 .monaco-editor .printWidget > div {
   border-color: lightgreen;
   background: #eeffee;
+  /*padding: 0.3em;*/
 
   & .message {
     flex: 1 1 auto;
@@ -600,10 +656,21 @@ body.showMessage #editor { bottom: var(--messageHeight); }
   }
 }
 
-body.menuVisible .monaco-editor .inlineWidget > div {
-  width: calc(var(--printMessageWidth) - var(--menuWidth));
-}
+.monaco-editor .inputWidget {
+  overflow: initial;
+  height: 16px;
+  z-index: 3;
 
+  & > div {
+    pointer-events: none;
+    align-items: stretch;
+    & > .content {
+      width:100%;
+      position: relative;
+      pointer-events: all;
+    }
+  }
+}
 
 
 .rangeControl {
@@ -612,14 +679,20 @@ body.menuVisible .monaco-editor .inlineWidget > div {
   --rangeKnobSize: 8px;
   --rangeMaxWidth: 100%;
 
+  z-index:999;
+
   flex: 1 1 auto;
-  min-width: 128px;
+  min-width: 64px;
   max-width: var(--rangeMaxWidth);
   height: var(--rangeHeight);
-  /*background: lightpink;*/
   cursor: default;
-  position: relative;
-  margin: 1px 0 1px calc(var(--inlineWidgetLeftPadding) * -1);
+  position: absolute; left:0; top:0; right:0; bottom:0;
+
+  /* This trick offsets the pointer-events area of the control all the way to the left
+   * without moving the track. This way the user can click outside the track.
+   */
+  margin-left: calc(calc(var(--inlineWidgetLeftBorderWidth) + var(--inlineWidgetLeftPadding)) * -1);
+  padding-left: calc(var(--inlineWidgetLeftBorderWidth) + var(--inlineWidgetLeftPadding));
 
   &.uninit .knob {
     /* disable transitions while the input is uninitialized */
@@ -629,7 +702,7 @@ body.menuVisible .monaco-editor .inlineWidget > div {
   & .track {
     background: rgba(0,0,0,0.4);
     height: var(--rangeTrackHeight);
-    margin: calc(calc(var(--rangeHeight) - var(--rangeTrackHeight)) / 2);
+    margin: calc(calc(var(--rangeHeight) - var(--rangeTrackHeight)) / 2) 4px;
     position: relative;
     border-radius: calc(var(--rangeTrackHeight) / 2);
 
@@ -643,6 +716,7 @@ body.menuVisible .monaco-editor .inlineWidget > div {
       left: 0;
       top: calc(calc(var(--rangeTrackHeight) - var(--rangeKnobSize)) / 2);
       pointer-events: none;
+      transform: translate(0,0);
       transition: transform 100ms linear;
 
       background: white;
@@ -650,6 +724,9 @@ body.menuVisible .monaco-editor .inlineWidget > div {
       border: calc((var(--rangeKnobSize) / 2) - 1px) solid black;
 
       &.dragging {
+        transition-duration: 35ms;
+      }
+      &.dragging-fine {
         transition: none;
       }
 

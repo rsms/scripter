@@ -6,12 +6,12 @@ import { EventEmitter } from "./event"
 import { db } from "./data"
 import { config } from "./config"
 import { scriptsData } from "./script-data"
-import { MsgZones } from "./editor-msg-zones"
+import { ViewZones } from "./viewzones"
 import * as Eval from "./eval"
 import * as warningMessage from "./warning-message"
-import * as runqueue from "./runqueue"
 import toolbar from "./toolbar"
 import { print, dlog } from "./util"
+import { menu } from "./menu"
 
 
 type EditorModel = monaco.editor.ITextModel
@@ -22,39 +22,63 @@ const kLocked = Symbol("Locked")
 const kOnUnlock = Symbol("OnUnlock")
 
 
-const defaultFontSize = 11
+const defaultFontSize = 11  // sync with app.css
 
 const varspaceFontFamily = "iaw-quattro-var, iaw-quattro, 'Roboto Mono', 'IBM Plex Mono', monospace"
 const monospaceFontFamily = "iaw-mono-var, iaw-mono, monospace"
 
 // default monaco editor options
 const defaultOptions :EditorOptions = {
-  automaticLayout: true,
+  // automaticLayout: true,
+
   scrollBeyondLastLine: false,
   lineDecorationsWidth: 16, // margin on left side, in pixels
 
-  lineNumbers: "on", // lineNumbers: (lineNumber: number) => "•",
+  lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
   lineNumbersMinChars: 3,
-  wordWrap: "on",
+  wordWrap: "off", // off | on | bounded | wordWrapColumn
   wrappingIndent: "same", // none | same | indent | deepIndent
 
+  scrollBeyondLastColumn: 2,
+
   // fontLigatures: true,
-  showUnused: true,
+  showUnused: true,  // fade out unused variables
   folding: false,
   cursorBlinking: "smooth", // solid | blink | smooth | phase
-  multiCursorModifier: "ctrlCmd", // cmd or ctrl + mouse click to add Nth cursor
   renderLineHighlight: "none",
-  fontSize: defaultFontSize,
+  renderWhitespace: "none", // none | boundary | all (default: none)
+  renderControlCharacters: false,
 
+  fontSize: defaultFontSize,
   fontFamily: varspaceFontFamily,
   disableMonospaceOptimizations: true, // required for non-monospace fonts
 
   extraEditorClassName: 'scripter-light',
 
+  // disable links since they can't be clicked in Figma anyways
+  links: false,
+
+  // disable code lens, which is not well documented, but a way to add stuff inline.
+  codeLens: false,
+
+  // not sure what this is, but we probably don't need it
+  lightbulb: { enabled: false },
+
   quickSuggestions: true,
   quickSuggestionsDelay: 800, // ms
   acceptSuggestionOnEnter: "smart",
   suggestSelection: "recentlyUsedByPrefix", // first | recentlyUsed | recentlyUsedByPrefix
+
+  // "hover" configures the hover cards shown on pointer hover
+  hover: {
+    enabled: true, // Defaults to true.
+
+    // Delay for showing the hover.
+    // delay?: number; // Defaults to 300.
+
+    // Is the hover sticky such that it can be clicked and its contents selected?
+    // sticky?: boolean; // Defaults to true.
+  },
 
   suggest: {
     // Enable graceful matching. Defaults to true.
@@ -92,6 +116,44 @@ const defaultOptions :EditorOptions = {
 }
 
 
+const typescriptCompilerOptions = {
+  // Note: When we set compiler options, we _override_ the default ones.
+  // This is why we need to set allowNonTsExtensions.
+  allowNonTsExtensions: true, // make "in-memory source" work
+  target: 6,
+  allowUnreachableCode: true,
+  allowUnusedLabels: true,
+  removeComments: true,
+  module: 1, // ts.ModuleKind.CommonJS
+  // lib: [ "es2018", "dom" ],
+  sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
+  strictNullChecks: true,
+
+  // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
+  // we disable sourcemaps for now (since it's pointless).
+  // However, we could use the sourcemap lib to decorate error stack traces a la
+  // evanw's sourcemap-support. The plugin could do this, so that the stack trace in Figma's
+  // console is updated as well as what we display in the Scripter UI. Upon error, the plugin
+  // process could request sourcemap from Scripter, so that we only have to transmit it on error.
+  // inlineSourceMap: true,
+}
+
+
+export enum ModelChangeFlags { // bitflags
+  NONE             = 0,
+  ADD_LINE         = 1 << 0,
+  REMOVE_LINE      = 1 << 1,
+  LAST_LINE_INTACT = 1 << 2,
+}
+export function ModelChangeFlagsString(flags :ModelChangeFlags) :string {
+  let s = []
+  if (flags & ModelChangeFlags.ADD_LINE) { s.push("ADD_LINE") }
+  if (flags & ModelChangeFlags.REMOVE_LINE) { s.push("REMOVE_LINE") }
+  if (flags & ModelChangeFlags.LAST_LINE_INTACT) { s.push("LAST_LINE_INTACT") }
+  return s.length == 0 ? "NONE" : s.join("|")
+}
+
+
 type DecoratedTextChangedCallback = (d :monaco.editor.IModelDecoration) => void
 
 
@@ -107,7 +169,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   editor :monaco.editor.IStandaloneCodeEditor
   options :EditorOptions = {...defaultOptions}
 
-  msgZones = new MsgZones(this)
+  viewZones = new ViewZones(this)
 
   _currentModel    :EditorModel
   _currentScript   :Script
@@ -121,6 +183,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   changeObservationEnabled = false
   changeObservationActive = false
   changeObservationLastLineCount = 0
+
+  isInitialized = false
 
 
   // ----------------------------------------------------------------------------------
@@ -171,19 +235,41 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
+  _isSwitchingModel = false
+
+
   switchToScript(script :Script) {
     this.stopCurrentScript()
     let model = this.setCurrentScript(script)
-    // this.editor.setModel(null)
-    this.clearAllMetaInfo()
-    this.editor.setModel(model)
-    this.updateOptions({
-      readOnly: script.readOnly,
+
+    if (this._isSwitchingModel) {
+      throw new Error("[scripter] internal error (switchToScript while _isSwitchingModel)")
+    }
+
+    // This is a sad workaround for a bug in Monaco where if you swap out an editor's model
+    // for another different model, and both models use the same language (i.e. typescript),
+    // then Monaco's typescript worker will think the newly-loaded script's top-level
+    // declarations are _additions_ to declarations of the past model, causing errors for
+    // names that appear in both.
+    //
+    // This workaround clears the currently-loaded model's content before it switches models
+    // for real.
+    this._isSwitchingModel = true
+    this.editor.getModel().setValue(" ")
+    requestAnimationFrame(() => {
+      this._isSwitchingModel = false
+
+      // actually switch model
+      this.clearAllMetaInfo()
+      this.editor.setModel(model)
+      this.updateOptions({
+        readOnly: script.readOnly,
+      })
+      this.restoreViewState()
+      initEditorModel(model)
+      this.editor.focus()
+      config.lastOpenScript = this._currentScript.id
     })
-    this.restoreViewState()
-    initEditorModel(model)
-    this.editor.focus()
-    config.lastOpenScript = this._currentScript.id
   }
 
 
@@ -222,10 +308,22 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let viewState = this._currentScript.editorViewState
     if (viewState) {
       this.editor.restoreViewState(viewState)
-      // workaround for a bug: Restoring the view state on the next frame works around
-      // a bug with variable-width fonts.
-      setTimeout(() => { this.editor.restoreViewState(viewState) }, 0)
+      // setTimeout(() => { this.editor.restoreViewState(viewState) }, 0)
     }
+
+    // // workaround for a bug in monaco:
+    // //   Flipping disableMonospaceOptimizations fixes bug with variable-width fonts
+    // //   where line length is incorrectly computed.
+    // //   The wordWrap change causes Monaco to shrink its viewport to fit the content.
+    // //   For some reason the Monaco viewport never shrinks, even when editing.
+    // if (this.options.disableMonospaceOptimizations) {
+    //   let wordWrap = this.options.wordWrap
+    //   this.updateOptions({ disableMonospaceOptimizations: false, wordWrap: "on" })
+    //   setTimeout(() => {
+    //     this.updateOptions({ disableMonospaceOptimizations: true, wordWrap })
+    //   }, 1)
+    //   // Note: requestAnimationFrame doesn't seem to work.
+    // }
   }
 
   saveViewState() {
@@ -242,13 +340,18 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   updateOptionsFromConfig() {
     let options :EditorOptions = {
-      lineNumbers: config.showLineNumbers ? "on" : "off",
-      wordWrap:    config.wordWrap ? "on" : "off",
-      quickSuggestions: config.quickSuggestions,
-      quickSuggestionsDelay: config.quickSuggestionsDelay,
-      folding: config.codeFolding,
+      lineNumbers:             config.showLineNumbers ? "on" : "off",
+      wordWrap:                config.wordWrap ? "on" : "off",
+      quickSuggestions:        config.quickSuggestions,
+      quickSuggestionsDelay:   config.quickSuggestionsDelay,
+      folding:                 config.codeFolding,
+      renderWhitespace:        config.showWhitespace ? "all" : "none",
+      renderControlCharacters: config.showWhitespace,
+      renderIndentGuides:      config.indentGuides,
+      fontSize:                defaultFontSize * config.uiScale,
     }
     options.minimap = {...this.options.minimap, enabled: config.minimap }
+    options.hover = {...this.options.hover, enabled: config.hoverCards }
     if (config.monospaceFont) {
       options.fontFamily = monospaceFontFamily
       options.disableMonospaceOptimizations = false
@@ -278,17 +381,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     return updated
   }
 
-  clearAllMetaInfo() {
-    this.clearAllDecorations()
-    this.msgZones.clearAll()
-  }
-
-  clearMessages() {
-    this.msgZones.clearAll()
-    this.clearAllDecorations()
-    this.editor.focus()
-  }
-
 
   // ----------------------------------------------------------------------------------
   // Running scripts
@@ -316,20 +408,20 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
     toolbar.addStopCallback(stopCallback)
 
-    let runqItem = runqueue.push()
+    // let runqItem = runqueue.push()
 
     let prog = await this.compileCurrentScript()
 
     if (prog.code.length > 0) {
       try {
         this.currentEvalPromise = Eval.run(prog.code, prog.sourceMap)
-        // setTimeout(() => { p.cancel() }, 500)  // XXX DEBUG
         await this.currentEvalPromise
-        runqItem.clearWithStatus("ok")
+        // runqItem.clearWithStatus("ok")
       } catch (err) {
-        runqItem.clearWithStatus("error")
+        // runqItem.clearWithStatus("error")
       }
       this.currentEvalPromise = null
+      this.viewZones.clearAllUIInputs()
     }
 
     toolbar.removeStopCallback(stopCallback)
@@ -341,12 +433,18 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
+  isScriptRunning() :bool {
+    return !!this.currentEvalPromise
+  }
+
+
   stopCurrentScript() {
     dlog("stopCurrentScript")
     if (this.currentEvalPromise) {
       this.currentEvalPromise.cancel()
     }
-    this.msgZones.clearAllUIInputs()
+    this.viewZones.clearAllUIInputs()
+    // Note: Intentionally not calling clearHoverCards()
   }
 
 
@@ -396,6 +494,26 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // ----------------------------------------------------------------------------------
   // Decorations
 
+
+  clearAllMetaInfo() {
+    this.clearAllDecorations()
+    this.viewZones.clearAll()
+    this.clearHoverCards()
+  }
+
+  clearMessages() {
+    this.clearAllDecorations()
+    this.viewZones.clearAll()
+    this.editor.focus()
+  }
+
+  clearHoverCards() {
+    if (this.options.hover.enabled) {
+      let options = { ...this.options, hover: { enabled: false } }
+      this.editor.updateOptions(options)
+      requestAnimationFrame(() => this.editor.updateOptions(this.options))
+    }
+  }
 
   clearAllDecorations() {
     this.decorationCallbacks.clear()
@@ -465,12 +583,25 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // ----------------------------------------------------------------------------------
   // Observing changes to the script code
 
+  _changeObservationRefCount = 0
+
   stopObservingChanges() {
-    this.changeObservationActive = false
-    this.changeObservationLastLineCount = 0
+    if (this._changeObservationRefCount == 0) {
+      throw new Error("unbalanced call to stopObservingChanges")
+    }
+    this._changeObservationRefCount--
+    if (this._changeObservationRefCount == 0) {
+      this.changeObservationActive = false
+      this.changeObservationLastLineCount = 0
+    }
   }
 
   startObservingChanges() {
+    this._changeObservationRefCount++
+    if (this._changeObservationRefCount > 1) {
+      return
+    }
+
     if (!this.changeObservationActive) {
       this.changeObservationActive = true
       this.changeObservationLastLineCount = this.currentModel.getLineCount()
@@ -499,14 +630,62 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
       // compute maxium line range of all changes
       let startLine = Infinity
+      let startColumn = 0
       let endLine = 0
+      let endColumn = 999999
       for (let c of e.changes) {
-        startLine = Math.min(startLine, c.range.startLineNumber)
-        endLine = Math.max(endLine, c.range.endLineNumber)
+        if (c.range.startLineNumber < startLine) {
+          startLine = c.range.startLineNumber
+          startColumn = c.range.startColumn
+        }
+        if (c.range.endLineNumber > endLine) {
+          endLine = c.range.endLineNumber
+          endColumn = c.range.endColumn
+        }
       }
 
+      let flags :ModelChangeFlags = ModelChangeFlags.NONE
+
+      // single simple change?
+      if (e.changes.length == 1) {
+        let c = e.changes[0]
+        let r = c.range
+
+        if (c.text == "") {
+          // Deletion
+          // TODO: check for actual line removal and set ModelChangeFlags.REMOVE_LINE
+          // Currently we don't use REMOVE_LINE apart from in conjunction with LAST_LINE_INTACT,
+          // but maybe on day we will.
+          if (endColumn == 1) {
+            // dlog("removed line(s) at the beginning of a line")
+            // reduce change to lastLine -1
+            flags |= ModelChangeFlags.REMOVE_LINE
+            flags |= ModelChangeFlags.LAST_LINE_INTACT
+            if (endLine == startLine) {
+              console.warn("[scripter] unexpected condition: endLine == startLine")
+            }
+          }
+        } else /*if (c.rangeLength == 0)*/ {
+          // let endLineEndCol = this.currentModel.getLineLength(endLine)
+          // dlog("endLineEndCol", endLineEndCol)
+          // if (endColumn == 1) {
+            let lastch = c.text.charCodeAt(c.text.length - 1)
+            if (lastch == 0x0A || lastch == 0x0D) { // \n || \r
+              flags |= ModelChangeFlags.ADD_LINE
+              if (endColumn == 1) {
+                // dlog("added line(s) at the beginning")
+                flags |= ModelChangeFlags.LAST_LINE_INTACT
+              }
+            }
+          // }
+          // Note: We don't track adding lines at the end
+        }
+      }
+
+      // dlog("change flags", ModelChangeFlagsString(flags))
+
       // update zones
-      this.msgZones.updateAfterEdit(startLine, endLine, lineCount, lineDelta)
+      this.viewZones.updateAfterEdit(startLine, startColumn, endLine, endColumn, lineDelta, flags)
 
       // update decorations
       for (let c of e.changes) {
@@ -515,7 +694,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           startLineNumber: c.range.startLineNumber,
           startColumn: 0,
           endLineNumber: c.range.endLineNumber,
-          endColumn: 999,
+          endColumn: 99999,
         }
         let decorations = this.currentModel.getDecorationsInRange(range)
         // let decorations = this.editor.getLineDecorations(e.changes[0].range.startLineNumber)
@@ -561,16 +740,46 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   // --------------------------------------------------------------------------------------------
+  // Helper functions
+
+  _measureEl :HTMLElement|null = null
+
+  // measureHTMLElement places el into a hidden element of the editor that is as large as the
+  // editor itself with absolute positioning.
+  // Returns the effective clientWidth and clientHeight of el.
+  //
+  // You can set el.style.width or el.style.height before calling this if you want to constrain
+  // one of the axes.
+  //
+  measureHTMLElement(el :HTMLElement) :{width:number, height:number} {
+    let measureEl = this._measureEl
+    if (!measureEl) {
+      let edel = this.editor.getDomNode()
+      measureEl = document.createElement("div")
+      measureEl.style.position = "absolute"
+      measureEl.style.visibility = "hidden"
+      measureEl.style.pointerEvents = "none"
+      edel.appendChild(measureEl)
+      this._measureEl = measureEl
+    }
+    if (measureEl.children.length > 0) {
+      measureEl.innerText = ""
+    }
+    let position = el.style.position
+    el.style.position = "absolute"
+    measureEl.appendChild(el)
+    let size = { width: el.clientWidth, height: el.clientHeight }
+    measureEl.removeChild(el)
+    el.style.position = position
+    return size
+  }
+
+
+  // --------------------------------------------------------------------------------------------
   // editor initialization
 
   async init() {
     this.initTypescript()  // intentionally not awaiting
-
-    // load previously-stored font size
-    if (config.fontSize) {
-      this.options.fontSize = config.fontSize
-      document.body.style.fontSize = `${config.fontSize}px`
-    }
 
     // load past code buffer
     let script = await loadLastOpenedScript()
@@ -595,6 +804,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // initialize model
     initEditorModel(model)
 
+    this.editor.layout()
+    setTimeout(() => this.editor.layout(), 100)
+    setTimeout(() => this.editor.layout(), 500)
+
     // assign focus to editor
     this.editor.focus()
 
@@ -609,6 +822,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // hook up config
     config.on("change", () => {
       this.updateOptionsFromConfig()
+    })
+
+    menu.menuUIMountPromise.then(() => {
+      menu.scrollToActiveItem()
     })
 
     // monaco.languages.registerCodeActionProvider("typescript", {
@@ -633,11 +850,13 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     //   let tsclient = await tsworker(model.uri)
     //   print("tsworker", tsworker)
     //   print("tsclient", tsclient)
-    //   print("tsclient.getCompilerOptionsDiagnostics()", await tsclient.getCompilerOptionsDiagnostics())
+    //   print("tsclient.getCompilerOptionsDiagnostics()",
+    //     await tsclient.getCompilerOptionsDiagnostics())
     //   print("tsclient.getSemanticDiagnostics()", await tsclient.getSemanticDiagnostics())
     //   print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings())
     // })()
 
+    this.isInitialized = true
     this.triggerEvent("init")
     this.triggerEvent("modelchange")
   } // init()
@@ -689,7 +908,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     editor.onDidChangeModelContent((e: monaco.editor.IModelContentChangedEvent) :void => {
       // getAlternativeVersionId is a version number that tracks undo/redo.
       // i.e. version=1; edit -> version=2; undo -> version=1.
-      if (!isRestoringModel) {
+      if (!isRestoringModel && !this._isSwitchingModel) {
         this._currentScript.updateBody(
           this._currentModel.getValue(),
           this._currentModel.getAlternativeVersionId()
@@ -710,8 +929,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     })
 
     editor.onDidChangeModel((e: monaco.editor.IModelChangedEvent) :void => {
-      this.triggerEvent("modelchange")
-      this.stopObservingChanges()
+      if (e.newModelUrl) {
+        this.triggerEvent("modelchange")
+      }
+      // this.stopObservingChanges()
     })
 
     // editor.addCommand(monaco.KeyCode.Enter | monaco.KeyCode.Ctrl, (ctx :any) => {
@@ -748,27 +969,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   async initTypescript() {
     let tsconfig = monaco.languages.typescript.typescriptDefaults
     tsconfig.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
-    tsconfig.setCompilerOptions({
-      // Note: When we set compiler options, we _override_ the default ones.
-      // This is why we need to set allowNonTsExtensions.
-      allowNonTsExtensions: true, // make "in-memory source" work
-      target: 6,
-      allowUnreachableCode: true,
-      allowUnusedLabels: true,
-      removeComments: true,
-      module: 1, // ts.ModuleKind.CommonJS
-      // lib: [ "esnext", "dom" ],
-      sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
-      strictNullChecks: true,
-
-      // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
-      // we disable sourcemaps for now (since it's pointless).
-      // However, we could use the sourcemap lib to decorate error stack traces a la
-      // evanw's sourcemap-support. The plugin could do this, so that the stack trace in Figma's
-      // console is updated as well as what we display in the Scripter UI. Upon error, the plugin
-      // process could request sourcemap from Scripter, so that we only have to transmit it on error.
-      // inlineSourceMap: true,
-    })
+    tsconfig.setCompilerOptions(typescriptCompilerOptions)
     tsconfig.addExtraLib(await resources["figma.d.ts"], "scripter:figma.d.ts")
     tsconfig.addExtraLib(await resources["scripter-env.d.ts"], "scripter:scripter-env.d.ts")
     // tsconfig.setDiagnosticsOptions({noSemanticValidation:true})
@@ -875,6 +1076,28 @@ export function initEditorModel(model :EditorModel) {
     if (initialLen != markers.length) {
       monaco.editor.setModelMarkers(model, "typescript", markers)
     }
+
+    // TODO: consider enriching the hover thingy.
+    // The following _adds_ information to a hover card.
+    // monaco.languages.registerHoverProvider('typescript', {
+    //   provideHover: function (model, position) {
+    //     // note: can return a promise
+    //     // return null
+    //     dlog("position", position)
+    //     return {
+    //       range: new monaco.Range(
+    //         position.lineNumber, position.column,
+    //         position.lineNumber, position.column + 999,
+    //         // 1, 1,
+    //         // model.getLineCount(), model.getLineMaxColumn(model.getLineCount())
+    //       ),
+    //       contents: [
+    //         { value: '**SOURCE**' },
+    //         { value: '```html\nHELLO <WORLD>\n```' }
+    //       ]
+    //     }
+    //   }
+    // })
 
     } finally {
       onDidChangeDecorationsCallbackRunning = false

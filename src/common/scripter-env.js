@@ -87,12 +87,20 @@ function _print(env, reqId, args) {
   let seen = new Map()
   args = args.map(arg => preClone(arg, seen))
 
+  // [fig-js limitation] calls in lambda-style functions have no source location
+  // in stack frame. In this case, we pick the first frame that has source location.
+  let srcPos = scriptLib.getFirstSourcePos(/* stackOffset */1)
+  if (srcPos.line == 0) {
+    // unable to find source location :-(
+    return
+  }
+
   let msg = { // PrintMsg
     type: "print",
     message: "",
     args: args,
     reqId: reqId,
-    srcPos: scriptLib.getSourcePos(/* stackOffset */1),
+    srcPos: srcPos,
     srcLineOffset: _evalScript.lineOffset,
   }
 
@@ -862,7 +870,8 @@ env.fetchImg = function(input, init) {
 
 
 const envKeys = Object.keys(env)
-let jsHeader = `var canceled=false;[async function script(` +
+// Note: "__scripter_script_main" has special meaning: used to find stack start.
+let jsHeader = `var canceled=false;[async function __scripter_script_main(` +
 `module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
 `){` +
 `function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };`
@@ -923,7 +932,7 @@ function _evalScript(reqId, js) {
         env0[k] = v
       }
       env0.scripter = Object.assign({}, env.scripter)
-      env0.libui = scriptLib.createUILib(reqId)
+      env0.libui = scriptLib.create_libui(reqId)
 
       // create script cancel function
       let cancelInner = r[1]

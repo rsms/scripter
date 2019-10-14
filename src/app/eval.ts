@@ -6,7 +6,7 @@ import { editor } from "./editor"
 import toolbar from "./toolbar"
 import { print, dlog } from "./util"
 import { resolveOrigSourcePos } from "./srcpos"
-import { MsgZoneType } from "./editor-msg-zones"
+import { PrintViewZone } from "./viewzone"
 
 
 export interface EvalPromise extends Promise<any> {
@@ -250,5 +250,5 @@ async function handlePrintMsg(msg :PrintMsg) {
   //   > lines
   //
 
-  editor.msgZones.set(pos, messageHtml, MsgZoneType.PRINT)
+  editor.viewZones.set(new PrintViewZone(pos, messageHtml))
 }

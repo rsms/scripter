@@ -46,7 +46,7 @@ export function jpegInfoBuf(buf :ArrayLike<byte>) :JpegInfo {
     }
     let length = readUint16BE(buf, i)
     if (length > bytesRemaining) {
-      print({ length, bytesRemaining })
+      // print({ length, bytesRemaining })
       throw new Error("jpeg data truncated")
     }
     i += 2
@@ -85,7 +85,7 @@ export function jpegInfoBuf(buf :ArrayLike<byte>) :JpegInfo {
       // case 0xDD: njDecodeDRI
       // case 0xDA: njDecodeScan
       default:
-        console.log(`[jpeg] skip section 0x${buf[i-1].toString(16)}`)
+        // console.log(`[jpeg] skip section 0x${buf[i-1].toString(16)}`)
         i += njDecodeLength()
     }
   }

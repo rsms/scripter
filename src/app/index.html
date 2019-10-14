@@ -8,30 +8,19 @@
 </head>
 <body>
   <div id="main">
-    <div id="menu" tabindex=0>
-      <div class="section">
-        <div class="button new" title="New script"
-          style="background-image:url(<%= require('./icon-add.svg') %>)"></div>
-        <!-- <span>Scripts</span> -->
-      </div>
-      <ul class="script-list">
-      </ul>
-    </div>
+    <div id="menu" tabindex=0></div>
     <div id="editor"></div>
   </div>
   <div id="message">
     <div class="warning-icon">⚠</div>
-    <div class="message"><p>in set_characters: Cannot write to node with unloaded font "Roboto Regular". Please call figma.loadFontAsync({ family: "Roboto", style: "Regular" }) and await the returned promise first.
-    </p></div>
+    <div class="message"><p>Warning message</p></div>
     <div class="close-button">✗</div>
   </div>
   <div id="toolbar">
+    <div class="title"></div>
     <div class="button menu"></div>
-    <div class="runqueue">
-      <!-- <div class="pending"></div>
-      <div class="ok"></div>
-      <div class="err"></div> -->
-    </div>
+    <div class="button new" title="New script"></div>
+    <div class="spacer"></div>
     <div class="button clear unavailable"></div>
     <div class="button run"></div>
   </div>

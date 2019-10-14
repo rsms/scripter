@@ -15,24 +15,106 @@ import { LazyNumberSequence } from "../common/lazyseq"
 import * as libgeometry from "./script-lib-geometry"
 
 
-export function getSourcePos(stackOffset :number = 0) :M.SourcePos {
-  // find origin source location
-  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+function sourcePosFromStackFrame(frame :string) :M.SourcePos {
   // Note: fig-js stack traces does not include source column information, so we
   // optionally parse the column if present.
-  let frameidx = 2 + stackOffset
-  let frame = e.stack.split("\n")[frameidx] || ""
   let m = frame.match(/:(\d+)(:?:(\d+)|)\)$/)
-  if (m) {
-    let line = parseInt(m[1])
-    let column = parseInt(m[2])
-    return {
-      line: isNaN(line) ? 0 : line,
-      column: isNaN(column) ? 0 : column,
+  if (!m) {
+    return { line: 0, column: 0 }
+  }
+  let line = parseInt(m[1])
+  let column = parseInt(m[2])
+  return {
+    line: isNaN(line) ? 0 : line,
+    column: isNaN(column) ? 0 : column,
+  }
+}
+
+
+function indexOfScriptMainStackFrame(frames :string[]) :number {
+  for (let i = 1; i < frames.length; i++) {
+    if (frames[i].indexOf("__scripter_script_main ") != -1) {
+      return i
+      break
     }
   }
-  return { line: 0, column: 0 }
+  // uh, no. fig-js does not contain source information for lambdas.
+  // As a last resort, walk backwards and pick first frame that looks like
+  // it comes from the plugin.
+  for (let i = frames.length; i > 1; ) {
+    if (frames[--i].indexOf("<input>:") != -1) {
+      return i
+    }
+  }
+  return -1
 }
+
+
+// getSourcePos finds SourcePos for call on current stack, relative to the leaf caller.
+// stackOffset can be provided to pick a frame further up the call stack.
+//
+export function getSourcePos(stackOffset :number = 0) :M.SourcePos {
+  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+  let frames = e.stack.split("\n")
+  return sourcePosFromStackFrame(frames[2 + stackOffset] || "")
+}
+
+
+// getFirstSourcePos is a speecial version of getSourcePos which returns the first
+// location that is known, starting at the outermost (callee of this function) frame.
+//
+export function getFirstSourcePos(stackOffset :number = 0) :M.SourcePos {
+  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+  let frames = e.stack.split("\n")
+  let pos :M.SourcePos = {line:0, column:0}
+  let mainFrameIdx = indexOfScriptMainStackFrame(frames)
+  let frameidx = 2 + stackOffset
+  while (pos.line == 0 && frameidx <= mainFrameIdx) {
+    pos = sourcePosFromStackFrame(frames[frameidx] || "")
+    frameidx++
+  }
+  return pos
+}
+
+
+// getTopLevelSourcePos finds SourcePos for call on current, relative to top-level frame
+// of the script. stackOffset can be provided to pick a frame further down the call stack.
+//
+// Example 1:
+//
+//   1  function foo() {
+//   2    print(getTopLevelSourcePos())
+//   3  }
+//   4  function bar() {
+//   5    foo()
+//   6  }
+//   7  bar()
+//
+// Output:
+//   { line: 7, column: 1 }  // position of bar()
+//
+// ----------------------------------
+// Example 2:
+//
+//   1  function foo() {
+//   2    print(getTopLevelSourcePos(1))  // offset = 1
+//   3  }
+//   4  function bar() {
+//   5    foo()
+//   6  }
+//   7  bar()
+//
+// Output:
+//   { line: 5, column: 3 }  // position of foo()
+//
+export function getTopLevelSourcePos(stackOffset :number = 0) :M.SourcePos {
+  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
+  let frames = e.stack.split("\n")
+  let frameidx = indexOfScriptMainStackFrame(frames)
+  frameidx -= stackOffset
+  return sourcePosFromStackFrame(frames[frameidx] || "")
+}
+
 
 
 export function base64Encode(data :Uint8Array|ArrayBuffer|string) :string {
@@ -256,11 +338,25 @@ Type 'Iterable<number>' is missing the following properties from type 'SharedArr
   byteLength, length, slice, [Symbol.species], [Symbol.toStringTag]
 */
 
+// ----------------------------------------------------------------------------------------
 
+// libui
+//
+const libui_base = {
+  confirm(question :string) :Promise<bool> {
+    return confirm(question)
+  },
 
-// one instance per script invocation
-export function createUILib(scriptReqId :string) {
-  return {
+  notify: (figma as any).notify,  // TODO: update figplug
+}
+//
+// Some of its functions makes use of script request ID and thus this returns
+// a new object based on libui_base with additional functions with a closure
+// around scriptReqId.
+//
+export function create_libui(scriptReqId :string) { return {
+  // Note: Spread "...other" is not supported in the plugin code (fig-js)
+  __proto__: libui_base,
 
   rangeInput(init? :M.UIRangeInputInit): AsyncIterable<number> {
     if (init) {
@@ -271,48 +367,60 @@ export function createUILib(scriptReqId :string) {
       if (step > 0 && max < min) { throw new Error("max < min") }
       if (step < 0 && max > min) { throw new Error("max > min") }
     }
-    let srcPos = getSourcePos()
+    let srcPos = getTopLevelSourcePos()
     return {
       [Symbol.asyncIterator]() {
-        return new UIRangeInputIterator(init, srcPos, scriptReqId)
+        return new UIInputIterator<M.UIRangeInputRequestMsg>(srcPos, scriptReqId, "range", init)
       }
     }
   },
 
-  }
-}
+}}
 
 
-class UIRangeInputIterator {
-  readonly init :M.UIRangeInputInit|undefined
-  readonly srcPos :M.SourcePos
+let nextInstanceId = 0
+
+
+class UIInputIterator<ReqT extends M.UIInputRequestMsg = M.UIInputRequestMsg> {
+  readonly srcPos      :M.SourcePos
   readonly scriptReqId :string
+  readonly init?       :ReqT["init"]
+  readonly type        :ReqT["controllerType"]
+  readonly instanceId  :string
 
+  // state
   value = 0
   done = false
 
-  constructor(init :M.UIRangeInputInit|undefined, srcPos :M.SourcePos, scriptReqId :string) {
-    this.init = init
+  constructor(
+    srcPos :M.SourcePos,
+    scriptReqId :string,
+    type :ReqT["controllerType"],
+    init? :ReqT["init"],
+  ) {
     this.srcPos = srcPos
     this.scriptReqId = scriptReqId
+    this.init = init
+    this.type = type
+    this.instanceId = "instance-" + (nextInstanceId++).toString(36)
   }
 
   async next(...args: []): Promise<IteratorResult<number>> {
     if (this.done) {
       return { value: this.value, done: true }
     }
-    let timestamp = Date.now()
-    let r = await rpc<M.UIInputRequestMsg,M.UIInputResponseMsg>(
-      "ui-input-request", "ui-input-response",
-      {
-        controllerType: "range",
-        srcPos: this.srcPos,
-        srcLineOffset: evalScript.lineOffset,
-        scriptReqId: this.scriptReqId,
-        timestamp,
-        init: this.init,
-      }
-    )
+
+    dlog("UIInputIterator send request")
+
+    let r = await rpc<ReqT, M.UIInputResponseMsg>("ui-input-request", "ui-input-response", {
+      instanceId: this.instanceId,
+      srcPos: this.srcPos,
+      srcLineOffset: evalScript.lineOffset,
+      scriptReqId: this.scriptReqId,
+      controllerType: this.type,
+      init: this.init,
+    } as ReqT)
+
     if (r.done) {
       this.done = true
       if (this.value == r.value) {
@@ -320,7 +428,9 @@ class UIRangeInputIterator {
         return { value: this.value, done: true }
       }
     }
+
     this.value = r.value
+
     return { value: this.value, done: false }
   }
 

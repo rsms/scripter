@@ -94,6 +94,26 @@ export interface FetchResponseMsg extends TransactionalMsg {
   // trailer    : Promise<Headers>  // TODO add support?
 }
 
+// --------------------------------------------------------------------------
+// UIInput
+
+export type UIInputType = "range"
+
+export interface UIInputRequestMsg extends TransactionalMsg {
+  type  :"ui-input-request"
+  scriptReqId    :string  // script invocation id. == EvalRequestMsg.id
+  instanceId     :string  // unique per iterator
+  srcPos         :SourcePos
+  srcLineOffset  :number  // line offset of source code (for sourcemap)
+  controllerType :UIInputType
+  init?          :object
+}
+
+export interface UIRangeInputRequestMsg extends UIInputRequestMsg {
+  controllerType :"range"
+  init?          :UIRangeInputInit
+}
+
 export interface UIRangeInputInit {
   value? :number
   min?   :number
@@ -101,15 +121,10 @@ export interface UIRangeInputInit {
   step?  :number
 }
 
-export interface UIInputRequestMsg extends TransactionalMsg {
-  type  :"ui-input-request"
-  scriptReqId    :string  // script invocation id. == EvalRequestMsg.id
-  controllerType :"range"
-  srcPos         :SourcePos
-  srcLineOffset  :number  // line offset of source code (for sourcemap)
-  timestamp      :number
-  init?          :UIRangeInputInit
+export function isUIRangeInputRequest(r :UIInputRequestMsg) :r is UIRangeInputRequestMsg {
+  return r.controllerType == "range"
 }
+
 
 export interface UIInputResponseMsg extends TransactionalMsg {
   type       : "ui-input-response"
