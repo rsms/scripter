@@ -81,7 +81,7 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
 
   constructor(afterLineNumber :number, className? :string) {
     super()
-    this.afterLineNumber = afterLineNumber
+    this.sourceLine = this.afterLineNumber = afterLineNumber || 0
 
     let domNode = this.domNode = document.createElement('div')
     domNode.className = "inlineWidget"
@@ -193,7 +193,12 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
   }
 
   _updateSourceLineLen() {
-    ;(this as any).sourceLineLen = this.editor.currentModel.getLineLength(this.sourceLine)
+    try {
+      ;(this as any).sourceLineLen = this.editor.currentModel.getLineLength(this.sourceLine)
+    } catch(e) {
+      console.warn(`[scripter/ViewZone._updateSourceLineLen] Model.getLineLength: ${e.stack||e}`)
+      ;(this as any).sourceLineLen = 1
+    }
   }
 
   // Callback which gives the relative top of the view zone as it appears

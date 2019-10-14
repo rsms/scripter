@@ -146,7 +146,7 @@ function rpc_ui_input(msg :UIInputRequestMsg) {
       }
 
       pos = await resolveOrigSourcePos(pos, msg.srcLineOffset, sourceMapJson)
-      if (pos.line == 0) {
+      if (!pos.line) {
         return { value: 0, done: true }
       }
 

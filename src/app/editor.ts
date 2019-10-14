@@ -965,6 +965,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         }
       }
     })
+
+    window.addEventListener("resize", () => {
+      this.editor.layout()
+    })
   }
 
 

@@ -1,5 +1,5 @@
 import { SourceMapConsumer, SourceMapGenerator } from "../misc/source-map"
-// import { print, dlog } from "./util"
+import { dlog } from "./util"
 
 export async function resolveOrigSourcePos(
   pos :SourcePos,
@@ -51,6 +51,10 @@ export async function resolveOrigSourcePos(
       if (pos2.line !== null) {
         break
       }
+    }
+    if (pos2.line === null) {
+      pos2.line = 0
+      pos2.column = 0
     }
   }
 

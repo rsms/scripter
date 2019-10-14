@@ -4,25 +4,6 @@
 // What's declared in there is available to scripts in their global namespace.
 //
 
-
-// Patch TS env since Monaco doesn't seem to work with "libs" in TS compiler settigs.
-interface SymbolConstructor {
-  readonly asyncIterator: symbol;
-}
-interface AsyncIterator<T, TReturn = any, TNext = undefined> {
-  next(...args: [] | [TNext | PromiseLike<TNext>]): Promise<IteratorResult<T, TReturn>>;
-  return?(value?: TReturn | PromiseLike<TReturn>): Promise<IteratorResult<T, TReturn>>;
-  throw?(e?: any): Promise<IteratorResult<T, TReturn>>;
-}
-interface AsyncIterable<T> {
-  [Symbol.asyncIterator](): AsyncIterator<T>;
-}
-interface AsyncIterableIterator<T> extends AsyncIterator<T> {
-  [Symbol.asyncIterator](): AsyncIterableIterator<T>;
-}
-
-
-
 // symbolic type aliases
 type int   = number
 type float = number
@@ -34,9 +15,6 @@ declare function print(...args :any[]) :void
 
 /** Throws an error if condition is not thruthy */
 declare function assert(condition :any, ...message :any[]) :void
-
-/** Close scripter, optionally showing a message (e.g. reason, status, etc) */
-declare function closeScripter(message? :string) :void
 
 // timer functions
 declare function clearInterval(id?: number): void;
@@ -73,13 +51,6 @@ interface Animation extends Promise<void> {
 
 /** Set to true if the script was canceled by the user */
 declare var canceled :boolean;
-
-/** Scripter-specific API */
-declare var scripter :ScripterAPI;
-interface ScripterAPI {
-  /** Visualize print() results inline in editor. Defaults to true */
-  visualizePrint :bool
-}
 
 /**
  * Shows a modal dialog with question and yes/no buttons.
@@ -496,14 +467,18 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
 
 
 // ------------------------------------------------------------------------------------
-// ui
+declare namespace scripter {
 
+  /** Visualize print() results inline in editor. Defaults to true */
+  var visualizePrint :bool
 
-interface UIInputIterator<T> extends AsyncIterable<T> {
-  [Symbol.asyncIterator](): AsyncIterator<T,T>;
+  /** Close scripter, optionally showing a message (e.g. reason, status, etc) */
+  function close(message? :string) :void
+
 }
 
 
+// ------------------------------------------------------------------------------------
 declare namespace libui {
 
   /** Presents a short ambient message to the user, at the bottom of the screen */
@@ -527,10 +502,12 @@ declare namespace libui {
 }
 
 
+interface UIInputIterator<T> extends AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T,T>;
+}
+
+
 // ------------------------------------------------------------------------------------
-// ui
-
-
 declare namespace libgeometry {
   class Rect {
     x      :number
@@ -560,4 +537,24 @@ declare namespace libgeometry {
     div(v :Vec|number) :Vec
   }
 
+}
+
+
+// ------------------------------------------------------------------------------------
+// Patch TS env since Monaco doesn't seem to work with "libs" in TS compiler settigs.
+
+// lib.es2018 async iterator
+interface SymbolConstructor {
+  readonly asyncIterator: symbol;
+}
+interface AsyncIterator<T, TReturn = any, TNext = undefined> {
+  next(...args: [] | [TNext | PromiseLike<TNext>]): Promise<IteratorResult<T, TReturn>>;
+  return?(value?: TReturn | PromiseLike<TReturn>): Promise<IteratorResult<T, TReturn>>;
+  throw?(e?: any): Promise<IteratorResult<T, TReturn>>;
+}
+interface AsyncIterable<T> {
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+interface AsyncIterableIterator<T> extends AsyncIterator<T> {
+  [Symbol.asyncIterator](): AsyncIterableIterator<T>;
 }
