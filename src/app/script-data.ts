@@ -112,7 +112,7 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     ]
     Promise.all(externalExampleFiles.map(name => resources[name[1]])).then(codes => {
       for (let i = 0; i < codes.length; i++) {
-        let [id, name] = externalExampleFiles[i]
+        let [id, , name] = externalExampleFiles[i]
         let s = mkExample(id, name, codes[i])
         s.readOnly = true
         this.referenceScripts.push(s)
