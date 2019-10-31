@@ -13,7 +13,7 @@
     "copy-webpack-plugin": "^5.0.4",
     "css-loader": "^3.2.0",
     "cssnano": "^4.1.10",
-    "figplug": "^0.1.6",
+    "figplug": "0.1.12",
     "html-webpack-inline-source-plugin": "0.0.10",
     "html-webpack-plugin": "^3.2.0",
     "livereload": "^0.8.0",
