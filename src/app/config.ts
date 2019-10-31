@@ -1,6 +1,6 @@
 import * as xdb from "./xdb"
 import { db } from "./data"
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 import { EventEmitter } from "./event"
 import { print, dlog } from "./util"
 import { WindowSize } from "../common/messages"

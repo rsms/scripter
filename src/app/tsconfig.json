@@ -10,10 +10,11 @@
       "dom"
     ]
   },
-  "exclude": [
-    "monaco-editor"
-  ],
+  // "exclude": [
+  //   "monaco-editor"
+  // ],
   "include": [
-    "global.d.ts"
+    "global.d.ts",
+    "../monaco-editor/monaco.d.ts"
   ]
 }

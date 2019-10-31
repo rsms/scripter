@@ -6,7 +6,7 @@ const TerserJSPlugin = require('terser-webpack-plugin')
 const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin')
 const CopyPlugin = require('copy-webpack-plugin')
 const path = require('path')
-const monacoVersion = require('monaco-editor/package.json').version
+const monacoVersion = require('../monaco/monaco-editor/package.json').version
 const uglify = require("uglify-es")
 
 const builddir = path.normalize(path.join(__dirname, "..", "..", "build"))
@@ -39,7 +39,7 @@ return {
   },
 
   externals: {
-    "monaco-editor": "monaco",
+    "../monaco/monaco": "monaco",
     "./resources": "__resources",
   },
 

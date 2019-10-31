@@ -1,9 +1,12 @@
 import { dlog } from "./util"
 import { EventEmitter } from "./event"
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 import { EditorState } from "./editor"
 import { UIInput } from "./ui-input"
 import { UIInputResponseMsg } from "../common/messages"
+
+
+export type ViewZoneID = string
 
 
 const kViewZoneDOMObserver = Symbol("kViewZoneDOMObserver")
@@ -60,7 +63,7 @@ interface ViewZoneEvents {
 }
 
 export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.editor.IViewZone {
-  readonly id            :number = -1
+  readonly id            :ViewZoneID = ""
   readonly containerEl   :HTMLDivElement  // element containing contentEl and buttonsEl
   readonly contentEl     :HTMLDivElement
   readonly buttonsEl     :HTMLDivElement
@@ -162,7 +165,7 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
     this.onWillMount()
   }
 
-  onDidAddToEditor(id :number) {
+  onDidAddToEditor(id :ViewZoneID) {
     ;(this as any).id = id
     // if (DEBUG) {
     //   this.contentEl.appendChild(document.createTextNode(` #${id}`))
@@ -176,7 +179,7 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
   }
 
   onDidRemoveFromEditor() {
-    ;(this as any).id = -1
+    ;(this as any).id = ""
     ;(this as any).editor = null
     ;(this as any).sourceLine = -1
     this.triggerEvent("remove")

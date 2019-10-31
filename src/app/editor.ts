@@ -1,4 +1,4 @@
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 import "./editor-themes"  // for side-effects
 import resources from "./resources"
 import { Script, ScriptMeta } from "./script"

@@ -1,1 +1,1 @@
-export { editor, languages } from 'monaco-editor'
+export * from './monaco-editor'

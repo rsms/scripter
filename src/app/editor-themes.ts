@@ -1,4 +1,4 @@
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 
 // see:
 // microsoft.github.io/monaco-editor/playground.html#customizing-the-appearence-exposed-colors

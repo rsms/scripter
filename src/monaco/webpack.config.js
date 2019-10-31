@@ -1,10 +1,15 @@
+const origResolve = require.resolve
+require.resolve = (path, options) => {
+  console.log("resolve", path)
+  return origResolve(path, options)
+}
 const webpack = require('webpack')
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin')
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const TerserJSPlugin = require('terser-webpack-plugin')
 const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin')
 const path = require('path')
-const monacoVersion = require('monaco-editor/package.json').version
+const monacoVersion = require('./monaco-editor/package.json').version
 
 const builddir = path.normalize(path.join(__dirname, "..", "..", "build"))
 
@@ -60,7 +65,7 @@ return {
     }),
 
     new MonacoWebpackPlugin({
-      languages: [ "typescript" ], // "javascript", "clojure"
+      languages: [ "typescript" ],
       output: outdirname,
       // TODO: slim things down by specifying only required features.
       // https://github.com/Microsoft/monaco-editor-webpack-plugin#options

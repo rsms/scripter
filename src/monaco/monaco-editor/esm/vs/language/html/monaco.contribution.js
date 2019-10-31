@@ -1,0 +1,2 @@
+function LanguageServiceDefaultsImpl(){}
+export { LanguageServiceDefaultsImpl }

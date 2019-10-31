@@ -50,7 +50,13 @@ trap cleanup EXIT
 
 # build monaco if needed
 # dep_pids=()
-pids+=( $(spawn_monaco_build "$rootdir/build/dev") )
+set +e
+spawn_monaco_build "$rootdir/build/dev"
+monaco_build_pid=$?
+set -e
+if [[ "$monaco_build_pid" != "0" ]]; then
+  pids+=( $monaco_build_pid )
+fi
 # spawn_monaco_build "$rootdir/build/dev" || true
 # # wait for dep build processes to finish before continuing
 # for pid in ${dep_pids[*]}; do wait $pid; done

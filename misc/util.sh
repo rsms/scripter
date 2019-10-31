@@ -9,22 +9,20 @@ has_newer() {
   return 1
 }
 
+print_monaco_build_dir() {
+  echo "$1/monaco-$(node -p 'require("./src/monaco/monaco-editor/package.json").version')"
+}
+
 spawn_monaco_build() {
   outdir=$1
 
   # find monaco build dir
-  monaco_build_dir=$outdir/monaco-$(node -p 'require("monaco-editor/package.json").version')
+  monaco_build_dir=$(print_monaco_build_dir "$outdir")
 
   # build monaco if needed
-  if ! [ -d $monaco_build_dir ] || has_newer "src/monaco" "$monaco_build_dir/monaco.js"; then
-    echo "building $monaco_build_dir"
-    pushd src/monaco >/dev/null
-    ( webpack --display=errors-only --mode=production "--output-path=$outdir" && \
-      echo "built $monaco_build_dir ok" \
-    ) &
-    pid=$!
-    popd >/dev/null
-    return $pid
+  if ! [ -d "$monaco_build_dir" ] || has_newer "src/monaco" "$monaco_build_dir/monaco.js"; then
+    bash misc/build-monaco.sh "$outdir" &
+    return $!
   fi
 
   return 0

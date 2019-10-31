@@ -1,6 +1,6 @@
 import { db } from "./data"
 import { EventEmitter } from "./event"
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 
 const print = console.log.bind(console)
 

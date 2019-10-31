@@ -1,9 +1,9 @@
 import { EditorState, ModelChangeFlags } from "./editor"
 import { EventEmitter } from "./event"
 import { dlog } from "./util"
-import { ViewZone, InputViewZone } from "./viewzone"
+import { ViewZone, ViewZoneID, InputViewZone } from "./viewzone"
 import { config } from "./config"
-import * as monaco from "monaco-editor"
+import * as monaco from "../monaco/monaco"
 
 
 interface ViewZonesEvents {
@@ -15,8 +15,8 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
 
   readonly editor :EditorState
 
-  lineToZoneId = new Array<number>() // line number => view zone ID
-  viewZones = new Map<number,ViewZone>() // view zone ID => view zone
+  lineToZoneId = new Array<ViewZoneID>() // line number => view zone ID
+  viewZones = new Map<ViewZoneID,ViewZone>() // view zone ID => view zone
   count :number = 0
 
 
@@ -36,7 +36,7 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
   }
 
   clearAllUIInputs() {
-    let clearIds :number[] = []
+    let clearIds :ViewZoneID[] = []
     for (let [viewZoneId, viewZone] of this.viewZones.entries()) {
       if (viewZone instanceof InputViewZone) {
         clearIds.push(viewZoneId)
@@ -47,13 +47,13 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
     }
   }
 
-  clear(ids :Iterable<number>) {
+  clear(ids :Iterable<ViewZoneID>) {
     if (this._clear(ids) > 0) {
       this.triggerEvent("update")
     }
   }
 
-  _clear(ids :Iterable<number>) :number {
+  _clear(ids :Iterable<ViewZoneID>) :number {
     let initCount = this.count
     this.editor.editor.changeViewZones(changeAccessor => {
       for (let id of ids) {
@@ -66,7 +66,7 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
     return initCount - this.count
   }
 
-  _removeZone(id :number) :number {
+  _removeZone(id :ViewZoneID) :ViewZoneID {
     let viewZone = this.viewZones.get(id)
     if (viewZone) {
       viewZone.onWillRemoveFromEditor()
@@ -137,8 +137,8 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
       }
     }
 
-    let lineToZoneId2 :number[] = []  // new lineToZoneId mapping
-    let rmZoneIds :number[] = []  // zones that were dirtied and will be removed
+    let lineToZoneId2 :ViewZoneID[] = []  // new lineToZoneId mapping
+    let rmZoneIds :ViewZoneID[] = []  // zones that were dirtied and will be removed
 
     // update zones
     let pastStartLine = false
@@ -190,25 +190,25 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
   }
 
 
-  set(viewZone :ViewZone) :number {
+  set(viewZone :ViewZone) :ViewZoneID {
     return this._set(viewZone, /* replace */true)
   }
 
   // add adds viewZone only if there's no existing view zone at viewZone.afterLineNumber
-  // Returns -1 if there is an existing view zone.
-  // Return !=-1 if viewZone was added in which case the number is the viewZoneId.
+  // Returns "" if there is an existing view zone.
+  // Return !="" if viewZone was added in which case the number is the viewZoneId.
   //
-  add(viewZone :ViewZone) :number {
+  add(viewZone :ViewZone) :ViewZoneID {
     return this._set(viewZone, /* replace */ false)
   }
 
 
-  _set(viewZone :ViewZone, replace :bool) :number {
+  _set(viewZone :ViewZone, replace :bool) :ViewZoneID {
     let existingViewZoneId = this.lineToZoneId[viewZone.afterLineNumber]
     if (!replace && existingViewZoneId !== undefined) {
-      return -1
+      return ""
     }
-    let viewZoneId :number = -1
+    let viewZoneId :ViewZoneID = ""
     this.editor.editor.changeViewZones(changeAccessor => {
       if (existingViewZoneId !== undefined) {
         changeAccessor.removeZone(this._removeZone(existingViewZoneId))
@@ -232,7 +232,7 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
   }
 
 
-  delete(viewZoneId :number) {
+  delete(viewZoneId :ViewZoneID) {
     this.clear([viewZoneId])
   }
 

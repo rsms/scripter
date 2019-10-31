@@ -160,7 +160,7 @@ function rpc_ui_input(msg :UIInputRequestMsg) {
 
       let input = createUIInput(msg)
       viewZone = new InputViewZone(pos.line, input)
-      if (editor.viewZones.add(viewZone) == -1) {
+      if (editor.viewZones.add(viewZone) == "") {
         // existing view zone conflict
         return { value: input.value, done: true }
       }
