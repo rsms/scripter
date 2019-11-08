@@ -9,6 +9,9 @@ cd "$(dirname "$0")/.."
 source misc/util.sh
 rootdir=$PWD
 
+# figplug=../figplug/bin/figplug.g
+figplug=./node_modules/.bin/figplug
+
 if (which lsof >/dev/null); then
   SERVE_PID=$(lsof -sTCP:LISTEN -iTCP:8009 | tail -1 | awk '{print $2}')
   if [ "$SERVE_PID" != "" ]; then
@@ -61,8 +64,14 @@ fi
 # # wait for dep build processes to finish before continuing
 # for pid in ${dep_pids[*]}; do wait $pid; done
 
+# symlink monaco
+rm -rf build/dev/monaco-*
+pushd build/dev >/dev/null
+ln -s $(ls -d ../../docs/monaco-*)
+popd >/dev/null
+
 # figma-plugin
-figplug build -g -v -w src/figma-plugin/manifest.json:build/figma-plugin &
+$figplug build -g -v -w src/figma-plugin/manifest.json:build/figma-plugin &
 pids+=( $! )
 
 # app

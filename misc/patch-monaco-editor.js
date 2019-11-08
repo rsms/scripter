@@ -51,6 +51,9 @@ str = str.replace(/^[\r\n]+/gm, "")
 // prepend no-default-lib directive
 str = '/// <reference no-default-lib="true"/>\n' + str
 
+// finally, append thing declared in lib.dom.d.ts which are actually available in Figma plugins
+str += "\n" + fs.readFileSync(__dirname + "/figma-extras.d.ts", "utf8")
+
 // // write build/lib.scripter.d.ts
 // fs.writeFileSync("build/lib.scripter.d.ts", str, "utf8")
 
@@ -77,9 +80,8 @@ fs.writeFileSync(tsWorkerJsFile, tsWorkerJs, "utf8")
 // copy monaco.d.ts and modularize
 //
 // declare namespace editor {...} => ""
-let monacoDtsInFile = "src/monaco/monaco-editor/monaco.d.ts"
-let monacoDtsOutFile = "src/monaco/monaco.d.ts"
-let monacoDts = fs.readFileSync(monacoDtsInFile, "utf8")
+let monacoDtsFile = "src/monaco/monaco.d.ts"
+let monacoDts = fs.readFileSync(monacoDtsFile, "utf8")
 // declare namespace monaco {
 monacoDts = monacoDts.replace(/declare\s+namespace\s+monaco\s*\{\n/gm, "")
 //
@@ -92,5 +94,5 @@ monacoDts = monacoDts.substr(0, i) + monacoDts.substr(i+1)
 monacoDts = monacoDts.replace(
   /declare\s+namespace\s+monaco\.([^\s]+)\s*\{\n/gm,
   "declare namespace $1 {")
-console.log(`write ${monacoDtsOutFile}`)
-fs.writeFileSync(monacoDtsOutFile, monacoDts, "utf8")
+console.log(`write ${monacoDtsFile}`)
+fs.writeFileSync(monacoDtsFile, monacoDts, "utf8")

@@ -18,6 +18,7 @@ if [[ "$1" != "update" ]]; then
       echo "Run  $0 update  to upgrade."
     else
       echo "No new version available. Local version $LOCAL_VERSION is current."
+      echo "Run  $0 update  to update anyways."
     fi
     exit 0
   fi
