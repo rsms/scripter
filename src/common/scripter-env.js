@@ -458,8 +458,18 @@ const env = {
 const _nodeCtor = c => props => {
   let n = c()
   try {
+    let width, height
     if (props) for (let k in props) {
-      n[k] = props[k]
+      if (k == "width") {
+        width = props[k]
+      } else if (k == "height") {
+        height = props[k]
+      } else {
+        n[k] = props[k]
+      }
+    }
+    if (width !== undefined || height !== undefined) {
+      n.resizeWithoutConstraints(width || n.width, height || n.height)
     }
   } catch (e) {
     n.remove()
@@ -708,6 +718,8 @@ env.scripter = {
       throw new Error("can't close Scripter")
     }
   },
+
+  onend() {}
 }
 
 // ------------------------------------------------------------------------------------------
@@ -843,6 +855,7 @@ env.Path = F
 env.fileType = F
 env.Bytes = F
 env.libgeometry = F
+env.libvars = F
 env.libui = F
 
 env.fetchData = function(input, init) {
@@ -869,15 +882,20 @@ env.fetchImg = function(input, init) {
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
 let jsHeader = (
-  `var canceled=false;[function (` +
+  `var canceled=false,__onend=null;` +
+  `[function (` +
   `module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
   `){\n` +
+  `Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});` +
   `function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };\n` +
   `return (async function __scripter_script_main(){`
 )
 let jsFooter = (
   `})();` +
-  `},function(){canceled=true}]`
+  `},` +
+  `function(){ canceled = true },` +
+  `function(){ if (__onend)try{ __onend() }catch(_){} }` +
+  `]`
 )
 
 // Note: The following caused a memory-related crash in fig-js when user code
@@ -936,6 +954,10 @@ function _evalScript(reqId, js) {
       }
       env0.scripter = Object.assign({}, env.scripter)
       env0.libui = scriptLib.create_libui(reqId)
+      env0.libvars = scriptLib.create_libvars(env0.libui)
+
+      // _onend function
+      let _onend = r[2]
 
       // create script cancel function
       let cancelInner = r[1]
@@ -943,6 +965,7 @@ function _evalScript(reqId, js) {
         env0.canceled = true
         cancelInner()
         _cancelAllTimers(reason || new Error("cancel"))
+        _onend()
         if (reason) {
           reject(reason)
         } else {
@@ -966,10 +989,14 @@ function _evalScript(reqId, js) {
       // call script entry function and handle reply
       return r[0].apply(env0, params)
         .then(result =>
-          _awaitAsync().then(() => resolve(result))
+          _awaitAsync().then(() => {
+            _onend()
+            resolve(result)
+          })
         )
         .catch(e => {
           try { _cancelAllTimers(e) } catch(_) {}
+          _onend()
 
           // scripterStack is a work-around for limitations in fig-js
           let e2 = new Error()
@@ -986,6 +1013,7 @@ function _evalScript(reqId, js) {
         })
     } catch(e) {
       _cancelAllTimers(e)
+      _onend()
       reject(e)
     }
   }), cancelFun]

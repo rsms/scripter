@@ -100,6 +100,12 @@ declare interface Img<DataType=null|Uint8Array> {
 
   /** Load the image. Resolves immediately if source is Uint8Array. */
   load() :Promise<Img<Uint8Array>>
+
+  /** Get Figma image. Cached. Calls load() if needed to load the data. */
+  getImage() :Promise<Image>
+
+  /** Create a rectangle node with the image as fill, scaleMode defaults to "FIT". */
+  toRectangle(scaleMode? :"FILL" | "FIT" | "CROP" | "TILE") :Promise<RectangleNode>
 }
 interface ImgOptions {
   type?   :string  // mime type
@@ -475,6 +481,8 @@ declare namespace scripter {
   /** Close scripter, optionally showing a message (e.g. reason, status, etc) */
   function close(message? :string) :void
 
+  /** A function to be called when the script ends */
+  var onend :()=>void
 }
 
 
@@ -538,6 +546,36 @@ declare namespace libgeometry {
   }
 
 }
+
+
+// ------------------------------------------------------------------------------------
+declare namespace libvars {
+  interface Var<T> {
+    value :T
+    showSlider(init? :libui.UIRangeInit) :Promise<number>
+  }
+
+  class VarBindings {
+    /** coalesceDuration: group changes happening within milliseconds into one update */
+    constructor(coalesceDuration? :number)
+
+    /** Add a variable */
+    addVar<T>(value :T) :Var<T>
+
+    /** Add multiple variables */
+    addVars<T>(count :number, value :T) :Var<T>[]
+
+    /** Remove a variable */
+    removeVar(v :Var<any>)
+
+    /** Remove all variables */
+    removeAllVars()
+
+    /** Read updates. Ends when all vars are removed. */
+    updates() :AsyncIterableIterator<void>
+  }
+}
+
 
 
 // ------------------------------------------------------------------------------------

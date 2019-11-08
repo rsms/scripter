@@ -373,8 +373,10 @@ export class InputViewZone extends ViewZone {
     // dequeue next resolver
     if (this.done || (this.nextResolver && this.value !== this.lastSentValue)) {
       this.lastSentValue = this.value
-      this.nextResolver({ value: this.lastSentValue, done: this.done })
-      this.nextResolver = null
+      if (this.nextResolver) {
+        this.nextResolver({ value: this.lastSentValue, done: this.done })
+        this.nextResolver = null
+      }
     }
   }
 
@@ -382,7 +384,13 @@ export class InputViewZone extends ViewZone {
   enqueueResolver(resolver :InputResolver) {
     if (this.nextResolver) {
       console.warn("[scripter] enqueueResolver while this.nextResolver != null")
-      this.nextResolver({ value: this.lastSentValue, done: true })
+      // let prevResolver = this.nextResolver
+      // let nextResolver = resolver
+      // resolver = (msg:Omit<UIInputResponseMsg,"id"|"type">) => {
+      //   prevResolver(msg)
+      //   nextResolver(msg)
+      // }
+      this.nextResolver({ value: this.lastSentValue, done: this.done })
     }
     this.nextResolver = resolver
   }

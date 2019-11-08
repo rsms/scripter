@@ -1,9 +1,5 @@
-/// <reference path="./evalscript.d.ts" />
 import * as M from "../common/messages"
 import { fmtPrintArgs } from "../common/fmtval"
-import * as base64 from "../common/base64"
-import * as utf8 from "./utf8"
-import { rpc } from "./rpc"
 import { FetchResponse, FetchHeaders, FetchRequest } from "./fetch"
 import { gifInfoBuf } from "../common/gif"
 import { jpegInfoBuf } from "../common/jpeg"
@@ -12,145 +8,32 @@ import * as filetype from "../common/filetype"
 import * as Path from "../common/path"
 import markerProps from "../common/marker-props"
 import { LazyNumberSequence } from "../common/lazyseq"
+import { base64Encode, base64Decode, confirm, fetch } from "./script-lib-misc"
 import * as libgeometry from "./script-lib-geometry"
-
-
-function sourcePosFromStackFrame(frame :string) :M.SourcePos {
-  // Note: fig-js stack traces does not include source column information, so we
-  // optionally parse the column if present.
-  let m = frame.match(/:(\d+)(:?:(\d+)|)\)$/)
-  if (!m) {
-    return { line: 0, column: 0 }
-  }
-  let line = parseInt(m[1])
-  let column = parseInt(m[2])
-  return {
-    line: isNaN(line) ? 0 : line,
-    column: isNaN(column) ? 0 : column,
-  }
-}
-
-
-function indexOfScriptMainStackFrame(frames :string[]) :number {
-  for (let i = 1; i < frames.length; i++) {
-    if (frames[i].indexOf("__scripter_script_main ") != -1) {
-      return i
-      break
-    }
-  }
-  // uh, no. fig-js does not contain source information for lambdas.
-  // As a last resort, walk backwards and pick first frame that looks like
-  // it comes from the plugin.
-  for (let i = frames.length; i > 1; ) {
-    if (frames[--i].indexOf("<input>:") != -1) {
-      return i
-    }
-  }
-  return -1
-}
-
-
-// getSourcePos finds SourcePos for call on current stack, relative to the leaf caller.
-// stackOffset can be provided to pick a frame further up the call stack.
-//
-export function getSourcePos(stackOffset :number = 0) :M.SourcePos {
-  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
-  let frames = e.stack.split("\n")
-  return sourcePosFromStackFrame(frames[2 + stackOffset] || "")
-}
-
-
-// getFirstSourcePos is a speecial version of getSourcePos which returns the first
-// location that is known, starting at the outermost (callee of this function) frame.
-//
-export function getFirstSourcePos(stackOffset :number = 0) :M.SourcePos {
-  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
-  let frames = e.stack.split("\n")
-  let pos :M.SourcePos = {line:0, column:0}
-  let mainFrameIdx = indexOfScriptMainStackFrame(frames)
-  let frameidx = 2 + stackOffset
-  while (pos.line == 0 && frameidx <= mainFrameIdx) {
-    pos = sourcePosFromStackFrame(frames[frameidx] || "")
-    frameidx++
-  }
-  return pos
-}
-
-
-// getTopLevelSourcePos finds SourcePos for call on current, relative to top-level frame
-// of the script. stackOffset can be provided to pick a frame further down the call stack.
-//
-// Example 1:
-//
-//   1  function foo() {
-//   2    print(getTopLevelSourcePos())
-//   3  }
-//   4  function bar() {
-//   5    foo()
-//   6  }
-//   7  bar()
-//
-// Output:
-//   { line: 7, column: 1 }  // position of bar()
-//
-// ----------------------------------
-// Example 2:
-//
-//   1  function foo() {
-//   2    print(getTopLevelSourcePos(1))  // offset = 1
-//   3  }
-//   4  function bar() {
-//   5    foo()
-//   6  }
-//   7  bar()
-//
-// Output:
-//   { line: 5, column: 3 }  // position of foo()
-//
-export function getTopLevelSourcePos(stackOffset :number = 0) :M.SourcePos {
-  let e; try { throw new Error() } catch(err) { e = err }  // workaround for fig-js bug
-  let frames = e.stack.split("\n")
-  let frameidx = indexOfScriptMainStackFrame(frames)
-  frameidx -= stackOffset
-  return sourcePosFromStackFrame(frames[frameidx] || "")
-}
-
-
-
-export function base64Encode(data :Uint8Array|ArrayBuffer|string) :string {
-  return base64.fromByteArray(
-    typeof data == "string" ? utf8.encode(data) :
-    data instanceof ArrayBuffer ? new Uint8Array(data) :
-    data
-  )
-}
-
-export function base64Decode(encoded :string) :Uint8Array {
-  return base64.toByteArray(encoded)
-}
-
-
-export function confirm(question :string) :Promise<bool> {
-  return rpc<M.UIConfirmRequestMsg,M.UIConfirmResponseMsg>(
-    "ui-confirm", "ui-confirm-response", { question }
-  ).then(r => r.answer)
-}
-
-
-export function fetch(input :any, init? :object) :Promise<FetchResponse> {
-  return rpc<M.FetchRequestMsg,M.FetchResponseMsg>(
-    "fetch-request", "fetch-response", { input, init }
-  ).then(r => new FetchResponse(r))
-}
+import { create_libvars } from "./script-lib-vars"
+import { create_libui } from "./script-lib-ui"
+import { getFirstSourcePos } from "./script-lib-runtime"
 
 export {
   markerProps,
   fmtPrintArgs,
   Path,
+
   FetchHeaders as Headers,
   FetchResponse as Response,
   FetchRequest as Request,
+
+  base64Encode,
+  base64Decode,
+  confirm,
+  fetch,
+
+  getFirstSourcePos,
+
   LazyNumberSequence,
+
+  create_libui,
+  create_libvars,
   libgeometry,
 }
 
@@ -178,6 +61,7 @@ interface IImg { // synced with scripter-env.d.ts
   source      :string|Uint8Array
   data        :Uint8Array|null  // same as source when loaded
   meta        :{[k:string]:any}  // type-specific metadata
+  image       :Image|null  // Figma image
 
   _guessFromData() :void
 }
@@ -204,6 +88,7 @@ export function Img(
   this.source = ""
   this.data = null
   this.meta = {}
+  this.image = null
   if (optionsOrWidth) {
     if (typeof optionsOrWidth == "object") {
       let o = optionsOrWidth
@@ -255,9 +140,25 @@ Img.prototype._guessFromData = function() {
       meta = jpegInfoBuf(buf)
       break
     }
+
     this.meta = meta
     this.pixelWidth = meta.width
     this.pixelHeight = meta.height
+
+    // set width and height as needed.
+    // if used has set just one of the lengths, set the other based on aspect ratio.
+    if (this.width <= 0) {
+      this.width = (
+        this.height > 0 ? (this.pixelWidth / this.pixelHeight) * this.height
+                        : this.pixelWidth
+      )
+    }
+    if (this.height <= 0) {
+      this.height = (
+        this.width > 0 ? (this.pixelHeight / this.pixelWidth) * this.width
+                       : this.pixelHeight
+      )
+    }
   } catch (e) {
     if (DEBUG) {
       console.warn("Img._guessFromData:", e.stack || String(e))
@@ -285,6 +186,26 @@ Img.prototype.load = function() :Promise<IImg> {
   }
   this[kPromise] = p
   return p
+}
+
+
+Img.prototype.getImage = function() :Promise<Image> {
+  return this.load().then(() =>
+    this.image || (this.image = figma.createImage(this.data))
+  )
+}
+
+type ImageScaleMode = "FILL" | "FIT" | "CROP" | "TILE";
+Img.prototype.toRectangle = function(scaleMode :ImageScaleMode = "FIT") :Promise<RectangleNode> {
+  return this.load().then(() => {
+    if (!this.image) {
+      this.image = figma.createImage(this.data)
+    }
+    let r = figma.createRectangle()
+    r.resize(this.width || 100, this.height || 100)
+    r.fills = [{ type: "IMAGE", scaleMode, imageHash: this.image.hash }]
+    return r
+  })
 }
 
 
@@ -337,102 +258,3 @@ Type 'Iterable<number>' is not assignable to type
 Type 'Iterable<number>' is missing the following properties from type 'SharedArrayBuffer':
   byteLength, length, slice, [Symbol.species], [Symbol.toStringTag]
 */
-
-// ----------------------------------------------------------------------------------------
-
-// libui
-//
-const libui_base = {
-  confirm(question :string) :Promise<bool> {
-    return confirm(question)
-  },
-
-  notify: (figma as any).notify,  // TODO: update figplug
-}
-//
-// Some of its functions makes use of script request ID and thus this returns
-// a new object based on libui_base with additional functions with a closure
-// around scriptReqId.
-//
-export function create_libui(scriptReqId :string) { return {
-  // Note: Spread "...other" is not supported in the plugin code (fig-js)
-  __proto__: libui_base,
-
-  rangeInput(init? :M.UIRangeInputInit): AsyncIterable<number> {
-    if (init) {
-      let step = "step" in init ? init.step as number : 1
-      let min  = "min" in init ? init.min as number : 0
-      let max  = "max" in init ? init.max as number : 1
-      if (step == 0) { throw new Error("zero step") }
-      if (step > 0 && max < min) { throw new Error("max < min") }
-      if (step < 0 && max > min) { throw new Error("max > min") }
-    }
-    let srcPos = getTopLevelSourcePos()
-    return {
-      [Symbol.asyncIterator]() {
-        return new UIInputIterator<M.UIRangeInputRequestMsg>(srcPos, scriptReqId, "range", init)
-      }
-    }
-  },
-
-}}
-
-
-let nextInstanceId = 0
-
-
-class UIInputIterator<ReqT extends M.UIInputRequestMsg = M.UIInputRequestMsg> {
-  readonly srcPos      :M.SourcePos
-  readonly scriptReqId :string
-  readonly init?       :ReqT["init"]
-  readonly type        :ReqT["controllerType"]
-  readonly instanceId  :string
-
-  // state
-  value = 0
-  done = false
-
-  constructor(
-    srcPos :M.SourcePos,
-    scriptReqId :string,
-    type :ReqT["controllerType"],
-    init? :ReqT["init"],
-  ) {
-    this.srcPos = srcPos
-    this.scriptReqId = scriptReqId
-    this.init = init
-    this.type = type
-    this.instanceId = "instance-" + (nextInstanceId++).toString(36)
-  }
-
-  async next(...args: []): Promise<IteratorResult<number>> {
-    if (this.done) {
-      return { value: this.value, done: true }
-    }
-
-    dlog("UIInputIterator send request")
-
-    let r = await rpc<ReqT, M.UIInputResponseMsg>("ui-input-request", "ui-input-response", {
-      instanceId: this.instanceId,
-      srcPos: this.srcPos,
-      srcLineOffset: evalScript.lineOffset,
-      scriptReqId: this.scriptReqId,
-      controllerType: this.type,
-      init: this.init,
-    } as ReqT)
-
-    if (r.done) {
-      this.done = true
-      if (this.value == r.value) {
-        // no tail value
-        return { value: this.value, done: true }
-      }
-    }
-
-    this.value = r.value
-
-    return { value: this.value, done: false }
-  }
-
-}
-

@@ -80,10 +80,10 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
     }
 
     if (init) {
-      if ("min" in init) { this.min = init.min }
-      if ("max" in init) { this.max = init.max }
-      if ("step" in init) { this.step = Math.abs(init.step) }
-      if ("value" in init) {
+      if (init.min !== undefined) { this.min = init.min }
+      if (init.max !== undefined) { this.max = init.max }
+      if (init.step !== undefined) { this.step = Math.abs(init.step) }
+      if (init.value !== undefined) {
         this._value = Math.min(this.max, Math.max(this.min, Number(init.value)))
       }
     }
@@ -104,13 +104,16 @@ export class UIRangeInput extends EventEmitter<UIRangeInputEvents> implements UI
       this.step = Math.min(this.step, Math.round(this._scale / 2))
     }
 
+    let prec = (n :number) => {
+      let v = (""+n).split(".", 2)
+      return v.length == 2 ? v[1].length : 0
+    }
+
     // decimal precision
     this._prec = Math.max(
-      Math.round(this.step) != this.step ? String(this.step).split(".", 2)[1].length : 0,
-      Math.max(
-        Math.round(this.min) != this.min ? String(this.min).split(".", 2)[1].length : 0,
-        Math.round(this.max) != this.max ? String(this.max).split(".", 2)[1].length : 0
-      )
+      prec(this.step),
+      prec(this.min),
+      prec(this.max)
     )
 
     tooltipLabel.innerText = this._value.toFixed(this._prec)

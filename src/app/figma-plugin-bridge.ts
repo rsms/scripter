@@ -173,6 +173,11 @@ function rpc_ui_input(msg :UIInputRequestMsg) {
         uiInputInstances.delete(msg.instanceId)
       })
     }
+    // else if (viewZone.nextResolver) {
+    //   console.warn("[scripter/rpc_ui_input] enqueueResolver while this.nextResolver != null", {
+    //     instanceId: msg.instanceId,
+    //   })
+    // }
 
     return new Promise(resolve => {
       viewZone.enqueueResolver(resolve)
