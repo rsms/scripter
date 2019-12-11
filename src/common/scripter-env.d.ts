@@ -59,6 +59,9 @@ declare var canceled :boolean;
  */
 declare function confirm(question: string): Promise<bool>;
 
+/** Presents a message to the user in a disruptive way. */
+declare function alert(message: string): void;
+
 
 // ------------------------------------------------------------------------------------
 // fetch
@@ -213,18 +216,6 @@ declare var MIXED: symbol
 declare var clientStorage: ClientStorageAPI
 
 
-/** Frame of type "FRAME" */
-interface FrameFrameNode extends FrameNode {
-  type: "FRAME"
-  clone(): FrameFrameNode
-}
-
-/** Frame of type "GROUP" */
-interface GroupFrameNode extends FrameNode {
-  type: "GROUP"
-  clone(): GroupFrameNode
-}
-
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
 //
@@ -247,9 +238,9 @@ declare function Text(props? :Partial<TextNode>): TextNode;
 /** Creates a new BooleanOperation */
 declare function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
 /** Creates a new Frame */
-declare function Frame(props? :Partial<FrameFrameNode>): FrameFrameNode;
+declare function Frame(props? :Partial<FrameNode>): FrameNode;
 /** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
-declare function Group(children :ReadonlyArray<BaseNode>, props? :Partial<GroupFrameNode & {index :number}>): GroupFrameNode;
+declare function Group(children :ReadonlyArray<BaseNode>, props? :Partial<GroupNode & {index :number}>): GroupNode;
 /** Creates a new Component */
 declare function Component(props? :Partial<ComponentNode>): ComponentNode;
 /** Creates a new Slice */
@@ -289,9 +280,9 @@ declare function isText(n :BaseNode|null|undefined): n is TextNode;
 /** Checks if node is of type BooleanOperation */
 declare function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
 /** Checks if node is of type Frame */
-declare function isFrame(n :BaseNode|null|undefined): n is FrameFrameNode;
+declare function isFrame(n :BaseNode|null|undefined): n is FrameNode;
 /** Checks if node is of type Group */
-declare function isGroup(n :BaseNode|null|undefined): n is GroupFrameNode;
+declare function isGroup(n :BaseNode|null|undefined): n is GroupNode;
 /** Checks if node is of type Component */
 declare function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
 /** Checks if node is of type Component */
