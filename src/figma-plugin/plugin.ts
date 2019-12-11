@@ -22,7 +22,6 @@ figma.showUI(__html__, {
   width: windowSize.width(initialWindowSize),
   height: windowSize.height(initialWindowSize),
   visible: false,
-  position: "last",
 })
 
 
