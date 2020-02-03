@@ -68,7 +68,7 @@ function setupKeyboardHandlers() {
   const maybeHandleKeypress = (ev :KeyboardEvent, key :string) :any => {
 
     // run script
-    if (key == "Enter" || key == "r" || key == "s") {
+    if (key == "Enter" || key == "r") {
       if (ev.shiftKey) {
         return editor.stopCurrentScript(), true
       } else {
