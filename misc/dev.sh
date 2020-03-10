@@ -65,7 +65,7 @@ ln -s $(ls -d "../../docs/$monaco_build_basedir")
 popd >/dev/null
 
 # figma-plugin
-$figplug build -g -v -w src/figma-plugin/manifest.json:build/figma-plugin &
+$figplug build -v -g -w src/figma-plugin:build/figma-plugin &
 pids+=( $! )
 
 # app
