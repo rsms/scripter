@@ -11,6 +11,7 @@ let ui = uiIframe.contentWindow!
 let pluginOriginRe = /^https?:\/\/[^\.]+\.figma.com/
 
 if (DEBUG) {
+  console.log("[debug] loading Scripter from http://127.0.0.1:8009")
   uiIframe.src = "http://127.0.0.1:8009/"
   if (location.protocol != "data:") {
     // not running as a plugin; running as a stand-alone web thing
