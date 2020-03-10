@@ -233,6 +233,9 @@ export function init() {
     //   }
     //   dlog("ui received message", JSON.stringify({ origin: ev.origin, data: data2 }, null,"  "))
     // }
+
+    // Note: Unknown messages are legitimate as they are sent by other parts of the
+    // app, like for instance Monaco. It's important we let them be and let them bubble.
     dlog("ui received message", ev.data && ev.data.type, { origin: ev.origin, data: ev.data })
   }
 
