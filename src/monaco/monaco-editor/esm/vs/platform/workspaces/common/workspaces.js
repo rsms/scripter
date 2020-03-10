@@ -16,3 +16,4 @@ export function toWorkspaceIdentifier(workspace) {
     // Empty workspace
     return undefined;
 }
+//#endregion

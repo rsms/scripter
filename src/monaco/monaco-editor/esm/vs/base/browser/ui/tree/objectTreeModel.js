@@ -13,14 +13,24 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import { Iterator, getSequenceIterator } from '../../../common/iterator.js';
 import { IndexTreeModel } from './indexTreeModel.js';
+import { TreeError } from './tree.js';
+import { mergeSort } from '../../../common/arrays.js';
 var ObjectTreeModel = /** @class */ (function () {
-    function ObjectTreeModel(list, options) {
+    function ObjectTreeModel(user, list, options) {
         if (options === void 0) { options = {}; }
+        this.user = user;
         this.nodes = new Map();
         this.nodesByIdentity = new Map();
-        this.model = new IndexTreeModel(list, null, options);
+        this.model = new IndexTreeModel(user, list, null, options);
         this.onDidSplice = this.model.onDidSplice;
         this.onDidChangeCollapseState = this.model.onDidChangeCollapseState;
         this.onDidChangeRenderNodeCount = this.model.onDidChangeRenderNodeCount;
@@ -35,7 +45,7 @@ var ObjectTreeModel = /** @class */ (function () {
     }
     ObjectTreeModel.prototype.setChildren = function (element, children, onDidCreateNode, onDidDeleteNode) {
         var location = this.getElementLocation(element);
-        return this._setChildren(location, this.preserveCollapseState(children), onDidCreateNode, onDidDeleteNode);
+        this._setChildren(location, this.preserveCollapseState(children), onDidCreateNode, onDidDeleteNode);
     };
     ObjectTreeModel.prototype._setChildren = function (location, children, onDidCreateNode, onDidDeleteNode) {
         var _this = this;
@@ -67,14 +77,13 @@ var ObjectTreeModel = /** @class */ (function () {
                 onDidDeleteNode(node);
             }
         };
-        var result = this.model.splice(location.concat([0]), Number.MAX_VALUE, children, _onDidCreateNode, _onDidDeleteNode);
-        return result;
+        this.model.splice(__spreadArrays(location, [0]), Number.MAX_VALUE, children, _onDidCreateNode, _onDidDeleteNode);
     };
     ObjectTreeModel.prototype.preserveCollapseState = function (elements) {
         var _this = this;
         var iterator = elements ? getSequenceIterator(elements) : Iterator.empty();
         if (this.sorter) {
-            iterator = Iterator.fromArray(Iterator.collect(iterator).sort(this.sorter.compare.bind(this.sorter)));
+            iterator = Iterator.fromArray(mergeSort(Iterator.collect(iterator), this.sorter.compare.bind(this.sorter)));
         }
         return Iterator.map(iterator, function (treeElement) {
             var node = _this.nodes.get(treeElement.element);
@@ -83,17 +92,20 @@ var ObjectTreeModel = /** @class */ (function () {
                 node = _this.nodesByIdentity.get(id);
             }
             if (!node) {
-                return __assign({}, treeElement, { children: _this.preserveCollapseState(treeElement.children) });
+                return __assign(__assign({}, treeElement), { children: _this.preserveCollapseState(treeElement.children) });
             }
             var collapsible = typeof treeElement.collapsible === 'boolean' ? treeElement.collapsible : node.collapsible;
             var collapsed = typeof treeElement.collapsed !== 'undefined' ? treeElement.collapsed : node.collapsed;
-            return __assign({}, treeElement, { collapsible: collapsible,
+            return __assign(__assign({}, treeElement), { collapsible: collapsible,
                 collapsed: collapsed, children: _this.preserveCollapseState(treeElement.children) });
         });
     };
     ObjectTreeModel.prototype.rerender = function (element) {
         var location = this.getElementLocation(element);
         this.model.rerender(location);
+    };
+    ObjectTreeModel.prototype.has = function (element) {
+        return this.nodes.has(element);
     };
     ObjectTreeModel.prototype.getListIndex = function (element) {
         var location = this.getElementLocation(element);
@@ -102,6 +114,14 @@ var ObjectTreeModel = /** @class */ (function () {
     ObjectTreeModel.prototype.getListRenderCount = function (element) {
         var location = this.getElementLocation(element);
         return this.model.getListRenderCount(location);
+    };
+    ObjectTreeModel.prototype.isCollapsible = function (element) {
+        var location = this.getElementLocation(element);
+        return this.model.isCollapsible(location);
+    };
+    ObjectTreeModel.prototype.setCollapsible = function (element, collapsible) {
+        var location = this.getElementLocation(element);
+        return this.model.setCollapsible(location, collapsible);
     };
     ObjectTreeModel.prototype.isCollapsed = function (element) {
         var location = this.getElementLocation(element);
@@ -125,7 +145,7 @@ var ObjectTreeModel = /** @class */ (function () {
         }
         var node = this.nodes.get(element);
         if (!node) {
-            throw new Error("Tree element not found: " + element);
+            throw new TreeError(this.user, "Tree element not found: " + element);
         }
         return node;
     };
@@ -134,13 +154,16 @@ var ObjectTreeModel = /** @class */ (function () {
     };
     ObjectTreeModel.prototype.getParentNodeLocation = function (element) {
         if (element === null) {
-            throw new Error("Invalid getParentNodeLocation call");
+            throw new TreeError(this.user, "Invalid getParentNodeLocation call");
         }
         var node = this.nodes.get(element);
         if (!node) {
-            throw new Error("Tree element not found: " + element);
+            throw new TreeError(this.user, "Tree element not found: " + element);
         }
-        return node.parent.element;
+        var location = this.model.getNodeLocation(node);
+        var parentLocation = this.model.getParentNodeLocation(location);
+        var parent = this.model.getNode(parentLocation);
+        return parent.element;
     };
     ObjectTreeModel.prototype.getElementLocation = function (element) {
         if (element === null) {
@@ -148,7 +171,7 @@ var ObjectTreeModel = /** @class */ (function () {
         }
         var node = this.nodes.get(element);
         if (!node) {
-            throw new Error("Tree element not found: " + element);
+            throw new TreeError(this.user, "Tree element not found: " + element);
         }
         return this.model.getNodeLocation(node);
     };

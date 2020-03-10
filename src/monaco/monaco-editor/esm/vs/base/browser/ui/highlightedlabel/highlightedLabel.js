@@ -3,14 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as objects from '../../../common/objects.js';
-import { renderOcticons } from '../octiconLabel/octiconLabel.js';
+import { renderCodicons } from '../../../common/codicons.js';
 import { escape } from '../../../common/strings.js';
 var HighlightedLabel = /** @class */ (function () {
-    function HighlightedLabel(container, supportOcticons) {
-        this.supportOcticons = supportOcticons;
+    function HighlightedLabel(container, supportCodicons) {
+        this.supportCodicons = supportCodicons;
+        this.text = '';
+        this.title = '';
+        this.highlights = [];
+        this.didEverRender = false;
         this.domNode = document.createElement('span');
         this.domNode.className = 'monaco-highlighted-label';
-        this.didEverRender = false;
         container.appendChild(this.domNode);
     }
     Object.defineProperty(HighlightedLabel.prototype, "element", {
@@ -52,24 +55,34 @@ var HighlightedLabel = /** @class */ (function () {
             if (pos < highlight.start) {
                 htmlContent += '<span>';
                 var substring_1 = this.text.substring(pos, highlight.start);
-                htmlContent += this.supportOcticons ? renderOcticons(substring_1) : escape(substring_1);
+                htmlContent += this.supportCodicons ? renderCodicons(escape(substring_1)) : escape(substring_1);
                 htmlContent += '</span>';
                 pos = highlight.end;
             }
-            htmlContent += '<span class="highlight">';
+            if (highlight.extraClasses) {
+                htmlContent += "<span class=\"highlight " + highlight.extraClasses + "\">";
+            }
+            else {
+                htmlContent += "<span class=\"highlight\">";
+            }
             var substring = this.text.substring(highlight.start, highlight.end);
-            htmlContent += this.supportOcticons ? renderOcticons(substring) : escape(substring);
+            htmlContent += this.supportCodicons ? renderCodicons(escape(substring)) : escape(substring);
             htmlContent += '</span>';
             pos = highlight.end;
         }
         if (pos < this.text.length) {
             htmlContent += '<span>';
             var substring = this.text.substring(pos);
-            htmlContent += this.supportOcticons ? renderOcticons(substring) : escape(substring);
+            htmlContent += this.supportCodicons ? renderCodicons(escape(substring)) : escape(substring);
             htmlContent += '</span>';
         }
         this.domNode.innerHTML = htmlContent;
-        this.domNode.title = this.title;
+        if (this.title) {
+            this.domNode.title = this.title;
+        }
+        else {
+            this.domNode.removeAttribute('title');
+        }
         this.didEverRender = true;
     };
     HighlightedLabel.escapeNewLines = function (text, highlights) {

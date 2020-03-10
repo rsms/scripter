@@ -20,7 +20,7 @@ import { CaseSensitiveCheckbox, RegexCheckbox, WholeWordsCheckbox } from '../../
 import { Widget } from '../../../base/browser/ui/widget.js';
 import { RunOnceScheduler } from '../../../base/common/async.js';
 import { FIND_IDS } from './findModel.js';
-import { contrastBorder, editorWidgetBackground, inputActiveOptionBorder, inputActiveOptionBackground, widgetShadow } from '../../../platform/theme/common/colorRegistry.js';
+import { contrastBorder, editorWidgetBackground, inputActiveOptionBorder, inputActiveOptionBackground, widgetShadow, editorWidgetForeground } from '../../../platform/theme/common/colorRegistry.js';
 import { registerThemingParticipant } from '../../../platform/theme/common/themeService.js';
 var FindOptionsWidget = /** @class */ (function (_super) {
     __extends(FindOptionsWidget, _super);
@@ -167,6 +167,10 @@ registerThemingParticipant(function (theme, collector) {
     var widgetBackground = theme.getColor(editorWidgetBackground);
     if (widgetBackground) {
         collector.addRule(".monaco-editor .findOptionsWidget { background-color: " + widgetBackground + "; }");
+    }
+    var widgetForeground = theme.getColor(editorWidgetForeground);
+    if (widgetForeground) {
+        collector.addRule(".monaco-editor .findOptionsWidget { color: " + widgetForeground + "; }");
     }
     var widgetShadowColor = theme.getColor(widgetShadow);
     if (widgetShadowColor) {

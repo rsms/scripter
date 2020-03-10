@@ -20,16 +20,10 @@ import { isWindows } from './platform.js';
 var _schemePattern = /^\w[\w\d+.-]*$/;
 var _singleSlashStart = /^\//;
 var _doubleSlashStart = /^\/\//;
-var _throwOnMissingSchema = true;
 function _validateUri(ret, _strict) {
     // scheme, must be set
-    if (!ret.scheme) {
-        if (_strict || _throwOnMissingSchema) {
-            throw new Error("[UriError]: Scheme is missing: {scheme: \"\", authority: \"" + ret.authority + "\", path: \"" + ret.path + "\", query: \"" + ret.query + "\", fragment: \"" + ret.fragment + "\"}");
-        }
-        else {
-            console.warn("[UriError]: Scheme is missing: {scheme: \"\", authority: \"" + ret.authority + "\", path: \"" + ret.path + "\", query: \"" + ret.query + "\", fragment: \"" + ret.fragment + "\"}");
-        }
+    if (!ret.scheme && _strict) {
+        throw new Error("[UriError]: Scheme is missing: {scheme: \"\", authority: \"" + ret.authority + "\", path: \"" + ret.path + "\", query: \"" + ret.query + "\", fragment: \"" + ret.fragment + "\"}");
     }
     // scheme, https://tools.ietf.org/html/rfc3986#section-3.1
     // ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
@@ -59,12 +53,8 @@ function _validateUri(ret, _strict) {
 // back to the file-scheme. that should cause the least carnage and still be a
 // clear warning
 function _schemeFix(scheme, _strict) {
-    if (_strict || _throwOnMissingSchema) {
-        return scheme || _empty;
-    }
-    if (!scheme) {
-        console.trace('BAD uri lacks scheme, falling back to file-scheme.');
-        scheme = 'file';
+    if (!scheme && !_strict) {
+        return 'file';
     }
     return scheme;
 }
@@ -239,7 +229,7 @@ var URI = /** @class */ (function () {
         if (!match) {
             return new _URI(_empty, _empty, _empty, _empty, _empty);
         }
-        return new _URI(match[2] || _empty, decodeURIComponent(match[4] || _empty), decodeURIComponent(match[5] || _empty), decodeURIComponent(match[7] || _empty), decodeURIComponent(match[9] || _empty), _strict);
+        return new _URI(match[2] || _empty, percentDecode(match[4] || _empty), percentDecode(match[5] || _empty), percentDecode(match[7] || _empty), percentDecode(match[9] || _empty), _strict);
     };
     /**
      * Creates a new URI from a file system path, e.g. `c:\my\files`,
@@ -325,7 +315,7 @@ var URI = /** @class */ (function () {
 }());
 export { URI };
 var _pathSepMarker = isWindows ? 1 : undefined;
-// tslint:disable-next-line:class-name
+// eslint-disable-next-line @typescript-eslint/class-name-casing
 var _URI = /** @class */ (function (_super) {
     __extends(_URI, _super);
     function _URI() {
@@ -576,4 +566,25 @@ function _asFormatted(uri, skipEncoding) {
         res += !skipEncoding ? encodeURIComponentFast(fragment, false) : fragment;
     }
     return res;
+}
+// --- decode
+function decodeURIComponentGraceful(str) {
+    try {
+        return decodeURIComponent(str);
+    }
+    catch (_a) {
+        if (str.length > 3) {
+            return str.substr(0, 3) + decodeURIComponentGraceful(str.substr(3));
+        }
+        else {
+            return str;
+        }
+    }
+}
+var _rEncodedAsHex = /(%[0-9A-Za-z][0-9A-Za-z])+/g;
+function percentDecode(str) {
+    if (!str.match(_rEncodedAsHex)) {
+        return str;
+    }
+    return str.replace(_rEncodedAsHex, function (match) { return decodeURIComponentGraceful(match); });
 }

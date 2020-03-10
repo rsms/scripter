@@ -5,6 +5,7 @@
 import { RawContextKey } from '../../platform/contextkey/common/contextkey.js';
 export var EditorContextKeys;
 (function (EditorContextKeys) {
+    EditorContextKeys.editorSimpleInput = new RawContextKey('editorSimpleInput', false);
     /**
      * A context key that is set when the editor's text has focus (cursor is blinking).
      */

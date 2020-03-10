@@ -57,6 +57,32 @@ var PieceTreeTextBuffer = /** @class */ (function () {
         var endOffset = this.getOffsetAt(range.endLineNumber, range.endColumn);
         return endOffset - startOffset;
     };
+    PieceTreeTextBuffer.prototype.getCharacterCountInRange = function (range, eol) {
+        if (eol === void 0) { eol = 0 /* TextDefined */; }
+        if (this._mightContainNonBasicASCII) {
+            // we must count by iterating
+            var result = 0;
+            var fromLineNumber = range.startLineNumber;
+            var toLineNumber = range.endLineNumber;
+            for (var lineNumber = fromLineNumber; lineNumber <= toLineNumber; lineNumber++) {
+                var lineContent = this.getLineContent(lineNumber);
+                var fromOffset = (lineNumber === fromLineNumber ? range.startColumn - 1 : 0);
+                var toOffset = (lineNumber === toLineNumber ? range.endColumn - 1 : lineContent.length);
+                for (var offset = fromOffset; offset < toOffset; offset++) {
+                    if (strings.isHighSurrogate(lineContent.charCodeAt(offset))) {
+                        result = result + 1;
+                        offset = offset + 1;
+                    }
+                    else {
+                        result = result + 1;
+                    }
+                }
+            }
+            result += this._getEndOfLine(eol).length * (toLineNumber - fromLineNumber);
+            return result;
+        }
+        return this.getValueLengthInRange(range, eol);
+    };
     PieceTreeTextBuffer.prototype.getLength = function () {
         return this._pieceTree.getLength();
     };

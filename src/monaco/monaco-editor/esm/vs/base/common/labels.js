@@ -28,7 +28,7 @@ export function getPathLabel(resource, userHomeProvider, rootProvider) {
                 pathLabel = relativePath(baseResource.uri, resource);
             }
             if (hasMultipleRoots) {
-                var rootName = (baseResource && baseResource.name) ? baseResource.name : basename(baseResource.uri);
+                var rootName = baseResource.name ? baseResource.name : basename(baseResource.uri);
                 pathLabel = pathLabel ? (rootName + ' • ' + pathLabel) : rootName; // always show root basename if there are multiple
             }
             return pathLabel;

@@ -5,7 +5,7 @@
 import { coalesce } from '../../../base/common/arrays.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { onUnexpectedExternalError } from '../../../base/common/errors.js';
-import { registerDefaultLanguageCommand } from '../../browser/editorExtensions.js';
+import { registerModelAndPositionCommand } from '../../browser/editorExtensions.js';
 import { HoverProviderRegistry } from '../../common/modes.js';
 export function getHover(model, position, token) {
     var supports = HoverProviderRegistry.ordered(model);
@@ -19,7 +19,7 @@ export function getHover(model, position, token) {
     });
     return Promise.all(promises).then(coalesce);
 }
-registerDefaultLanguageCommand('_executeHoverProvider', function (model, position) { return getHover(model, position, CancellationToken.None); });
+registerModelAndPositionCommand('_executeHoverProvider', function (model, position) { return getHover(model, position, CancellationToken.None); });
 function isValid(result) {
     var hasRange = (typeof result.range !== 'undefined');
     var hasHtmlContent = typeof result.contents !== 'undefined' && result.contents && result.contents.length > 0;

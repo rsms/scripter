@@ -52,7 +52,7 @@ var MouseWheelClassifier = /** @class */ (function () {
             // no elements
             return false;
         }
-        // 0.5 * last + 0.25 * before last + 0.125 * before before last + ...
+        // 0.5 * last + 0.25 * 2nd last + 0.125 * 3rd last + ...
         var remainingInfluence = 1;
         var score = 0;
         var iteration = 1;
@@ -245,7 +245,7 @@ var AbstractScrollableElement = /** @class */ (function (_super) {
             var onMouseWheel = function (browserEvent) {
                 _this._onMouseWheel(new StandardWheelEvent(browserEvent));
             };
-            this._mouseWheelToDispose.push(dom.addDisposableListener(this._listenOnDomNode, isEdgeOrIE ? 'mousewheel' : 'wheel', onMouseWheel));
+            this._mouseWheelToDispose.push(dom.addDisposableListener(this._listenOnDomNode, isEdgeOrIE ? 'mousewheel' : 'wheel', onMouseWheel, { passive: false }));
         }
     };
     AbstractScrollableElement.prototype._onMouseWheel = function (e) {

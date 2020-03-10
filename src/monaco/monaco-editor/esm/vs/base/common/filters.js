@@ -396,7 +396,7 @@ export var FuzzyScore;
 export function fuzzyScore(pattern, patternLow, patternStart, word, wordLow, wordStart, firstMatchCanBeWeak) {
     var patternLen = pattern.length > _maxLen ? _maxLen : pattern.length;
     var wordLen = word.length > _maxLen ? _maxLen : word.length;
-    if (patternStart >= patternLen || wordStart >= wordLen || patternLen > wordLen) {
+    if (patternStart >= patternLen || wordStart >= wordLen || (patternLen - patternStart) > (wordLen - wordStart)) {
         return undefined;
     }
     // Run a simple check if the characters of pattern occur

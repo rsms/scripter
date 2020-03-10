@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import * as nls from '../../../nls.js';
 import * as dom from '../../../base/browser/dom.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
@@ -24,7 +31,7 @@ import { toDisposable, DisposableStore, combinedDisposable, MutableDisposable } 
 import { Position } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
 import { ModelDecorationOptions } from '../../common/model/textModel.js';
-import { HoverProviderRegistry } from '../../common/modes.js';
+import { HoverProviderRegistry, TokenizationRegistry } from '../../common/modes.js';
 import { getColorPresentations } from '../colorPicker/color.js';
 import { ColorDetector } from '../colorPicker/colorDetector.js';
 import { ColorPickerModel } from '../colorPicker/colorPickerModel.js';
@@ -33,6 +40,7 @@ import { getHover } from './getHover.js';
 import { HoverOperation } from './hoverOperation.js';
 import { ContentHoverWidget } from './hoverWidgets.js';
 import { MarkdownRenderer } from '../markdown/markdownRenderer.js';
+import { registerThemingParticipant } from '../../../platform/theme/common/themeService.js';
 import { coalesce, isNonEmptyArray, asArray } from '../../../base/common/arrays.js';
 import { IMarkerData, MarkerSeverity } from '../../../platform/markers/common/markers.js';
 import { basename } from '../../../base/common/resources.js';
@@ -42,7 +50,8 @@ import { MarkerController, NextMarkerAction } from '../gotoError/gotoError.js';
 import { createCancelablePromise } from '../../../base/common/async.js';
 import { getCodeActions } from '../codeAction/codeAction.js';
 import { QuickFixAction, QuickFixController } from '../codeAction/codeActionCommands.js';
-import { CodeActionKind } from '../codeAction/codeActionTrigger.js';
+import { CodeActionKind } from '../codeAction/types.js';
+import { textLinkForeground } from '../../../platform/theme/common/colorRegistry.js';
 var $ = dom.$;
 var ColorHover = /** @class */ (function () {
     function ColorHover(range, color, provider) {
@@ -156,6 +165,10 @@ var ModesContentComputer = /** @class */ (function () {
     };
     return ModesContentComputer;
 }());
+var markerCodeActionTrigger = {
+    type: 2 /* Manual */,
+    filter: { include: CodeActionKind.QuickFix }
+};
 var ModesContentHoverWidget = /** @class */ (function (_super) {
     __extends(ModesContentHoverWidget, _super);
     function ModesContentHoverWidget(editor, markerDecorationsService, _themeService, _keybindingService, _modeService, _openerService) {
@@ -173,7 +186,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
         _this._isChangingDecorations = false;
         _this._shouldFocus = false;
         _this._colorPicker = null;
-        _this._hoverOperation = new HoverOperation(_this._computer, function (result) { return _this._withResult(result, true); }, null, function (result) { return _this._withResult(result, false); }, _this._editor.getConfiguration().contribInfo.hover.delay);
+        _this._hoverOperation = new HoverOperation(_this._computer, function (result) { return _this._withResult(result, true); }, null, function (result) { return _this._withResult(result, false); }, _this._editor.getOption(44 /* hover */).delay);
         _this._register(dom.addStandardDisposableListener(_this.getDomNode(), dom.EventType.FOCUS, function () {
             if (_this._colorPicker) {
                 dom.addClass(_this.getDomNode(), 'colorpicker-hover');
@@ -183,7 +196,13 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
             dom.removeClass(_this.getDomNode(), 'colorpicker-hover');
         }));
         _this._register(editor.onDidChangeConfiguration(function (e) {
-            _this._hoverOperation.setHoverTime(_this._editor.getConfiguration().contribInfo.hover.delay);
+            _this._hoverOperation.setHoverTime(_this._editor.getOption(44 /* hover */).delay);
+        }));
+        _this._register(TokenizationRegistry.onDidChange(function (e) {
+            if (_this.isVisible && _this._lastRange && _this._messages.length > 0) {
+                _this._domNode.textContent = '';
+                _this._renderMessages(_this._lastRange, _this._messages);
+            }
         }));
         return _this;
     }
@@ -273,7 +292,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
         this.renderDisposable.dispose();
         this._colorPicker = null;
         // update column from which to show
-        var renderColumn = Number.MAX_VALUE;
+        var renderColumn = 1073741824 /* MAX_SAFE_SMALL_INTEGER */;
         var highlightRange = messages[0].range ? Range.lift(messages[0].range) : null;
         var fragment = document.createDocumentFragment();
         var isEmptyHoverContent = true;
@@ -289,7 +308,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
             if (msg instanceof ColorHover) {
                 containColorPicker = true;
                 var _a = msg.color, red = _a.red, green = _a.green, blue = _a.blue, alpha = _a.alpha;
-                var rgba = new RGBA(red * 255, green * 255, blue * 255, alpha);
+                var rgba = new RGBA(Math.round(red * 255), Math.round(green * 255), Math.round(blue * 255), alpha);
                 var color_1 = new Color(rgba);
                 if (!_this._editor.hasModel()) {
                     return;
@@ -299,7 +318,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
                 var colorInfo = { range: msg.range, color: msg.color };
                 // create blank olor picker model and widget first to ensure it's positioned correctly.
                 var model_1 = new ColorPickerModel(color_1, [], 0);
-                var widget_1 = new ColorPickerWidget(fragment, model_1, _this._editor.getConfiguration().pixelRatio, _this._themeService);
+                var widget_1 = new ColorPickerWidget(fragment, model_1, _this._editor.getOption(105 /* pixelRatio */), _this._themeService);
                 getColorPresentations(editorModel_1, colorInfo, msg.provider, CancellationToken.None).then(function (colorPresentations) {
                     model_1.colorPresentations = colorPresentations || [];
                     if (!_this._editor.hasModel()) {
@@ -323,7 +342,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
                         _this._editor.pushUndoStop();
                         _this._editor.executeEdits('colorpicker', textEdits);
                         if (model_1.presentation.additionalTextEdits) {
-                            textEdits = model_1.presentation.additionalTextEdits.slice();
+                            textEdits = __spreadArrays(model_1.presentation.additionalTextEdits);
                             _this._editor.executeEdits('colorpicker', textEdits);
                             _this.hide();
                         }
@@ -405,10 +424,33 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
         messageElement.style.whiteSpace = 'pre-wrap';
         messageElement.innerText = message;
         if (source || code) {
-            var detailsElement = dom.append(markerElement, $('span'));
-            detailsElement.style.opacity = '0.6';
-            detailsElement.style.paddingLeft = '6px';
-            detailsElement.innerText = source && code ? source + "(" + code + ")" : source ? source : "(" + code + ")";
+            if (typeof code === 'string') {
+                var detailsElement = dom.append(markerElement, $('span'));
+                detailsElement.style.opacity = '0.6';
+                detailsElement.style.paddingLeft = '6px';
+                detailsElement.innerText = source && code ? source + "(" + code + ")" : source ? source : "(" + code + ")";
+            }
+            else {
+                if (code) {
+                    var sourceAndCodeElement = $('span');
+                    if (source) {
+                        var sourceElement = dom.append(sourceAndCodeElement, $('span'));
+                        sourceElement.innerText = source;
+                    }
+                    this._codeLink = dom.append(sourceAndCodeElement, $('a.code-link'));
+                    this._codeLink.setAttribute('href', code.link.toString());
+                    this._codeLink.onclick = function (e) {
+                        _this._openerService.open(code.link);
+                        e.preventDefault();
+                        e.stopPropagation();
+                    };
+                    var codeElement = dom.append(this._codeLink, $('span'));
+                    codeElement.innerText = code.value;
+                    var detailsElement = dom.append(markerElement, sourceAndCodeElement);
+                    detailsElement.style.opacity = '0.6';
+                    detailsElement.style.paddingLeft = '6px';
+                }
+            }
         }
         if (isNonEmptyArray(relatedInformation)) {
             var _loop_1 = function (message_1, resource, startLineNumber, startColumn) {
@@ -421,7 +463,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
                     e.stopPropagation();
                     e.preventDefault();
                     if (_this._openerService) {
-                        _this._openerService.open(resource.with({ fragment: startLineNumber + "," + startColumn })).catch(onUnexpectedError);
+                        _this._openerService.open(resource.with({ fragment: startLineNumber + "," + startColumn }), { fromUserGesture: true }).catch(onUnexpectedError);
                     }
                 };
                 var messageElement_1 = dom.append(relatedInfoContainer, $('span'));
@@ -463,7 +505,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
         codeActionsPromise.then(function (actions) {
             quickfixPlaceholderElement.style.transition = '';
             quickfixPlaceholderElement.style.opacity = '1';
-            if (!actions.actions.length) {
+            if (!actions.validActions.length) {
                 actions.dispose();
                 quickfixPlaceholderElement.textContent = nls.localize('noQuickFixes', "No quick fixes available");
                 return;
@@ -482,7 +524,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
                     showing = true;
                     var controller = QuickFixController.get(_this._editor);
                     var elementPosition = dom.getDomNodePagePosition(target);
-                    controller.showCodeActions(actions, {
+                    controller.showCodeActions(markerCodeActionTrigger, actions, {
                         x: elementPosition.left + 6,
                         y: elementPosition.top + elementPosition.height + 6
                     });
@@ -495,7 +537,7 @@ var ModesContentHoverWidget = /** @class */ (function (_super) {
     ModesContentHoverWidget.prototype.getCodeActions = function (marker) {
         var _this = this;
         return createCancelablePromise(function (cancellationToken) {
-            return getCodeActions(_this._editor.getModel(), new Range(marker.startLineNumber, marker.startColumn, marker.endLineNumber, marker.endColumn), { type: 'manual', filter: { kind: CodeActionKind.QuickFix } }, cancellationToken);
+            return getCodeActions(_this._editor.getModel(), new Range(marker.startLineNumber, marker.startColumn, marker.endLineNumber, marker.endColumn), markerCodeActionTrigger, cancellationToken);
         });
     };
     ModesContentHoverWidget.prototype.renderAction = function (parent, actionOptions) {
@@ -545,3 +587,9 @@ function hoverContentsEquals(first, second) {
     }
     return true;
 }
+registerThemingParticipant(function (theme, collector) {
+    var linkFg = theme.getColor(textLinkForeground);
+    if (linkFg) {
+        collector.addRule(".monaco-editor-hover .hover-contents a.code-link span:hover { color: " + linkFg + "; }");
+    }
+});

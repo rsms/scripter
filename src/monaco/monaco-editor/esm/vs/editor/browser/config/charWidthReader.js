@@ -42,6 +42,7 @@ var DomCharWidthReader = /** @class */ (function () {
         regularDomNode.style.fontFamily = this._bareFontInfo.getMassagedFontFamily();
         regularDomNode.style.fontWeight = this._bareFontInfo.fontWeight;
         regularDomNode.style.fontSize = this._bareFontInfo.fontSize + 'px';
+        regularDomNode.style.fontFeatureSettings = this._bareFontInfo.fontFeatureSettings;
         regularDomNode.style.lineHeight = this._bareFontInfo.lineHeight + 'px';
         regularDomNode.style.letterSpacing = this._bareFontInfo.letterSpacing + 'px';
         container.appendChild(regularDomNode);
@@ -49,6 +50,7 @@ var DomCharWidthReader = /** @class */ (function () {
         boldDomNode.style.fontFamily = this._bareFontInfo.getMassagedFontFamily();
         boldDomNode.style.fontWeight = 'bold';
         boldDomNode.style.fontSize = this._bareFontInfo.fontSize + 'px';
+        boldDomNode.style.fontFeatureSettings = this._bareFontInfo.fontFeatureSettings;
         boldDomNode.style.lineHeight = this._bareFontInfo.lineHeight + 'px';
         boldDomNode.style.letterSpacing = this._bareFontInfo.letterSpacing + 'px';
         container.appendChild(boldDomNode);
@@ -56,13 +58,14 @@ var DomCharWidthReader = /** @class */ (function () {
         italicDomNode.style.fontFamily = this._bareFontInfo.getMassagedFontFamily();
         italicDomNode.style.fontWeight = this._bareFontInfo.fontWeight;
         italicDomNode.style.fontSize = this._bareFontInfo.fontSize + 'px';
+        italicDomNode.style.fontFeatureSettings = this._bareFontInfo.fontFeatureSettings;
         italicDomNode.style.lineHeight = this._bareFontInfo.lineHeight + 'px';
         italicDomNode.style.letterSpacing = this._bareFontInfo.letterSpacing + 'px';
         italicDomNode.style.fontStyle = 'italic';
         container.appendChild(italicDomNode);
         var testElements = [];
-        for (var i = 0, len = this._requests.length; i < len; i++) {
-            var request = this._requests[i];
+        for (var _i = 0, _a = this._requests; _i < _a.length; _i++) {
+            var request = _a[_i];
             var parent_1 = void 0;
             if (request.type === 0 /* Regular */) {
                 parent_1 = regularDomNode;
@@ -77,14 +80,14 @@ var DomCharWidthReader = /** @class */ (function () {
             var testElement = document.createElement('span');
             DomCharWidthReader._render(testElement, request);
             parent_1.appendChild(testElement);
-            testElements[i] = testElement;
+            testElements.push(testElement);
         }
         this._container = container;
         this._testElements = testElements;
     };
     DomCharWidthReader._render = function (testElement, request) {
         if (request.chr === ' ') {
-            var htmlString = '&nbsp;';
+            var htmlString = '&#160;';
             // Repeat character 256 (2^8) times
             for (var i = 0; i < 8; i++) {
                 htmlString += htmlString;

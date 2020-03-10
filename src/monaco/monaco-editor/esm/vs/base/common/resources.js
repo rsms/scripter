@@ -2,6 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import * as extpath from './extpath.js';
 import * as paths from './path.js';
 import { URI } from './uri.js';
@@ -76,10 +83,10 @@ export function joinPath(resource) {
     }
     var joinedPath;
     if (resource.scheme === Schemas.file) {
-        joinedPath = URI.file(paths.join.apply(paths, [originalFSPath(resource)].concat(pathFragment))).path;
+        joinedPath = URI.file(paths.join.apply(paths, __spreadArrays([originalFSPath(resource)], pathFragment))).path;
     }
     else {
-        joinedPath = (_a = paths.posix).join.apply(_a, [resource.path || '/'].concat(pathFragment));
+        joinedPath = (_a = paths.posix).join.apply(_a, __spreadArrays([resource.path || '/'], pathFragment));
     }
     return resource.with({
         path: joinedPath

@@ -13,13 +13,13 @@ import { DisposableStore } from '../../../base/common/lifecycle.js';
 var CodeLensModel = /** @class */ (function () {
     function CodeLensModel() {
         this.lenses = [];
-        this._dispoables = new DisposableStore();
+        this._disposables = new DisposableStore();
     }
     CodeLensModel.prototype.dispose = function () {
-        this._dispoables.dispose();
+        this._disposables.dispose();
     };
     CodeLensModel.prototype.add = function (list, provider) {
-        this._dispoables.add(list);
+        this._disposables.add(list);
         for (var _i = 0, _a = list.lenses; _i < _a.length; _i++) {
             var symbol = _a[_i];
             this.lenses.push({ symbol: symbol, provider: provider });

@@ -316,23 +316,21 @@ var MonarchTokenizer = /** @class */ (function () {
     MonarchTokenizer.prototype.getLoadStatus = function () {
         var promises = [];
         for (var nestedModeId in this._embeddedModes) {
-            if (this._embeddedModes.hasOwnProperty(nestedModeId)) {
-                var tokenizationSupport = modes.TokenizationRegistry.get(nestedModeId);
-                if (tokenizationSupport) {
-                    // The nested mode is already loaded
-                    if (tokenizationSupport instanceof MonarchTokenizer) {
-                        var nestedModeStatus = tokenizationSupport.getLoadStatus();
-                        if (nestedModeStatus.loaded === false) {
-                            promises.push(nestedModeStatus.promise);
-                        }
+            var tokenizationSupport = modes.TokenizationRegistry.get(nestedModeId);
+            if (tokenizationSupport) {
+                // The nested mode is already loaded
+                if (tokenizationSupport instanceof MonarchTokenizer) {
+                    var nestedModeStatus = tokenizationSupport.getLoadStatus();
+                    if (nestedModeStatus.loaded === false) {
+                        promises.push(nestedModeStatus.promise);
                     }
-                    continue;
                 }
-                var tokenizationSupportPromise = modes.TokenizationRegistry.getPromise(nestedModeId);
-                if (tokenizationSupportPromise) {
-                    // The nested mode is in the process of being loaded
-                    promises.push(tokenizationSupportPromise);
-                }
+                continue;
+            }
+            var tokenizationSupportPromise = modes.TokenizationRegistry.getPromise(nestedModeId);
+            if (tokenizationSupportPromise) {
+                // The nested mode is in the process of being loaded
+                promises.push(tokenizationSupportPromise);
             }
         }
         if (promises.length === 0) {
@@ -389,7 +387,7 @@ var MonarchTokenizer = /** @class */ (function () {
                 regex = new RegExp(regexSource.substr(4, regexSource.length - 5), regex.ignoreCase ? 'i' : '');
             }
             var result = line.search(regex);
-            if (result === -1) {
+            if (result === -1 || (result !== 0 && rule.matchOnlyAtLineStart)) {
                 continue;
             }
             if (popOffset === -1 || result < popOffset) {

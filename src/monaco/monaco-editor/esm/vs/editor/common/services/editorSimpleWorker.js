@@ -15,6 +15,42 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
 import { mergeSort } from '../../../base/common/arrays.js';
 import { stringDiff } from '../../../base/common/diff/diff.js';
 import { FIN } from '../../../base/common/iterator.js';
@@ -76,21 +112,6 @@ var MirrorModel = /** @class */ (function (_super) {
             return new Range(position.lineNumber, wordAtText.startColumn, position.lineNumber, wordAtText.endColumn);
         }
         return null;
-    };
-    MirrorModel.prototype.getWordUntilPosition = function (position, wordDefinition) {
-        var wordAtPosition = this.getWordAtPosition(position, wordDefinition);
-        if (!wordAtPosition) {
-            return {
-                word: '',
-                startColumn: position.column,
-                endColumn: position.column
-            };
-        }
-        return {
-            word: this._lines[position.lineNumber - 1].substring(wordAtPosition.startColumn - 1, position.column - 1),
-            startColumn: wordAtPosition.startColumn,
-            endColumn: position.column
-        };
     };
     MirrorModel.prototype.createWordIterator = function (wordDefinition) {
         var _this = this;
@@ -275,25 +296,32 @@ var EditorSimpleWorker = /** @class */ (function () {
         delete this._models[strURL];
     };
     // ---- BEGIN diff --------------------------------------------------------------------------
-    EditorSimpleWorker.prototype.computeDiff = function (originalUrl, modifiedUrl, ignoreTrimWhitespace) {
-        var original = this._getModel(originalUrl);
-        var modified = this._getModel(modifiedUrl);
-        if (!original || !modified) {
-            return Promise.resolve(null);
-        }
-        var originalLines = original.getLinesContent();
-        var modifiedLines = modified.getLinesContent();
-        var diffComputer = new DiffComputer(originalLines, modifiedLines, {
-            shouldComputeCharChanges: true,
-            shouldPostProcessCharChanges: true,
-            shouldIgnoreTrimWhitespace: ignoreTrimWhitespace,
-            shouldMakePrettyDiff: true
-        });
-        var changes = diffComputer.computeDiff();
-        var identical = (changes.length > 0 ? false : this._modelsAreIdentical(original, modified));
-        return Promise.resolve({
-            identical: identical,
-            changes: changes
+    EditorSimpleWorker.prototype.computeDiff = function (originalUrl, modifiedUrl, ignoreTrimWhitespace, maxComputationTime) {
+        return __awaiter(this, void 0, void 0, function () {
+            var original, modified, originalLines, modifiedLines, diffComputer, diffResult, identical;
+            return __generator(this, function (_a) {
+                original = this._getModel(originalUrl);
+                modified = this._getModel(modifiedUrl);
+                if (!original || !modified) {
+                    return [2 /*return*/, null];
+                }
+                originalLines = original.getLinesContent();
+                modifiedLines = modified.getLinesContent();
+                diffComputer = new DiffComputer(originalLines, modifiedLines, {
+                    shouldComputeCharChanges: true,
+                    shouldPostProcessCharChanges: true,
+                    shouldIgnoreTrimWhitespace: ignoreTrimWhitespace,
+                    shouldMakePrettyDiff: true,
+                    maxComputationTime: maxComputationTime
+                });
+                diffResult = diffComputer.computeDiff();
+                identical = (diffResult.changes.length > 0 ? false : this._modelsAreIdentical(original, modified));
+                return [2 /*return*/, {
+                        quitEarly: diffResult.quitEarly,
+                        identical: identical,
+                        changes: diffResult.changes
+                    }];
+            });
         });
     };
     EditorSimpleWorker.prototype._modelsAreIdentical = function (original, modified) {
@@ -312,155 +340,173 @@ var EditorSimpleWorker = /** @class */ (function () {
         return true;
     };
     EditorSimpleWorker.prototype.computeMoreMinimalEdits = function (modelUrl, edits) {
-        var model = this._getModel(modelUrl);
-        if (!model) {
-            return Promise.resolve(edits);
-        }
-        var result = [];
-        var lastEol = undefined;
-        edits = mergeSort(edits, function (a, b) {
-            if (a.range && b.range) {
-                return Range.compareRangesUsingStarts(a.range, b.range);
-            }
-            // eol only changes should go to the end
-            var aRng = a.range ? 0 : 1;
-            var bRng = b.range ? 0 : 1;
-            return aRng - bRng;
-        });
-        for (var _i = 0, edits_1 = edits; _i < edits_1.length; _i++) {
-            var _a = edits_1[_i], range = _a.range, text = _a.text, eol = _a.eol;
-            if (typeof eol === 'number') {
-                lastEol = eol;
-            }
-            if (Range.isEmpty(range) && !text) {
-                // empty change
-                continue;
-            }
-            var original = model.getValueInRange(range);
-            text = text.replace(/\r\n|\n|\r/g, model.eol);
-            if (original === text) {
-                // noop
-                continue;
-            }
-            // make sure diff won't take too long
-            if (Math.max(text.length, original.length) > EditorSimpleWorker._diffLimit) {
-                result.push({ range: range, text: text });
-                continue;
-            }
-            // compute diff between original and edit.text
-            var changes = stringDiff(original, text, false);
-            var editOffset = model.offsetAt(Range.lift(range).getStartPosition());
-            for (var _b = 0, changes_1 = changes; _b < changes_1.length; _b++) {
-                var change = changes_1[_b];
-                var start = model.positionAt(editOffset + change.originalStart);
-                var end = model.positionAt(editOffset + change.originalStart + change.originalLength);
-                var newEdit = {
-                    text: text.substr(change.modifiedStart, change.modifiedLength),
-                    range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }
-                };
-                if (model.getValueInRange(newEdit.range) !== newEdit.text) {
-                    result.push(newEdit);
+        return __awaiter(this, void 0, void 0, function () {
+            var model, result, lastEol, _i, edits_1, _a, range, text, eol, original, changes, editOffset, _b, changes_1, change, start, end, newEdit;
+            return __generator(this, function (_c) {
+                model = this._getModel(modelUrl);
+                if (!model) {
+                    return [2 /*return*/, edits];
                 }
-            }
-        }
-        if (typeof lastEol === 'number') {
-            result.push({ eol: lastEol, text: '', range: { startLineNumber: 0, startColumn: 0, endLineNumber: 0, endColumn: 0 } });
-        }
-        return Promise.resolve(result);
+                result = [];
+                lastEol = undefined;
+                edits = mergeSort(edits, function (a, b) {
+                    if (a.range && b.range) {
+                        return Range.compareRangesUsingStarts(a.range, b.range);
+                    }
+                    // eol only changes should go to the end
+                    var aRng = a.range ? 0 : 1;
+                    var bRng = b.range ? 0 : 1;
+                    return aRng - bRng;
+                });
+                for (_i = 0, edits_1 = edits; _i < edits_1.length; _i++) {
+                    _a = edits_1[_i], range = _a.range, text = _a.text, eol = _a.eol;
+                    if (typeof eol === 'number') {
+                        lastEol = eol;
+                    }
+                    if (Range.isEmpty(range) && !text) {
+                        // empty change
+                        continue;
+                    }
+                    original = model.getValueInRange(range);
+                    text = text.replace(/\r\n|\n|\r/g, model.eol);
+                    if (original === text) {
+                        // noop
+                        continue;
+                    }
+                    // make sure diff won't take too long
+                    if (Math.max(text.length, original.length) > EditorSimpleWorker._diffLimit) {
+                        result.push({ range: range, text: text });
+                        continue;
+                    }
+                    changes = stringDiff(original, text, false);
+                    editOffset = model.offsetAt(Range.lift(range).getStartPosition());
+                    for (_b = 0, changes_1 = changes; _b < changes_1.length; _b++) {
+                        change = changes_1[_b];
+                        start = model.positionAt(editOffset + change.originalStart);
+                        end = model.positionAt(editOffset + change.originalStart + change.originalLength);
+                        newEdit = {
+                            text: text.substr(change.modifiedStart, change.modifiedLength),
+                            range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }
+                        };
+                        if (model.getValueInRange(newEdit.range) !== newEdit.text) {
+                            result.push(newEdit);
+                        }
+                    }
+                }
+                if (typeof lastEol === 'number') {
+                    result.push({ eol: lastEol, text: '', range: { startLineNumber: 0, startColumn: 0, endLineNumber: 0, endColumn: 0 } });
+                }
+                return [2 /*return*/, result];
+            });
+        });
     };
     // ---- END minimal edits ---------------------------------------------------------------
     EditorSimpleWorker.prototype.computeLinks = function (modelUrl) {
-        var model = this._getModel(modelUrl);
-        if (!model) {
-            return Promise.resolve(null);
-        }
-        return Promise.resolve(computeLinks(model));
+        return __awaiter(this, void 0, void 0, function () {
+            var model;
+            return __generator(this, function (_a) {
+                model = this._getModel(modelUrl);
+                if (!model) {
+                    return [2 /*return*/, null];
+                }
+                return [2 /*return*/, computeLinks(model)];
+            });
+        });
     };
     EditorSimpleWorker.prototype.textualSuggest = function (modelUrl, position, wordDef, wordDefFlags) {
-        var model = this._getModel(modelUrl);
-        if (!model) {
-            return Promise.resolve(null);
-        }
-        var seen = Object.create(null);
-        var suggestions = [];
-        var wordDefRegExp = new RegExp(wordDef, wordDefFlags);
-        var wordUntil = model.getWordUntilPosition(position, wordDefRegExp);
-        var wordAt = model.getWordAtPosition(position, wordDefRegExp);
-        if (wordAt) {
-            seen[model.getValueInRange(wordAt)] = true;
-        }
-        for (var iter = model.createWordIterator(wordDefRegExp), e = iter.next(); !e.done && suggestions.length <= EditorSimpleWorker._suggestionsLimit; e = iter.next()) {
-            var word = e.value;
-            if (seen[word]) {
-                continue;
-            }
-            seen[word] = true;
-            if (!isNaN(Number(word))) {
-                continue;
-            }
-            suggestions.push({
-                kind: 18 /* Text */,
-                label: word,
-                insertText: word,
-                range: { startLineNumber: position.lineNumber, startColumn: wordUntil.startColumn, endLineNumber: position.lineNumber, endColumn: wordUntil.endColumn }
+        return __awaiter(this, void 0, void 0, function () {
+            var model, words, seen, wordDefRegExp, wordAt, iter, e, word;
+            return __generator(this, function (_a) {
+                model = this._getModel(modelUrl);
+                if (!model) {
+                    return [2 /*return*/, null];
+                }
+                words = [];
+                seen = new Set();
+                wordDefRegExp = new RegExp(wordDef, wordDefFlags);
+                wordAt = model.getWordAtPosition(position, wordDefRegExp);
+                if (wordAt) {
+                    seen.add(model.getValueInRange(wordAt));
+                }
+                for (iter = model.createWordIterator(wordDefRegExp), e = iter.next(); !e.done && seen.size <= EditorSimpleWorker._suggestionsLimit; e = iter.next()) {
+                    word = e.value;
+                    if (seen.has(word)) {
+                        continue;
+                    }
+                    seen.add(word);
+                    if (!isNaN(Number(word))) {
+                        continue;
+                    }
+                    words.push(word);
+                }
+                return [2 /*return*/, words];
             });
-        }
-        return Promise.resolve({ suggestions: suggestions });
+        });
     };
     // ---- END suggest --------------------------------------------------------------------------
     //#region -- word ranges --
     EditorSimpleWorker.prototype.computeWordRanges = function (modelUrl, range, wordDef, wordDefFlags) {
-        var model = this._getModel(modelUrl);
-        if (!model) {
-            return Promise.resolve(Object.create(null));
-        }
-        var wordDefRegExp = new RegExp(wordDef, wordDefFlags);
-        var result = Object.create(null);
-        for (var line = range.startLineNumber; line < range.endLineNumber; line++) {
-            var words = model.getLineWords(line, wordDefRegExp);
-            for (var _i = 0, words_1 = words; _i < words_1.length; _i++) {
-                var word = words_1[_i];
-                if (!isNaN(Number(word.word))) {
-                    continue;
+        return __awaiter(this, void 0, void 0, function () {
+            var model, wordDefRegExp, result, line, words, _i, words_1, word, array;
+            return __generator(this, function (_a) {
+                model = this._getModel(modelUrl);
+                if (!model) {
+                    return [2 /*return*/, Object.create(null)];
                 }
-                var array = result[word.word];
-                if (!array) {
-                    array = [];
-                    result[word.word] = array;
+                wordDefRegExp = new RegExp(wordDef, wordDefFlags);
+                result = Object.create(null);
+                for (line = range.startLineNumber; line < range.endLineNumber; line++) {
+                    words = model.getLineWords(line, wordDefRegExp);
+                    for (_i = 0, words_1 = words; _i < words_1.length; _i++) {
+                        word = words_1[_i];
+                        if (!isNaN(Number(word.word))) {
+                            continue;
+                        }
+                        array = result[word.word];
+                        if (!array) {
+                            array = [];
+                            result[word.word] = array;
+                        }
+                        array.push({
+                            startLineNumber: line,
+                            startColumn: word.startColumn,
+                            endLineNumber: line,
+                            endColumn: word.endColumn
+                        });
+                    }
                 }
-                array.push({
-                    startLineNumber: line,
-                    startColumn: word.startColumn,
-                    endLineNumber: line,
-                    endColumn: word.endColumn
-                });
-            }
-        }
-        return Promise.resolve(result);
+                return [2 /*return*/, result];
+            });
+        });
     };
     //#endregion
     EditorSimpleWorker.prototype.navigateValueSet = function (modelUrl, range, up, wordDef, wordDefFlags) {
-        var model = this._getModel(modelUrl);
-        if (!model) {
-            return Promise.resolve(null);
-        }
-        var wordDefRegExp = new RegExp(wordDef, wordDefFlags);
-        if (range.startColumn === range.endColumn) {
-            range = {
-                startLineNumber: range.startLineNumber,
-                startColumn: range.startColumn,
-                endLineNumber: range.endLineNumber,
-                endColumn: range.endColumn + 1
-            };
-        }
-        var selectionText = model.getValueInRange(range);
-        var wordRange = model.getWordAtPosition({ lineNumber: range.startLineNumber, column: range.startColumn }, wordDefRegExp);
-        if (!wordRange) {
-            return Promise.resolve(null);
-        }
-        var word = model.getValueInRange(wordRange);
-        var result = BasicInplaceReplace.INSTANCE.navigateValueSet(range, selectionText, wordRange, word, up);
-        return Promise.resolve(result);
+        return __awaiter(this, void 0, void 0, function () {
+            var model, wordDefRegExp, selectionText, wordRange, word, result;
+            return __generator(this, function (_a) {
+                model = this._getModel(modelUrl);
+                if (!model) {
+                    return [2 /*return*/, null];
+                }
+                wordDefRegExp = new RegExp(wordDef, wordDefFlags);
+                if (range.startColumn === range.endColumn) {
+                    range = {
+                        startLineNumber: range.startLineNumber,
+                        startColumn: range.startColumn,
+                        endLineNumber: range.endLineNumber,
+                        endColumn: range.endColumn + 1
+                    };
+                }
+                selectionText = model.getValueInRange(range);
+                wordRange = model.getWordAtPosition({ lineNumber: range.startLineNumber, column: range.startColumn }, wordDefRegExp);
+                if (!wordRange) {
+                    return [2 /*return*/, null];
+                }
+                word = model.getValueInRange(wordRange);
+                result = BasicInplaceReplace.INSTANCE.navigateValueSet(range, selectionText, wordRange, word, up);
+                return [2 /*return*/, result];
+            });
+        });
     };
     // ---- BEGIN foreign module support --------------------------------------------------------------------------
     EditorSimpleWorker.prototype.loadForeignModule = function (moduleId, createData, foreignHostMethods) {

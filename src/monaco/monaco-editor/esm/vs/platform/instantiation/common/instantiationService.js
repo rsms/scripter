@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import { illegalState } from '../../../base/common/errors.js';
 import { Graph } from './graph.js';
 import { SyncDescriptor } from './descriptors.js';
@@ -66,7 +73,7 @@ var InstantiationService = /** @class */ (function () {
                     return result;
                 }
             };
-            return fn.apply(undefined, [accessor].concat(args));
+            return fn.apply(undefined, __spreadArrays([accessor], args));
         }
         finally {
             _done = true;
@@ -117,7 +124,7 @@ var InstantiationService = /** @class */ (function () {
             }
         }
         // now create the instance
-        return new (ctor.bind.apply(ctor, [void 0].concat(args.concat(serviceArgs))))();
+        return new (ctor.bind.apply(ctor, __spreadArrays([void 0], __spreadArrays(args, serviceArgs))))();
     };
     InstantiationService.prototype._setServiceInstance = function (id, instance) {
         if (this._services.get(id) instanceof SyncDescriptor) {
@@ -157,7 +164,7 @@ var InstantiationService = /** @class */ (function () {
             var item = stack.pop();
             graph.lookupOrInsertNode(item);
             // a weak but working heuristic for cycle checks
-            if (cycleCount++ > 100) {
+            if (cycleCount++ > 150) {
                 throw new CyclicDependencyError(graph);
             }
             // check all dependencies for existence and if they need to be created first
@@ -203,7 +210,7 @@ var InstantiationService = /** @class */ (function () {
             return this._parent._createServiceInstanceWithOwner(id, ctor, args, supportsDelayedInstantiation, _trace);
         }
         else {
-            throw new Error('illegalState - creating UNKNOWN service instance');
+            throw new Error("illegalState - creating UNKNOWN service instance " + ctor.name);
         }
     };
     InstantiationService.prototype._createServiceInstance = function (ctor, args, _supportsDelayedInstantiation, _trace) {
@@ -219,8 +226,18 @@ var InstantiationService = /** @class */ (function () {
             // needed but not when injected into a consumer
             var idle_1 = new IdleValue(function () { return _this._createInstance(ctor, args, _trace); });
             return new Proxy(Object.create(null), {
-                get: function (_target, prop) {
-                    return idle_1.getValue()[prop];
+                get: function (target, key) {
+                    if (key in target) {
+                        return target[key];
+                    }
+                    var obj = idle_1.getValue();
+                    var prop = obj[key];
+                    if (typeof prop !== 'function') {
+                        return prop;
+                    }
+                    prop = prop.bind(obj);
+                    target[key] = prop;
+                    return prop;
                 },
                 set: function (_target, p, value) {
                     idle_1.getValue()[p] = value;

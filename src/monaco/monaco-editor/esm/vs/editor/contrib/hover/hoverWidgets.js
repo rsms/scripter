@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import { toggleClass } from '../../../base/browser/dom.js';
 import { DomScrollableElement } from '../../../base/browser/ui/scrollbar/scrollableElement.js';
 import { Widget } from '../../../base/browser/ui/widget.js';
@@ -42,7 +49,7 @@ var ContentHoverWidget = /** @class */ (function (_super) {
             }
         });
         _this._register(_this._editor.onDidChangeConfiguration(function (e) {
-            if (e.fontInfo) {
+            if (e.hasChanged(34 /* fontInfo */)) {
                 _this.updateFont();
             }
         }));
@@ -129,7 +136,7 @@ var ContentHoverWidget = /** @class */ (function (_super) {
     };
     ContentHoverWidget.prototype.layout = function () {
         var height = Math.max(this._editor.getLayoutInfo().height / 4, 250);
-        var _a = this._editor.getConfiguration().fontInfo, fontSize = _a.fontSize, lineHeight = _a.lineHeight;
+        var _a = this._editor.getOption(34 /* fontInfo */), fontSize = _a.fontSize, lineHeight = _a.lineHeight;
         this._domNode.style.fontSize = fontSize + "px";
         this._domNode.style.lineHeight = lineHeight + "px";
         this._domNode.style.maxHeight = height + "px";
@@ -151,7 +158,7 @@ var GlyphHoverWidget = /** @class */ (function (_super) {
         _this._domNode.setAttribute('role', 'presentation');
         _this._showAtLineNumber = -1;
         _this._register(_this._editor.onDidChangeConfiguration(function (e) {
-            if (e.fontInfo) {
+            if (e.hasChanged(34 /* fontInfo */)) {
                 _this.updateFont();
             }
         }));
@@ -183,7 +190,7 @@ var GlyphHoverWidget = /** @class */ (function (_super) {
         var editorLayout = this._editor.getLayoutInfo();
         var topForLineNumber = this._editor.getTopForLineNumber(this._showAtLineNumber);
         var editorScrollTop = this._editor.getScrollTop();
-        var lineHeight = this._editor.getConfiguration().lineHeight;
+        var lineHeight = this._editor.getOption(49 /* lineHeight */);
         var nodeHeight = this._domNode.clientHeight;
         var top = topForLineNumber - editorScrollTop - ((nodeHeight - lineHeight) / 2);
         this._domNode.style.left = editorLayout.glyphMarginLeft + editorLayout.glyphMarginWidth + "px";
@@ -206,7 +213,7 @@ var GlyphHoverWidget = /** @class */ (function (_super) {
         var _this = this;
         var codeTags = Array.prototype.slice.call(this._domNode.getElementsByTagName('code'));
         var codeClasses = Array.prototype.slice.call(this._domNode.getElementsByClassName('code'));
-        codeTags.concat(codeClasses).forEach(function (node) { return _this._editor.applyFontInfo(node); });
+        __spreadArrays(codeTags, codeClasses).forEach(function (node) { return _this._editor.applyFontInfo(node); });
     };
     GlyphHoverWidget.prototype.updateContents = function (node) {
         this._domNode.textContent = '';

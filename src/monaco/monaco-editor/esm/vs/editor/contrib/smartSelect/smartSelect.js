@@ -16,10 +16,11 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -52,7 +53,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 import * as arrays from '../../../base/common/arrays.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
-import { EditorAction, registerEditorAction, registerEditorContribution, registerDefaultLanguageCommand } from '../../browser/editorExtensions.js';
+import { EditorAction, registerEditorAction, registerEditorContribution, registerModelCommand } from '../../browser/editorExtensions.js';
 import { Position } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
 import { Selection } from '../../common/core/selection.js';
@@ -89,13 +90,10 @@ var SmartSelectController = /** @class */ (function () {
         this._editor = editor;
     }
     SmartSelectController.get = function (editor) {
-        return editor.getContribution(SmartSelectController._id);
+        return editor.getContribution(SmartSelectController.ID);
     };
     SmartSelectController.prototype.dispose = function () {
         dispose(this._selectionListener);
-    };
-    SmartSelectController.prototype.getId = function () {
-        return SmartSelectController._id;
     };
     SmartSelectController.prototype.run = function (forward) {
         var _this = this;
@@ -156,7 +154,7 @@ var SmartSelectController = /** @class */ (function () {
             }
         });
     };
-    SmartSelectController._id = 'editor.contrib.smartSelectController';
+    SmartSelectController.ID = 'editor.contrib.smartSelectController';
     return SmartSelectController;
 }());
 var AbstractSmartSelect = /** @class */ (function (_super) {
@@ -196,11 +194,14 @@ var GrowSelectionAction = /** @class */ (function (_super) {
             kbOpts: {
                 kbExpr: EditorContextKeys.editorTextFocus,
                 primary: 1024 /* Shift */ | 512 /* Alt */ | 17 /* RightArrow */,
-                mac: { primary: 2048 /* CtrlCmd */ | 256 /* WinCtrl */ | 1024 /* Shift */ | 17 /* RightArrow */ },
+                mac: {
+                    primary: 2048 /* CtrlCmd */ | 256 /* WinCtrl */ | 1024 /* Shift */ | 17 /* RightArrow */,
+                    secondary: [256 /* WinCtrl */ | 1024 /* Shift */ | 17 /* RightArrow */],
+                },
                 weight: 100 /* EditorContrib */
             },
-            menubarOpts: {
-                menuId: 22 /* MenubarSelectionMenu */,
+            menuOpts: {
+                menuId: 25 /* MenubarSelectionMenu */,
                 group: '1_basic',
                 title: nls.localize({ key: 'miSmartSelectGrow', comment: ['&& denotes a mnemonic'] }, "&&Expand Selection"),
                 order: 2
@@ -222,11 +223,14 @@ var ShrinkSelectionAction = /** @class */ (function (_super) {
             kbOpts: {
                 kbExpr: EditorContextKeys.editorTextFocus,
                 primary: 1024 /* Shift */ | 512 /* Alt */ | 15 /* LeftArrow */,
-                mac: { primary: 2048 /* CtrlCmd */ | 256 /* WinCtrl */ | 1024 /* Shift */ | 15 /* LeftArrow */ },
+                mac: {
+                    primary: 2048 /* CtrlCmd */ | 256 /* WinCtrl */ | 1024 /* Shift */ | 15 /* LeftArrow */,
+                    secondary: [256 /* WinCtrl */ | 1024 /* Shift */ | 15 /* LeftArrow */],
+                },
                 weight: 100 /* EditorContrib */
             },
-            menubarOpts: {
-                menuId: 22 /* MenubarSelectionMenu */,
+            menuOpts: {
+                menuId: 25 /* MenubarSelectionMenu */,
                 group: '1_basic',
                 title: nls.localize({ key: 'miSmartSelectShrink', comment: ['&& denotes a mnemonic'] }, "&&Shrink Selection"),
                 order: 3
@@ -235,7 +239,7 @@ var ShrinkSelectionAction = /** @class */ (function (_super) {
     }
     return ShrinkSelectionAction;
 }(AbstractSmartSelect));
-registerEditorContribution(SmartSelectController);
+registerEditorContribution(SmartSelectController.ID, SmartSelectController);
 registerEditorAction(GrowSelectionAction);
 registerEditorAction(ShrinkSelectionAction);
 // word selection
@@ -324,6 +328,11 @@ export function provideSelectionRanges(model, positions, token) {
         });
     });
 }
-registerDefaultLanguageCommand('_executeSelectionRangeProvider', function (model, _position, args) {
-    return provideSelectionRanges(model, args.positions, CancellationToken.None);
+registerModelCommand('_executeSelectionRangeProvider', function (model) {
+    var args = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        args[_i - 1] = arguments[_i];
+    }
+    var positions = args[0];
+    return provideSelectionRanges(model, positions, CancellationToken.None);
 });

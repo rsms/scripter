@@ -73,6 +73,7 @@ var Delayer = /** @class */ (function () {
         this.timeout = null;
         this.completionPromise = null;
         this.doResolve = null;
+        this.doReject = null;
         this.task = null;
     }
     Delayer.prototype.trigger = function (task, delay) {
@@ -87,14 +88,19 @@ var Delayer = /** @class */ (function () {
             }).then(function () {
                 _this.completionPromise = null;
                 _this.doResolve = null;
-                var task = _this.task;
-                _this.task = null;
-                return task();
+                if (_this.task) {
+                    var task_1 = _this.task;
+                    _this.task = null;
+                    return task_1();
+                }
+                return undefined;
             });
         }
         this.timeout = setTimeout(function () {
             _this.timeout = null;
-            _this.doResolve(null);
+            if (_this.doResolve) {
+                _this.doResolve(null);
+            }
         }, delay);
         return this.completionPromise;
     };
@@ -104,7 +110,9 @@ var Delayer = /** @class */ (function () {
     Delayer.prototype.cancel = function () {
         this.cancelTimeout();
         if (this.completionPromise) {
-            this.doReject(errors.canceled());
+            if (this.doReject) {
+                this.doReject(errors.canceled());
+            }
             this.completionPromise = null;
         }
     };

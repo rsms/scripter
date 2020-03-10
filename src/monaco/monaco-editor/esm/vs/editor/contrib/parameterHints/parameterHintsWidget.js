@@ -29,7 +29,7 @@ import { domEvent, stop } from '../../../base/browser/event.js';
 import * as aria from '../../../base/browser/ui/aria/aria.js';
 import { DomScrollableElement } from '../../../base/browser/ui/scrollbar/scrollableElement.js';
 import { Event } from '../../../base/common/event.js';
-import { Disposable, DisposableStore, MutableDisposable } from '../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore } from '../../../base/common/lifecycle.js';
 import './parameterHints.css';
 import { IModeService } from '../../common/services/modeService.js';
 import { MarkdownRenderer } from '../markdown/markdownRenderer.js';
@@ -37,9 +37,10 @@ import { Context } from './provideSignatureHelp.js';
 import * as nls from '../../../nls.js';
 import { IContextKeyService } from '../../../platform/contextkey/common/contextkey.js';
 import { IOpenerService } from '../../../platform/opener/common/opener.js';
-import { editorHoverBackground, editorHoverBorder, textCodeBlockBackground, textLinkForeground } from '../../../platform/theme/common/colorRegistry.js';
+import { editorHoverBackground, editorHoverBorder, textCodeBlockBackground, textLinkForeground, editorHoverForeground } from '../../../platform/theme/common/colorRegistry.js';
 import { HIGH_CONTRAST, registerThemingParticipant } from '../../../platform/theme/common/themeService.js';
 import { ParameterHintsModel } from './parameterHintsModel.js';
+import { pad } from '../../../base/common/strings.js';
 var $ = dom.$;
 var ParameterHintsWidget = /** @class */ (function (_super) {
     __extends(ParameterHintsWidget, _super);
@@ -47,15 +48,15 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
         var _this = _super.call(this) || this;
         _this.editor = editor;
         _this.renderDisposeables = _this._register(new DisposableStore());
-        _this.model = _this._register(new MutableDisposable());
+        _this.visible = false;
+        _this.announcedLabel = null;
         // Editor.IContentWidget.allowEditorOverflow
         _this.allowEditorOverflow = true;
         _this.markdownRenderer = _this._register(new MarkdownRenderer(editor, modeService, openerService));
-        _this.model.value = new ParameterHintsModel(editor);
+        _this.model = _this._register(new ParameterHintsModel(editor));
         _this.keyVisible = Context.Visible.bindTo(contextKeyService);
         _this.keyMultipleSignatures = Context.MultipleSignatures.bindTo(contextKeyService);
-        _this.visible = false;
-        _this._register(_this.model.value.onChangedHints(function (newParameterHints) {
+        _this._register(_this.model.onChangedHints(function (newParameterHints) {
             if (newParameterHints) {
                 _this.show();
                 _this.render(newParameterHints);
@@ -68,66 +69,79 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
     }
     ParameterHintsWidget.prototype.createParamaterHintDOMNodes = function () {
         var _this = this;
-        this.element = $('.editor-widget.parameter-hints-widget');
-        var wrapper = dom.append(this.element, $('.wrapper'));
+        var element = $('.editor-widget.parameter-hints-widget');
+        var wrapper = dom.append(element, $('.wrapper'));
         wrapper.tabIndex = -1;
-        var buttons = dom.append(wrapper, $('.buttons'));
-        var previous = dom.append(buttons, $('.button.previous'));
-        var next = dom.append(buttons, $('.button.next'));
+        var controls = dom.append(wrapper, $('.controls'));
+        var previous = dom.append(controls, $('.button.codicon.codicon-chevron-up'));
+        var overloads = dom.append(controls, $('.overloads'));
+        var next = dom.append(controls, $('.button.codicon.codicon-chevron-down'));
         var onPreviousClick = stop(domEvent(previous, 'click'));
         this._register(onPreviousClick(this.previous, this));
         var onNextClick = stop(domEvent(next, 'click'));
         this._register(onNextClick(this.next, this));
-        this.overloads = dom.append(wrapper, $('.overloads'));
         var body = $('.body');
-        this.scrollbar = new DomScrollableElement(body, {});
-        this._register(this.scrollbar);
-        wrapper.appendChild(this.scrollbar.getDomNode());
-        this.signature = dom.append(body, $('.signature'));
-        this.docs = dom.append(body, $('.docs'));
+        var scrollbar = new DomScrollableElement(body, {});
+        this._register(scrollbar);
+        wrapper.appendChild(scrollbar.getDomNode());
+        var signature = dom.append(body, $('.signature'));
+        var docs = dom.append(body, $('.docs'));
+        element.style.userSelect = 'text';
+        this.domNodes = {
+            element: element,
+            signature: signature,
+            overloads: overloads,
+            docs: docs,
+            scrollbar: scrollbar,
+        };
         this.editor.addContentWidget(this);
         this.hide();
-        this.element.style.userSelect = 'text';
         this._register(this.editor.onDidChangeCursorSelection(function (e) {
             if (_this.visible) {
                 _this.editor.layoutContentWidget(_this);
             }
         }));
         var updateFont = function () {
-            var fontInfo = _this.editor.getConfiguration().fontInfo;
-            _this.element.style.fontSize = fontInfo.fontSize + "px";
+            if (!_this.domNodes) {
+                return;
+            }
+            var fontInfo = _this.editor.getOption(34 /* fontInfo */);
+            _this.domNodes.element.style.fontSize = fontInfo.fontSize + "px";
         };
         updateFont();
         this._register(Event.chain(this.editor.onDidChangeConfiguration.bind(this.editor))
-            .filter(function (e) { return e.fontInfo; })
+            .filter(function (e) { return e.hasChanged(34 /* fontInfo */); })
             .on(updateFont, null));
         this._register(this.editor.onDidLayoutChange(function (e) { return _this.updateMaxHeight(); }));
         this.updateMaxHeight();
     };
     ParameterHintsWidget.prototype.show = function () {
         var _this = this;
-        if (!this.model || this.visible) {
+        if (this.visible) {
             return;
         }
-        if (!this.element) {
+        if (!this.domNodes) {
             this.createParamaterHintDOMNodes();
         }
         this.keyVisible.set(true);
         this.visible = true;
-        setTimeout(function () { return dom.addClass(_this.element, 'visible'); }, 100);
+        setTimeout(function () {
+            if (_this.domNodes) {
+                dom.addClass(_this.domNodes.element, 'visible');
+            }
+        }, 100);
         this.editor.layoutContentWidget(this);
     };
     ParameterHintsWidget.prototype.hide = function () {
-        if (!this.model || !this.visible) {
+        if (!this.visible) {
             return;
-        }
-        if (!this.element) {
-            this.createParamaterHintDOMNodes();
         }
         this.keyVisible.reset();
         this.visible = false;
         this.announcedLabel = null;
-        dom.removeClass(this.element, 'visible');
+        if (this.domNodes) {
+            dom.removeClass(this.domNodes.element, 'visible');
+        }
         this.editor.layoutContentWidget(this);
     };
     ParameterHintsWidget.prototype.getPosition = function () {
@@ -140,18 +154,21 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
         return null;
     };
     ParameterHintsWidget.prototype.render = function (hints) {
+        if (!this.domNodes) {
+            return;
+        }
         var multiple = hints.signatures.length > 1;
-        dom.toggleClass(this.element, 'multiple', multiple);
+        dom.toggleClass(this.domNodes.element, 'multiple', multiple);
         this.keyMultipleSignatures.set(multiple);
-        this.signature.innerHTML = '';
-        this.docs.innerHTML = '';
+        this.domNodes.signature.innerHTML = '';
+        this.domNodes.docs.innerHTML = '';
         var signature = hints.signatures[hints.activeSignature];
         if (!signature) {
             return;
         }
-        var code = dom.append(this.signature, $('.code'));
+        var code = dom.append(this.domNodes.signature, $('.code'));
         var hasParameters = signature.parameters.length > 0;
-        var fontInfo = this.editor.getConfiguration().fontInfo;
+        var fontInfo = this.editor.getOption(34 /* fontInfo */);
         code.style.fontSize = fontInfo.fontSize + "px";
         code.style.fontFamily = fontInfo.fontFamily;
         if (!hasParameters) {
@@ -174,38 +191,23 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
                 this.renderDisposeables.add(renderedContents);
                 documentation.appendChild(renderedContents.element);
             }
-            dom.append(this.docs, $('p', {}, documentation));
+            dom.append(this.domNodes.docs, $('p', {}, documentation));
         }
         if (signature.documentation === undefined) { /** no op */ }
         else if (typeof signature.documentation === 'string') {
-            dom.append(this.docs, $('p', {}, signature.documentation));
+            dom.append(this.domNodes.docs, $('p', {}, signature.documentation));
         }
         else {
             var renderedContents = this.markdownRenderer.render(signature.documentation);
             dom.addClass(renderedContents.element, 'markdown-docs');
             this.renderDisposeables.add(renderedContents);
-            dom.append(this.docs, renderedContents.element);
+            dom.append(this.domNodes.docs, renderedContents.element);
         }
-        var hasDocs = false;
-        if (activeParameter && typeof (activeParameter.documentation) === 'string' && activeParameter.documentation.length > 0) {
-            hasDocs = true;
-        }
-        if (activeParameter && typeof (activeParameter.documentation) === 'object' && activeParameter.documentation.value.length > 0) {
-            hasDocs = true;
-        }
-        if (typeof (signature.documentation) === 'string' && signature.documentation.length > 0) {
-            hasDocs = true;
-        }
-        if (typeof (signature.documentation) === 'object' && signature.documentation.value.length > 0) {
-            hasDocs = true;
-        }
-        dom.toggleClass(this.signature, 'has-docs', hasDocs);
-        dom.toggleClass(this.docs, 'empty', !hasDocs);
-        var currentOverload = String(hints.activeSignature + 1);
-        if (hints.signatures.length < 10) {
-            currentOverload += "/" + hints.signatures.length;
-        }
-        this.overloads.textContent = currentOverload;
+        var hasDocs = this.hasDocs(signature, activeParameter);
+        dom.toggleClass(this.domNodes.signature, 'has-docs', hasDocs);
+        dom.toggleClass(this.domNodes.docs, 'empty', !hasDocs);
+        this.domNodes.overloads.textContent =
+            pad(hints.activeSignature + 1, hints.signatures.length.toString().length) + '/' + hints.signatures.length;
         if (activeParameter) {
             var labelToAnnounce = this.getParameterLabel(signature, hints.activeParameter);
             // Select method gets called on every user type while parameter hints are visible.
@@ -216,7 +218,22 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
             }
         }
         this.editor.layoutContentWidget(this);
-        this.scrollbar.scanDomNode();
+        this.domNodes.scrollbar.scanDomNode();
+    };
+    ParameterHintsWidget.prototype.hasDocs = function (signature, activeParameter) {
+        if (activeParameter && typeof (activeParameter.documentation) === 'string' && activeParameter.documentation.length > 0) {
+            return true;
+        }
+        if (activeParameter && typeof (activeParameter.documentation) === 'object' && activeParameter.documentation.value.length > 0) {
+            return true;
+        }
+        if (typeof (signature.documentation) === 'string' && signature.documentation.length > 0) {
+            return true;
+        }
+        if (typeof (signature.documentation) === 'object' && signature.documentation.value.length > 0) {
+            return true;
+        }
+        return false;
     };
     ParameterHintsWidget.prototype.renderParameters = function (parent, signature, currentParameter) {
         var _a = this.getParameterLabelOffsets(signature, currentParameter), start = _a[0], end = _a[1];
@@ -254,36 +271,39 @@ var ParameterHintsWidget = /** @class */ (function (_super) {
         }
     };
     ParameterHintsWidget.prototype.next = function () {
-        if (this.model.value) {
-            this.editor.focus();
-            this.model.value.next();
-        }
+        this.editor.focus();
+        this.model.next();
     };
     ParameterHintsWidget.prototype.previous = function () {
-        if (this.model.value) {
-            this.editor.focus();
-            this.model.value.previous();
-        }
+        this.editor.focus();
+        this.model.previous();
     };
     ParameterHintsWidget.prototype.cancel = function () {
-        if (this.model.value) {
-            this.model.value.cancel();
-        }
+        this.model.cancel();
     };
     ParameterHintsWidget.prototype.getDomNode = function () {
-        return this.element;
+        if (!this.domNodes) {
+            this.createParamaterHintDOMNodes();
+        }
+        return this.domNodes.element;
     };
     ParameterHintsWidget.prototype.getId = function () {
         return ParameterHintsWidget.ID;
     };
     ParameterHintsWidget.prototype.trigger = function (context) {
-        if (this.model.value) {
-            this.model.value.trigger(context, 0);
-        }
+        this.model.trigger(context, 0);
     };
     ParameterHintsWidget.prototype.updateMaxHeight = function () {
+        if (!this.domNodes) {
+            return;
+        }
         var height = Math.max(this.editor.getLayoutInfo().height / 4, 250);
-        this.element.style.maxHeight = height + "px";
+        var maxHeight = height + "px";
+        this.domNodes.element.style.maxHeight = maxHeight;
+        var wrapper = this.domNodes.element.getElementsByClassName('wrapper');
+        if (wrapper.length) {
+            wrapper[0].style.maxHeight = maxHeight;
+        }
     };
     ParameterHintsWidget.ID = 'editor.widget.parameterHintsWidget';
     ParameterHintsWidget = __decorate([
@@ -309,6 +329,10 @@ registerThemingParticipant(function (theme, collector) {
     var link = theme.getColor(textLinkForeground);
     if (link) {
         collector.addRule(".monaco-editor .parameter-hints-widget a { color: " + link + "; }");
+    }
+    var foreground = theme.getColor(editorHoverForeground);
+    if (foreground) {
+        collector.addRule(".monaco-editor .parameter-hints-widget { color: " + foreground + "; }");
     }
     var codeBackground = theme.getColor(textCodeBlockBackground);
     if (codeBackground) {

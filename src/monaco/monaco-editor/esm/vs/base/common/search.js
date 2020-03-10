@@ -5,6 +5,14 @@
 import * as strings from './strings.js';
 export function buildReplaceStringWithCasePreserved(matches, pattern) {
     if (matches && (matches[0] !== '')) {
+        var containsHyphens = validateSpecificSpecialCharacter(matches, pattern, '-');
+        var containsUnderscores = validateSpecificSpecialCharacter(matches, pattern, '_');
+        if (containsHyphens && !containsUnderscores) {
+            return buildReplaceStringForSpecificSpecialCharacter(matches, pattern, '-');
+        }
+        else if (!containsHyphens && containsUnderscores) {
+            return buildReplaceStringForSpecificSpecialCharacter(matches, pattern, '_');
+        }
         if (matches[0].toUpperCase() === matches[0]) {
             return pattern.toUpperCase();
         }
@@ -12,12 +20,7 @@ export function buildReplaceStringWithCasePreserved(matches, pattern) {
             return pattern.toLowerCase();
         }
         else if (strings.containsUppercaseCharacter(matches[0][0])) {
-            if (validateSpecificSpecialCharacter(matches, pattern, '-')) {
-                return buildReplaceStringForSpecificSpecialCharacter(matches, pattern, '-');
-            }
-            else {
-                return pattern[0].toUpperCase() + pattern.substr(1);
-            }
+            return pattern[0].toUpperCase() + pattern.substr(1);
         }
         else {
             // we don't understand its pattern yet.
@@ -29,8 +32,8 @@ export function buildReplaceStringWithCasePreserved(matches, pattern) {
     }
 }
 function validateSpecificSpecialCharacter(matches, pattern, specialCharacter) {
-    var doesConatinSpecialCharacter = matches[0].indexOf(specialCharacter) !== -1 && pattern.indexOf(specialCharacter) !== -1;
-    return doesConatinSpecialCharacter && matches[0].split(specialCharacter).length === pattern.split(specialCharacter).length;
+    var doesContainSpecialCharacter = matches[0].indexOf(specialCharacter) !== -1 && pattern.indexOf(specialCharacter) !== -1;
+    return doesContainSpecialCharacter && matches[0].split(specialCharacter).length === pattern.split(specialCharacter).length;
 }
 function buildReplaceStringForSpecificSpecialCharacter(matches, pattern, specialCharacter) {
     var splitPatternAtSpecialCharacter = pattern.split(specialCharacter);

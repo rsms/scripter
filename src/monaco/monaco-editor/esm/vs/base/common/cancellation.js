@@ -104,7 +104,11 @@ var CancellationTokenSource = /** @class */ (function () {
             this._token.cancel();
         }
     };
-    CancellationTokenSource.prototype.dispose = function () {
+    CancellationTokenSource.prototype.dispose = function (cancel) {
+        if (cancel === void 0) { cancel = false; }
+        if (cancel) {
+            this.cancel();
+        }
         if (this._parentListener) {
             this._parentListener.dispose();
         }

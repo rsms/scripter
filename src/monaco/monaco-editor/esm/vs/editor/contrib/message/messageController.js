@@ -47,10 +47,7 @@ var MessageController = /** @class */ (function (_super) {
         return _this;
     }
     MessageController.get = function (editor) {
-        return editor.getContribution(MessageController._id);
-    };
-    MessageController.prototype.getId = function () {
-        return MessageController._id;
+        return editor.getContribution(MessageController.ID);
     };
     MessageController.prototype.dispose = function () {
         _super.prototype.dispose.call(this);
@@ -98,7 +95,7 @@ var MessageController = /** @class */ (function (_super) {
             this.showMessage(nls.localize('editor.readonly', "Cannot edit in read-only editor"), this._editor.getPosition());
         }
     };
-    MessageController._id = 'editor.contrib.messageController';
+    MessageController.ID = 'editor.contrib.messageController';
     MessageController.MESSAGE_VISIBLE = new RawContextKey('messageVisible', false);
     MessageController = __decorate([
         __param(1, IContextKeyService)
@@ -159,11 +156,11 @@ var MessageWidget = /** @class */ (function () {
         return this._domNode;
     };
     MessageWidget.prototype.getPosition = function () {
-        return { position: this._position, preference: [1 /* ABOVE */] };
+        return { position: this._position, preference: [1 /* ABOVE */, 2 /* BELOW */] };
     };
     return MessageWidget;
 }());
-registerEditorContribution(MessageController);
+registerEditorContribution(MessageController.ID, MessageController);
 registerThemingParticipant(function (theme, collector) {
     var border = theme.getColor(inputValidationInfoBorder);
     if (border) {

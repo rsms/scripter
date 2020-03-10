@@ -38,7 +38,7 @@ var Checkbox = /** @class */ (function (_super) {
         _this._checked = _this._opts.isChecked;
         _this.domNode = document.createElement('div');
         _this.domNode.title = _this._opts.title;
-        _this.domNode.className = 'monaco-custom-checkbox ' + (_this._opts.actionClassName || '') + ' ' + (_this._checked ? 'checked' : 'unchecked');
+        _this.domNode.className = 'monaco-custom-checkbox codicon ' + (_this._opts.actionClassName || '') + ' ' + (_this._checked ? 'checked' : 'unchecked');
         _this.domNode.tabIndex = 0;
         _this.domNode.setAttribute('role', 'checkbox');
         _this.domNode.setAttribute('aria-checked', String(_this._checked));
@@ -49,6 +49,7 @@ var Checkbox = /** @class */ (function (_super) {
             _this._onChange.fire(false);
             ev.preventDefault();
         });
+        _this.ignoreGesture(_this.domNode);
         _this.onkeydown(_this.domNode, function (keyboardEvent) {
             if (keyboardEvent.keyCode === 10 /* Space */ || keyboardEvent.keyCode === 3 /* Enter */) {
                 _this.checked = !_this._checked;
@@ -60,6 +61,13 @@ var Checkbox = /** @class */ (function (_super) {
         });
         return _this;
     }
+    Object.defineProperty(Checkbox.prototype, "enabled", {
+        get: function () {
+            return this.domNode.getAttribute('aria-disabled') !== 'true';
+        },
+        enumerable: true,
+        configurable: true
+    });
     Checkbox.prototype.focus = function () {
         this.domNode.focus();
     };

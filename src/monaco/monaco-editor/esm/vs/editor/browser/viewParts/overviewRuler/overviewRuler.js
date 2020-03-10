@@ -23,16 +23,18 @@ var OverviewRuler = /** @class */ (function (_super) {
     function OverviewRuler(context, cssClassName) {
         var _this = _super.call(this) || this;
         _this._context = context;
+        var options = _this._context.configuration.options;
         _this._domNode = createFastDomNode(document.createElement('canvas'));
         _this._domNode.setClassName(cssClassName);
         _this._domNode.setPosition('absolute');
         _this._domNode.setLayerHinting(true);
+        _this._domNode.setContain('strict');
         _this._zoneManager = new OverviewZoneManager(function (lineNumber) { return _this._context.viewLayout.getVerticalOffsetForLineNumber(lineNumber); });
         _this._zoneManager.setDOMWidth(0);
         _this._zoneManager.setDOMHeight(0);
         _this._zoneManager.setOuterHeight(_this._context.viewLayout.getScrollHeight());
-        _this._zoneManager.setLineHeight(_this._context.configuration.editor.lineHeight);
-        _this._zoneManager.setPixelRatio(_this._context.configuration.editor.pixelRatio);
+        _this._zoneManager.setLineHeight(options.get(49 /* lineHeight */));
+        _this._zoneManager.setPixelRatio(options.get(105 /* pixelRatio */));
         _this._context.addEventHandler(_this);
         return _this;
     }
@@ -42,12 +44,13 @@ var OverviewRuler = /** @class */ (function (_super) {
     };
     // ---- begin view event handlers
     OverviewRuler.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._zoneManager.setLineHeight(this._context.configuration.editor.lineHeight);
+        var options = this._context.configuration.options;
+        if (e.hasChanged(49 /* lineHeight */)) {
+            this._zoneManager.setLineHeight(options.get(49 /* lineHeight */));
             this._render();
         }
-        if (e.pixelRatio) {
-            this._zoneManager.setPixelRatio(this._context.configuration.editor.pixelRatio);
+        if (e.hasChanged(105 /* pixelRatio */)) {
+            this._zoneManager.setPixelRatio(options.get(105 /* pixelRatio */));
             this._domNode.setWidth(this._zoneManager.getDOMWidth());
             this._domNode.setHeight(this._zoneManager.getDOMHeight());
             this._domNode.domNode.width = this._zoneManager.getCanvasWidth();

@@ -61,10 +61,12 @@ function spacesDiff(a, aLength, b, bLength, result) {
         result.spacesDiff = spacesDiff;
         if (spacesDiff > 0 && 0 <= bSpacesCnt - 1 && bSpacesCnt - 1 < a.length && bSpacesCnt < b.length) {
             if (b.charCodeAt(bSpacesCnt) !== 32 /* Space */ && a.charCodeAt(bSpacesCnt - 1) === 32 /* Space */) {
-                // This looks like an alignment desire: e.g.
-                // const a = b + c,
-                //       d = b - c;
-                result.looksLikeAlignment = true;
+                if (a.charCodeAt(a.length - 1) === 44 /* Comma */) {
+                    // This looks like an alignment desire: e.g.
+                    // const a = b + c,
+                    //       d = b - c;
+                    result.looksLikeAlignment = true;
+                }
             }
         }
         return;

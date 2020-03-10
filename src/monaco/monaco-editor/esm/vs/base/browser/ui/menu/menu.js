@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import './menu.css';
 import * as nls from '../../../../nls.js';
 import * as strings from '../../../common/strings.js';
@@ -25,10 +32,14 @@ import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { RunOnceScheduler } from '../../../common/async.js';
 import { DisposableStore } from '../../../common/lifecycle.js';
 import { DomScrollableElement } from '../scrollbar/scrollableElement.js';
-import { Emitter } from '../../../common/event.js';
 import { isLinux, isMacintosh } from '../../../common/platform.js';
 export var MENU_MNEMONIC_REGEX = /\(&([^\s&])\)|(^|[^&])&([^\s&])/;
 export var MENU_ESCAPED_MNEMONIC_REGEX = /(&amp;)?(&amp;)([^\s&])/g;
+export var Direction;
+(function (Direction) {
+    Direction[Direction["Right"] = 0] = "Right";
+    Direction[Direction["Left"] = 1] = "Left";
+})(Direction || (Direction = {}));
 var SubmenuAction = /** @class */ (function (_super) {
     __extends(SubmenuAction, _super);
     function SubmenuAction(label, entries, cssClass) {
@@ -55,10 +66,9 @@ var Menu = /** @class */ (function (_super) {
             context: options.context,
             actionRunner: options.actionRunner,
             ariaLabel: options.ariaLabel,
-            triggerKeys: { keys: [3 /* Enter */].concat((isMacintosh ? [10 /* Space */] : [])), keyDown: true }
+            triggerKeys: { keys: __spreadArrays([3 /* Enter */], (isMacintosh ? [10 /* Space */] : [])), keyDown: true }
         }) || this;
         _this.menuElement = menuElement;
-        _this._onScroll = _this._register(new Emitter());
         _this.actionsList.setAttribute('role', 'menu');
         _this.actionsList.tabIndex = 0;
         _this.menuDisposables = _this._register(new DisposableStore());
@@ -76,14 +86,14 @@ var Menu = /** @class */ (function (_super) {
                     EventHelper.stop(e, true);
                     var actions_1 = _this.mnemonics.get(key);
                     if (actions_1.length === 1) {
-                        if (actions_1[0] instanceof SubmenuMenuActionViewItem) {
+                        if (actions_1[0] instanceof SubmenuMenuActionViewItem && actions_1[0].container) {
                             _this.focusItemByElement(actions_1[0].container);
                         }
                         actions_1[0].onClick(e);
                     }
                     if (actions_1.length > 1) {
                         var action = actions_1.shift();
-                        if (action) {
+                        if (action && action.container) {
                             _this.focusItemByElement(action.container);
                             actions_1.push(action);
                         }
@@ -111,14 +121,9 @@ var Menu = /** @class */ (function (_super) {
             var relatedTarget = e.relatedTarget;
             if (!isAncestor(relatedTarget, _this.domNode)) {
                 _this.focusedItem = undefined;
-                _this.scrollTopHold = _this.menuElement.scrollTop;
                 _this.updateFocus();
                 e.stopPropagation();
             }
-        }));
-        _this._register(addDisposableListener(_this.domNode, EventType.MOUSE_UP, function (e) {
-            // Absorb clicks in menu dead space https://github.com/Microsoft/vscode/issues/63575
-            EventHelper.stop(e, true);
         }));
         _this._register(addDisposableListener(_this.actionsList, EventType.MOUSE_OVER, function (e) {
             var target = e.target;
@@ -130,7 +135,6 @@ var Menu = /** @class */ (function (_super) {
             }
             if (hasClass(target, 'action-item')) {
                 var lastFocusedItem = _this.focusedItem;
-                _this.scrollTopHold = _this.menuElement.scrollTop;
                 _this.setFocusedItem(target);
                 if (lastFocusedItem !== _this.focusedItem) {
                     _this.updateFocus();
@@ -141,7 +145,6 @@ var Menu = /** @class */ (function (_super) {
             parent: _this
         };
         _this.mnemonics = new Map();
-        _this.push(actions, { icon: true, label: true, isMenu: true });
         // Scroll Logic
         _this.scrollableElement = _this._register(new DomScrollableElement(menuElement, {
             alwaysConsumeMouseWheel: true,
@@ -152,18 +155,14 @@ var Menu = /** @class */ (function (_super) {
             useShadows: true
         }));
         var scrollElement = _this.scrollableElement.getDomNode();
-        scrollElement.style.position = null;
-        menuElement.style.maxHeight = Math.max(10, window.innerHeight - container.getBoundingClientRect().top - 30) + "px";
-        _this.menuDisposables.add(_this.scrollableElement.onScroll(function () {
-            _this._onScroll.fire();
-        }, _this));
-        _this._register(addDisposableListener(_this.menuElement, EventType.SCROLL, function (e) {
-            if (_this.scrollTopHold !== undefined) {
-                _this.menuElement.scrollTop = _this.scrollTopHold;
-                _this.scrollTopHold = undefined;
-            }
-            _this.scrollableElement.scanDomNode();
+        scrollElement.style.position = '';
+        _this._register(addDisposableListener(scrollElement, EventType.MOUSE_UP, function (e) {
+            // Absorb clicks in menu dead space https://github.com/Microsoft/vscode/issues/63575
+            // We do this on the scroll element so the scroll bar doesn't dismiss the menu either
+            e.preventDefault();
         }));
+        menuElement.style.maxHeight = Math.max(10, window.innerHeight - container.getBoundingClientRect().top - 30) + "px";
+        _this.push(actions, { icon: true, label: true, isMenu: true });
         container.appendChild(_this.scrollableElement.getDomNode());
         _this.scrollableElement.scanDomNode();
         _this.viewItems.filter(function (item) { return !(item instanceof MenuSeparatorActionViewItem); }).forEach(function (item, index, array) {
@@ -173,10 +172,10 @@ var Menu = /** @class */ (function (_super) {
     }
     Menu.prototype.style = function (style) {
         var container = this.getContainer();
-        var fgColor = style.foregroundColor ? "" + style.foregroundColor : null;
-        var bgColor = style.backgroundColor ? "" + style.backgroundColor : null;
-        var border = style.borderColor ? "2px solid " + style.borderColor : null;
-        var shadow = style.shadowColor ? "0 2px 4px " + style.shadowColor : null;
+        var fgColor = style.foregroundColor ? "" + style.foregroundColor : '';
+        var bgColor = style.backgroundColor ? "" + style.backgroundColor : '';
+        var border = style.borderColor ? "1px solid " + style.borderColor : '';
+        var shadow = style.shadowColor ? "0 2px 4px " + style.shadowColor : '';
         container.style.border = border;
         this.domNode.style.color = fgColor;
         this.domNode.style.backgroundColor = bgColor;
@@ -194,7 +193,7 @@ var Menu = /** @class */ (function (_super) {
     };
     Object.defineProperty(Menu.prototype, "onScroll", {
         get: function () {
-            return this._onScroll.event;
+            return this.scrollableElement.onScroll;
         },
         enumerable: true,
         configurable: true
@@ -220,6 +219,17 @@ var Menu = /** @class */ (function (_super) {
                 this.focusedItem = i;
                 break;
             }
+        }
+    };
+    Menu.prototype.updateFocus = function (fromRight) {
+        _super.prototype.updateFocus.call(this, fromRight, true);
+        if (typeof this.focusedItem !== 'undefined') {
+            // Workaround for #80047 caused by an issue in chromium
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=414283
+            // When that's fixed, just call this.scrollableElement.scanDomNode()
+            this.scrollableElement.setScrollPosition({
+                scrollTop: Math.round(this.menuElement.scrollTop)
+            });
         }
     };
     Menu.prototype.doGetActionViewItem = function (action, options, parentData) {
@@ -297,10 +307,13 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
                 return;
             }
             _this._register(addDisposableListener(_this.element, EventType.MOUSE_UP, function (e) {
+                if (e.defaultPrevented) {
+                    return;
+                }
                 EventHelper.stop(e, true);
                 _this.onClick(e);
             }));
-        }, 50);
+        }, 100);
         _this._register(_this.runOnceToEnableMouseUp);
         return _this;
     }
@@ -321,7 +334,7 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
                 this.item.setAttribute('aria-keyshortcuts', "" + this.mnemonic);
             }
         }
-        this.check = append(this.item, $('span.menu-item-check'));
+        this.check = append(this.item, $('span.menu-item-check.codicon.codicon-check'));
         this.check.setAttribute('role', 'none');
         this.label = append(this.item, $('span.action-label'));
         if (this.options.label && this.options.keybinding) {
@@ -341,12 +354,16 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
     };
     BaseMenuActionViewItem.prototype.focus = function () {
         _super.prototype.focus.call(this);
-        this.item.focus();
+        if (this.item) {
+            this.item.focus();
+        }
         this.applyStyle();
     };
     BaseMenuActionViewItem.prototype.updatePositionInSet = function (pos, setSize) {
-        this.item.setAttribute('aria-posinset', "" + pos);
-        this.item.setAttribute('aria-setsize', "" + setSize);
+        if (this.item) {
+            this.item.setAttribute('aria-posinset', "" + pos);
+            this.item.setAttribute('aria-setsize', "" + setSize);
+        }
     };
     BaseMenuActionViewItem.prototype.updateLabel = function () {
         if (this.options.label) {
@@ -356,7 +373,9 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
                 if (!this.options.enableMnemonics) {
                     label = cleanLabel;
                 }
-                this.label.setAttribute('aria-label', cleanLabel.replace(/&&/g, '&'));
+                if (this.label) {
+                    this.label.setAttribute('aria-label', cleanLabel.replace(/&&/g, '&'));
+                }
                 var matches = MENU_MNEMONIC_REGEX.exec(label);
                 if (matches) {
                     label = strings.escape(label);
@@ -371,13 +390,17 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
                         label = label.substr(0, escMatch.index) + "<u aria-hidden=\"true\">" + escMatch[3] + "</u>" + label.substr(escMatch.index + escMatch[0].length);
                     }
                     label = label.replace(/&amp;&amp;/g, '&amp;');
-                    this.item.setAttribute('aria-keyshortcuts', (!!matches[1] ? matches[1] : matches[3]).toLocaleLowerCase());
+                    if (this.item) {
+                        this.item.setAttribute('aria-keyshortcuts', (!!matches[1] ? matches[1] : matches[3]).toLocaleLowerCase());
+                    }
                 }
                 else {
                     label = label.replace(/&&/g, '&');
                 }
             }
-            this.label.innerHTML = label.trim();
+            if (this.label) {
+                this.label.innerHTML = label.trim();
+            }
         }
     };
     BaseMenuActionViewItem.prototype.updateTooltip = function () {
@@ -391,15 +414,15 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
                 title = nls.localize({ key: 'titleLabel', comment: ['action title', 'action keybinding'] }, "{0} ({1})", title, this.options.keybinding);
             }
         }
-        if (title) {
+        if (title && this.item) {
             this.item.title = title;
         }
     };
     BaseMenuActionViewItem.prototype.updateClass = function () {
-        if (this.cssClass) {
+        if (this.cssClass && this.item) {
             removeClasses(this.item, this.cssClass);
         }
-        if (this.options.icon) {
+        if (this.options.icon && this.label) {
             this.cssClass = this.getAction().class || '';
             addClass(this.label, 'icon');
             if (this.cssClass) {
@@ -407,7 +430,7 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
             }
             this.updateEnabled();
         }
-        else {
+        else if (this.label) {
             removeClass(this.label, 'icon');
         }
     };
@@ -416,18 +439,25 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
             if (this.element) {
                 removeClass(this.element, 'disabled');
             }
-            removeClass(this.item, 'disabled');
-            this.item.tabIndex = 0;
+            if (this.item) {
+                removeClass(this.item, 'disabled');
+                this.item.tabIndex = 0;
+            }
         }
         else {
             if (this.element) {
                 addClass(this.element, 'disabled');
             }
-            addClass(this.item, 'disabled');
-            removeTabIndexAndUpdateFocus(this.item);
+            if (this.item) {
+                addClass(this.item, 'disabled');
+                removeTabIndexAndUpdateFocus(this.item);
+            }
         }
     };
     BaseMenuActionViewItem.prototype.updateChecked = function () {
+        if (!this.item) {
+            return;
+        }
         if (this.getAction().checked) {
             addClass(this.item, 'checked');
             this.item.setAttribute('role', 'menuitemcheckbox');
@@ -448,12 +478,18 @@ var BaseMenuActionViewItem = /** @class */ (function (_super) {
         }
         var isSelected = this.element && hasClass(this.element, 'focused');
         var fgColor = isSelected && this.menuStyle.selectionForegroundColor ? this.menuStyle.selectionForegroundColor : this.menuStyle.foregroundColor;
-        var bgColor = isSelected && this.menuStyle.selectionBackgroundColor ? this.menuStyle.selectionBackgroundColor : this.menuStyle.backgroundColor;
-        var border = isSelected && this.menuStyle.selectionBorderColor ? "thin solid " + this.menuStyle.selectionBorderColor : null;
-        this.item.style.color = fgColor ? "" + fgColor : null;
-        this.check.style.backgroundColor = fgColor ? "" + fgColor : null;
-        this.item.style.backgroundColor = bgColor ? "" + bgColor : null;
-        this.container.style.border = border;
+        var bgColor = isSelected && this.menuStyle.selectionBackgroundColor ? this.menuStyle.selectionBackgroundColor : undefined;
+        var border = isSelected && this.menuStyle.selectionBorderColor ? "thin solid " + this.menuStyle.selectionBorderColor : '';
+        if (this.item) {
+            this.item.style.color = fgColor ? fgColor.toString() : '';
+            this.item.style.backgroundColor = bgColor ? bgColor.toString() : '';
+        }
+        if (this.check) {
+            this.check.style.color = fgColor ? fgColor.toString() : '';
+        }
+        if (this.container) {
+            this.container.style.border = border;
+        }
     };
     BaseMenuActionViewItem.prototype.style = function (style) {
         this.menuStyle = style;
@@ -468,7 +504,10 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
         _this.submenuActions = submenuActions;
         _this.parentData = parentData;
         _this.submenuOptions = submenuOptions;
+        _this.mysubmenu = null;
         _this.submenuDisposables = _this._register(new DisposableStore());
+        _this.mouseOver = false;
+        _this.expandDirection = submenuOptions && submenuOptions.expandDirection !== undefined ? submenuOptions.expandDirection : Direction.Right;
         _this.showScheduler = new RunOnceScheduler(function () {
             if (_this.mouseOver) {
                 _this.cleanupExistingSubmenu(false);
@@ -489,10 +528,13 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
         if (!this.element) {
             return;
         }
-        addClass(this.item, 'monaco-submenu-item');
-        this.item.setAttribute('aria-haspopup', 'true');
-        this.submenuIndicator = append(this.item, $('span.submenu-indicator'));
-        this.submenuIndicator.setAttribute('aria-hidden', 'true');
+        if (this.item) {
+            addClass(this.item, 'monaco-submenu-item');
+            this.item.setAttribute('aria-haspopup', 'true');
+            this.updateAriaExpanded('false');
+            this.submenuIndicator = append(this.item, $('span.submenu-indicator.codicon.codicon-chevron-right'));
+            this.submenuIndicator.setAttribute('aria-hidden', 'true');
+        }
         this._register(addDisposableListener(this.element, EventType.KEY_UP, function (e) {
             var event = new StandardKeyboardEvent(e);
             if (event.equals(17 /* RightArrow */) || event.equals(3 /* Enter */)) {
@@ -531,12 +573,13 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
         // stop clicking from trying to run an action
         EventHelper.stop(e, true);
         this.cleanupExistingSubmenu(false);
-        this.createSubmenu(false);
+        this.createSubmenu(true);
     };
     SubmenuMenuActionViewItem.prototype.cleanupExistingSubmenu = function (force) {
         if (this.parentData.submenu && (force || (this.parentData.submenu !== this.mysubmenu))) {
             this.parentData.submenu.dispose();
             this.parentData.submenu = undefined;
+            this.updateAriaExpanded('false');
             if (this.submenuContainer) {
                 this.submenuDisposables.clear();
                 this.submenuContainer = undefined;
@@ -550,22 +593,33 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
             return;
         }
         if (!this.parentData.submenu) {
+            this.updateAriaExpanded('true');
             this.submenuContainer = append(this.element, $('div.monaco-submenu'));
             addClasses(this.submenuContainer, 'menubar-menu-items-holder', 'context-view');
+            // Set the top value of the menu container before construction
+            // This allows the menu constructor to calculate the proper max height
+            var computedStyles = getComputedStyle(this.parentData.parent.domNode);
+            var paddingTop = parseFloat(computedStyles.paddingTop || '0') || 0;
+            this.submenuContainer.style.top = this.element.offsetTop - this.parentData.parent.scrollOffset - paddingTop + "px";
             this.parentData.submenu = new Menu(this.submenuContainer, this.submenuActions, this.submenuOptions);
             if (this.menuStyle) {
                 this.parentData.submenu.style(this.menuStyle);
             }
             var boundingRect = this.element.getBoundingClientRect();
             var childBoundingRect = this.submenuContainer.getBoundingClientRect();
-            var computedStyles = getComputedStyle(this.parentData.parent.domNode);
-            var paddingTop = parseFloat(computedStyles.paddingTop || '0') || 0;
-            if (window.innerWidth <= boundingRect.right + childBoundingRect.width) {
-                this.submenuContainer.style.left = '10px';
-                this.submenuContainer.style.top = this.element.offsetTop - this.parentData.parent.scrollOffset + boundingRect.height + "px";
+            if (this.expandDirection === Direction.Right) {
+                if (window.innerWidth <= boundingRect.right + childBoundingRect.width) {
+                    this.submenuContainer.style.left = '10px';
+                    this.submenuContainer.style.top = this.element.offsetTop - this.parentData.parent.scrollOffset + boundingRect.height + "px";
+                }
+                else {
+                    this.submenuContainer.style.left = this.element.offsetWidth + "px";
+                    this.submenuContainer.style.top = this.element.offsetTop - this.parentData.parent.scrollOffset - paddingTop + "px";
+                }
             }
-            else {
-                this.submenuContainer.style.left = this.element.offsetWidth + "px";
+            else if (this.expandDirection === Direction.Left) {
+                this.submenuContainer.style.right = this.element.offsetWidth + "px";
+                this.submenuContainer.style.left = 'auto';
                 this.submenuContainer.style.top = this.element.offsetTop - this.parentData.parent.scrollOffset - paddingTop + "px";
             }
             this.submenuDisposables.add(addDisposableListener(this.submenuContainer, EventType.KEY_UP, function (e) {
@@ -573,12 +627,7 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
                 if (event.equals(15 /* LeftArrow */)) {
                     EventHelper.stop(e, true);
                     _this.parentData.parent.focus();
-                    if (_this.parentData.submenu) {
-                        _this.parentData.submenu.dispose();
-                        _this.parentData.submenu = undefined;
-                    }
-                    _this.submenuDisposables.clear();
-                    _this.submenuContainer = undefined;
+                    _this.cleanupExistingSubmenu(true);
                 }
             }));
             this.submenuDisposables.add(addDisposableListener(this.submenuContainer, EventType.KEY_DOWN, function (e) {
@@ -589,18 +638,19 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
             }));
             this.submenuDisposables.add(this.parentData.submenu.onDidCancel(function () {
                 _this.parentData.parent.focus();
-                if (_this.parentData.submenu) {
-                    _this.parentData.submenu.dispose();
-                    _this.parentData.submenu = undefined;
-                }
-                _this.submenuDisposables.clear();
-                _this.submenuContainer = undefined;
+                _this.cleanupExistingSubmenu(true);
             }));
             this.parentData.submenu.focus(selectFirstItem);
             this.mysubmenu = this.parentData.submenu;
         }
         else {
             this.parentData.submenu.focus(false);
+        }
+    };
+    SubmenuMenuActionViewItem.prototype.updateAriaExpanded = function (value) {
+        var _a;
+        if (this.item) {
+            (_a = this.item) === null || _a === void 0 ? void 0 : _a.setAttribute('aria-expanded', value);
         }
     };
     SubmenuMenuActionViewItem.prototype.applyStyle = function () {
@@ -610,7 +660,9 @@ var SubmenuMenuActionViewItem = /** @class */ (function (_super) {
         }
         var isSelected = this.element && hasClass(this.element, 'focused');
         var fgColor = isSelected && this.menuStyle.selectionForegroundColor ? this.menuStyle.selectionForegroundColor : this.menuStyle.foregroundColor;
-        this.submenuIndicator.style.backgroundColor = fgColor ? "" + fgColor : null;
+        if (this.submenuIndicator) {
+            this.submenuIndicator.style.color = fgColor ? "" + fgColor : '';
+        }
         if (this.parentData.submenu) {
             this.parentData.submenu.style(this.menuStyle);
         }
@@ -634,7 +686,9 @@ var MenuSeparatorActionViewItem = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     MenuSeparatorActionViewItem.prototype.style = function (style) {
-        this.label.style.borderBottomColor = style.separatorColor ? "" + style.separatorColor : null;
+        if (this.label) {
+            this.label.style.borderBottomColor = style.separatorColor ? "" + style.separatorColor : '';
+        }
     };
     return MenuSeparatorActionViewItem;
 }(ActionViewItem));

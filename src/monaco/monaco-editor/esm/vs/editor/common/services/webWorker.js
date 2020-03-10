@@ -27,7 +27,7 @@ export function createWebWorker(modelService, opts) {
 var MonacoWebWorkerImpl = /** @class */ (function (_super) {
     __extends(MonacoWebWorkerImpl, _super);
     function MonacoWebWorkerImpl(modelService, opts) {
-        var _this = _super.call(this, modelService, opts.label) || this;
+        var _this = _super.call(this, modelService, opts.keepIdleModels || false, opts.label) || this;
         _this._foreignModuleId = opts.moduleId;
         _this._foreignModuleCreateData = opts.createData || null;
         _this._foreignModuleHost = opts.host || null;

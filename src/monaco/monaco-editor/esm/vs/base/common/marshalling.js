@@ -5,10 +5,11 @@
 import { URI } from './uri.js';
 export function parse(text) {
     var data = JSON.parse(text);
-    data = revive(data, 0);
+    data = revive(data);
     return data;
 }
 export function revive(obj, depth) {
+    if (depth === void 0) { depth = 0; }
     if (!obj || depth > 200) {
         return obj;
     }

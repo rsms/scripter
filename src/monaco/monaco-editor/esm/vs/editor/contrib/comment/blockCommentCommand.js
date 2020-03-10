@@ -8,8 +8,9 @@ import { Range } from '../../common/core/range.js';
 import { Selection } from '../../common/core/selection.js';
 import { LanguageConfigurationRegistry } from '../../common/modes/languageConfigurationRegistry.js';
 var BlockCommentCommand = /** @class */ (function () {
-    function BlockCommentCommand(selection) {
+    function BlockCommentCommand(selection, insertSpace) {
         this._selection = selection;
+        this._insertSpace = insertSpace;
         this._usedEndToken = null;
     }
     BlockCommentCommand._haystackHasNeedleAtOffset = function (haystack, needle, offset) {
@@ -39,7 +40,7 @@ var BlockCommentCommand = /** @class */ (function () {
         }
         return true;
     };
-    BlockCommentCommand.prototype._createOperationsForBlockComment = function (selection, startToken, endToken, model, builder) {
+    BlockCommentCommand.prototype._createOperationsForBlockComment = function (selection, startToken, endToken, insertSpace, model, builder) {
         var startLineNumber = selection.startLineNumber;
         var startColumn = selection.startColumn;
         var endLineNumber = selection.endLineNumber;
@@ -70,23 +71,19 @@ var BlockCommentCommand = /** @class */ (function () {
         var ops;
         if (startTokenIndex !== -1 && endTokenIndex !== -1) {
             // Consider spaces as part of the comment tokens
-            if (startTokenIndex + startToken.length < startLineText.length) {
-                if (startLineText.charCodeAt(startTokenIndex + startToken.length) === 32 /* Space */) {
-                    // Pretend the start token contains a trailing space
-                    startToken = startToken + ' ';
-                }
+            if (insertSpace && startTokenIndex + startToken.length < startLineText.length && startLineText.charCodeAt(startTokenIndex + startToken.length) === 32 /* Space */) {
+                // Pretend the start token contains a trailing space
+                startToken = startToken + ' ';
             }
-            if (endTokenIndex > 0) {
-                if (endLineText.charCodeAt(endTokenIndex - 1) === 32 /* Space */) {
-                    // Pretend the end token contains a leading space
-                    endToken = ' ' + endToken;
-                    endTokenIndex -= 1;
-                }
+            if (insertSpace && endTokenIndex > 0 && endLineText.charCodeAt(endTokenIndex - 1) === 32 /* Space */) {
+                // Pretend the end token contains a leading space
+                endToken = ' ' + endToken;
+                endTokenIndex -= 1;
             }
             ops = BlockCommentCommand._createRemoveBlockCommentOperations(new Range(startLineNumber, startTokenIndex + startToken.length + 1, endLineNumber, endTokenIndex + 1), startToken, endToken);
         }
         else {
-            ops = BlockCommentCommand._createAddBlockCommentOperations(selection, startToken, endToken);
+            ops = BlockCommentCommand._createAddBlockCommentOperations(selection, startToken, endToken, this._insertSpace);
             this._usedEndToken = ops.length === 1 ? endToken : null;
         }
         for (var _i = 0, ops_1 = ops; _i < ops_1.length; _i++) {
@@ -108,13 +105,13 @@ var BlockCommentCommand = /** @class */ (function () {
         }
         return res;
     };
-    BlockCommentCommand._createAddBlockCommentOperations = function (r, startToken, endToken) {
+    BlockCommentCommand._createAddBlockCommentOperations = function (r, startToken, endToken, insertSpace) {
         var res = [];
         if (!Range.isEmpty(r)) {
             // Insert block comment start
-            res.push(EditOperation.insert(new Position(r.startLineNumber, r.startColumn), startToken + ' '));
+            res.push(EditOperation.insert(new Position(r.startLineNumber, r.startColumn), startToken + (insertSpace ? ' ' : '')));
             // Insert block comment end
-            res.push(EditOperation.insert(new Position(r.endLineNumber, r.endColumn), ' ' + endToken));
+            res.push(EditOperation.insert(new Position(r.endLineNumber, r.endColumn), (insertSpace ? ' ' : '') + endToken));
         }
         else {
             // Insert both continuously
@@ -132,7 +129,7 @@ var BlockCommentCommand = /** @class */ (function () {
             // Mode does not support block comments
             return;
         }
-        this._createOperationsForBlockComment(this._selection, config.blockCommentStartToken, config.blockCommentEndToken, model, builder);
+        this._createOperationsForBlockComment(this._selection, config.blockCommentStartToken, config.blockCommentEndToken, this._insertSpace, model, builder);
     };
     BlockCommentCommand.prototype.computeCursorState = function (model, helper) {
         var inverseEditOperations = helper.getInverseEditOperations();

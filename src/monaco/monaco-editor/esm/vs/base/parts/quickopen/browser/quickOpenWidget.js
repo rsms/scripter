@@ -200,6 +200,14 @@ var QuickOpenWidget = /** @class */ (function (_super) {
                 DOM.EventHelper.stop(e, true);
                 _this.navigateInTree(keyboardEvent.keyCode);
             }
+            // Support to open item with Enter still even in quick nav mode
+            else if (keyboardEvent.keyCode === 3 /* Enter */) {
+                DOM.EventHelper.stop(e, true);
+                var focus_2 = _this.tree.getFocus();
+                if (focus_2) {
+                    _this.elementSelected(focus_2, e);
+                }
+            }
         }));
         this._register(DOM.addDisposableListener(this.treeContainer, DOM.EventType.KEY_UP, function (e) {
             var keyboardEvent = new StandardKeyboardEvent(e);
@@ -210,7 +218,7 @@ var QuickOpenWidget = /** @class */ (function (_super) {
             }
             // Select element when keys are pressed that signal it
             var quickNavKeys = _this.quickNavigateConfiguration.keybindings;
-            var wasTriggerKeyPressed = keyCode === 3 /* Enter */ || quickNavKeys.some(function (k) {
+            var wasTriggerKeyPressed = quickNavKeys.some(function (k) {
                 var _a = k.getParts(), firstPart = _a[0], chordPart = _a[1];
                 if (chordPart) {
                     return false;
@@ -233,9 +241,9 @@ var QuickOpenWidget = /** @class */ (function (_super) {
                 return false;
             });
             if (wasTriggerKeyPressed) {
-                var focus_2 = _this.tree.getFocus();
-                if (focus_2) {
-                    _this.elementSelected(focus_2, e);
+                var focus_3 = _this.tree.getFocus();
+                if (focus_3) {
+                    _this.elementSelected(focus_3, e);
                 }
             }
         }));
@@ -265,16 +273,16 @@ var QuickOpenWidget = /** @class */ (function (_super) {
     };
     QuickOpenWidget.prototype.applyStyles = function () {
         if (this.element) {
-            var foreground = this.styles.foreground ? this.styles.foreground.toString() : null;
-            var background = this.styles.background ? this.styles.background.toString() : null;
-            var borderColor = this.styles.borderColor ? this.styles.borderColor.toString() : null;
-            var widgetShadow = this.styles.widgetShadow ? this.styles.widgetShadow.toString() : null;
+            var foreground = this.styles.foreground ? this.styles.foreground.toString() : '';
+            var background = this.styles.background ? this.styles.background.toString() : '';
+            var borderColor = this.styles.borderColor ? this.styles.borderColor.toString() : '';
+            var widgetShadow = this.styles.widgetShadow ? this.styles.widgetShadow.toString() : '';
             this.element.style.color = foreground;
             this.element.style.backgroundColor = background;
             this.element.style.borderColor = borderColor;
-            this.element.style.borderWidth = borderColor ? '1px' : null;
-            this.element.style.borderStyle = borderColor ? 'solid' : null;
-            this.element.style.boxShadow = widgetShadow ? "0 5px 8px " + widgetShadow : null;
+            this.element.style.borderWidth = borderColor ? '1px' : '';
+            this.element.style.borderStyle = borderColor ? 'solid' : '';
+            this.element.style.boxShadow = widgetShadow ? "0 5px 8px " + widgetShadow : '';
         }
         if (this.progressBar) {
             this.progressBar.style({
@@ -544,6 +552,7 @@ var QuickOpenWidget = /** @class */ (function (_super) {
         else if (autoFocus.autoFocusLastEntry) {
             if (entries.length > 1) {
                 this.tree.focusLast();
+                this.tree.reveal(this.tree.getFocus());
             }
         }
     };

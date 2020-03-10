@@ -18,13 +18,14 @@ export var OverviewRulerLane;
 export var MinimapPosition;
 (function (MinimapPosition) {
     MinimapPosition[MinimapPosition["Inline"] = 1] = "Inline";
+    MinimapPosition[MinimapPosition["Gutter"] = 2] = "Gutter";
 })(MinimapPosition || (MinimapPosition = {}));
 var TextModelResolvedOptions = /** @class */ (function () {
     /**
      * @internal
      */
     function TextModelResolvedOptions(src) {
-        this.tabSize = src.tabSize | 0;
+        this.tabSize = Math.max(1, src.tabSize | 0);
         this.indentSize = src.tabSize | 0;
         this.insertSpaces = Boolean(src.insertSpaces);
         this.defaultEOL = src.defaultEOL | 0;

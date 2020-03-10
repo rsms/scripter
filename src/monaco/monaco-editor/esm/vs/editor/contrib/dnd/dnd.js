@@ -57,7 +57,7 @@ var DragAndDropController = /** @class */ (function (_super) {
         this._modifierPressed = false;
     };
     DragAndDropController.prototype.onEditorKeyDown = function (e) {
-        if (!this._editor.getConfiguration().dragAndDrop) {
+        if (!this._editor.getOption(24 /* dragAndDrop */)) {
             return;
         }
         if (hasTriggerModifier(e)) {
@@ -70,7 +70,7 @@ var DragAndDropController = /** @class */ (function (_super) {
         }
     };
     DragAndDropController.prototype.onEditorKeyUp = function (e) {
-        if (!this._editor.getConfiguration().dragAndDrop) {
+        if (!this._editor.getOption(24 /* dragAndDrop */)) {
             return;
         }
         if (hasTriggerModifier(e)) {
@@ -184,9 +184,6 @@ var DragAndDropController = /** @class */ (function (_super) {
             target.type === 3 /* GUTTER_LINE_NUMBERS */ ||
             target.type === 4 /* GUTTER_LINE_DECORATIONS */;
     };
-    DragAndDropController.prototype.getId = function () {
-        return DragAndDropController.ID;
-    };
     DragAndDropController.prototype.dispose = function () {
         this._removeDecoration();
         this._dragSelection = null;
@@ -202,4 +199,4 @@ var DragAndDropController = /** @class */ (function (_super) {
     return DragAndDropController;
 }(Disposable));
 export { DragAndDropController };
-registerEditorContribution(DragAndDropController);
+registerEditorContribution(DragAndDropController.ID, DragAndDropController);

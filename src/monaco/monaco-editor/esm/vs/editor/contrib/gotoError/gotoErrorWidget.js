@@ -28,17 +28,17 @@ import { ScrollableElement } from '../../../base/browser/ui/scrollbar/scrollable
 import { getBaseLabel, getPathLabel } from '../../../base/common/labels.js';
 import { isNonEmptyArray } from '../../../base/common/arrays.js';
 import { Emitter } from '../../../base/common/event.js';
-import { PeekViewWidget } from '../referenceSearch/peekViewWidget.js';
+import { PeekViewWidget, peekViewTitleForeground, peekViewTitleInfoForeground } from '../peekView/peekView.js';
 import { basename } from '../../../base/common/resources.js';
-import { peekViewTitleForeground, peekViewTitleInfoForeground } from '../referenceSearch/referencesWidget.js';
 import { SeverityIcon } from '../../../platform/severityIcon/common/severityIcon.js';
 var MessageWidget = /** @class */ (function () {
-    function MessageWidget(parent, editor, onRelatedInformation) {
+    function MessageWidget(parent, editor, onRelatedInformation, _openerService) {
         var _this = this;
+        this._openerService = _openerService;
         this._lines = 0;
         this._longestLineLength = 0;
         this._relatedDiagnostics = new WeakMap();
-        this._disposables = [];
+        this._disposables = new DisposableStore();
         this._editor = editor;
         var domNode = document.createElement('div');
         domNode.className = 'descriptioncontainer';
@@ -49,7 +49,7 @@ var MessageWidget = /** @class */ (function () {
         domNode.appendChild(this._messageBlock);
         this._relatedBlock = document.createElement('div');
         domNode.appendChild(this._relatedBlock);
-        this._disposables.push(dom.addStandardDisposableListener(this._relatedBlock, 'click', function (event) {
+        this._disposables.add(dom.addStandardDisposableListener(this._relatedBlock, 'click', function (event) {
             event.preventDefault();
             var related = _this._relatedDiagnostics.get(event.target);
             if (related) {
@@ -64,23 +64,33 @@ var MessageWidget = /** @class */ (function () {
             verticalScrollbarSize: 3
         });
         parent.appendChild(this._scrollable.getDomNode());
-        this._disposables.push(this._scrollable.onScroll(function (e) {
+        this._disposables.add(this._scrollable.onScroll(function (e) {
             domNode.style.left = "-" + e.scrollLeft + "px";
             domNode.style.top = "-" + e.scrollTop + "px";
         }));
-        this._disposables.push(this._scrollable);
+        this._disposables.add(this._scrollable);
     }
     MessageWidget.prototype.dispose = function () {
         dispose(this._disposables);
     };
     MessageWidget.prototype.update = function (_a) {
+        var _this = this;
         var source = _a.source, message = _a.message, relatedInformation = _a.relatedInformation, code = _a.code;
+        var sourceAndCodeLength = ((source === null || source === void 0 ? void 0 : source.length) || 0) + '()'.length;
+        if (code) {
+            if (typeof code === 'string') {
+                sourceAndCodeLength += code.length;
+            }
+            else {
+                sourceAndCodeLength += code.value.length;
+            }
+        }
         var lines = message.split(/\r\n|\r|\n/g);
         this._lines = lines.length;
         this._longestLineLength = 0;
         for (var _i = 0, lines_1 = lines; _i < lines_1.length; _i++) {
             var line = lines_1[_i];
-            this._longestLineLength = Math.max(line.length, this._longestLineLength);
+            this._longestLineLength = Math.max(line.length + sourceAndCodeLength, this._longestLineLength);
         }
         dom.clearNode(this._messageBlock);
         this._editor.applyFontInfo(this._messageBlock);
@@ -105,17 +115,31 @@ var MessageWidget = /** @class */ (function () {
                 detailsElement.appendChild(sourceElement);
             }
             if (code) {
-                var codeElement = document.createElement('span');
-                codeElement.innerText = "(" + code + ")";
-                dom.addClass(codeElement, 'code');
-                detailsElement.appendChild(codeElement);
+                if (typeof code === 'string') {
+                    var codeElement = document.createElement('span');
+                    codeElement.innerText = "(" + code + ")";
+                    dom.addClass(codeElement, 'code');
+                    detailsElement.appendChild(codeElement);
+                }
+                else {
+                    this._codeLink = dom.$('a.code-link');
+                    this._codeLink.setAttribute('href', "" + code.link.toString());
+                    this._codeLink.onclick = function (e) {
+                        _this._openerService.open(code.link);
+                        e.preventDefault();
+                        e.stopPropagation();
+                    };
+                    var codeElement = dom.append(this._codeLink, dom.$('span'));
+                    codeElement.innerText = code.value;
+                    detailsElement.appendChild(this._codeLink);
+                }
             }
         }
         dom.clearNode(this._relatedBlock);
         this._editor.applyFontInfo(this._relatedBlock);
         if (isNonEmptyArray(relatedInformation)) {
             var relatedInformationNode = this._relatedBlock.appendChild(document.createElement('div'));
-            relatedInformationNode.style.paddingTop = Math.floor(this._editor.getConfiguration().lineHeight * 0.66) + "px";
+            relatedInformationNode.style.paddingTop = Math.floor(this._editor.getOption(49 /* lineHeight */) * 0.66) + "px";
             this._lines += 1;
             for (var _c = 0, relatedInformation_1 = relatedInformation; _c < relatedInformation_1.length; _c++) {
                 var related = relatedInformation_1[_c];
@@ -133,7 +157,7 @@ var MessageWidget = /** @class */ (function () {
                 relatedInformationNode.appendChild(container);
             }
         }
-        var fontInfo = this._editor.getConfiguration().fontInfo;
+        var fontInfo = this._editor.getOption(34 /* fontInfo */);
         var scrollWidth = Math.ceil(fontInfo.typicalFullwidthCharacterWidth * this._longestLineLength * 0.75);
         var scrollHeight = fontInfo.lineHeight * this._lines;
         this._scrollable.setScrollDimensions({ scrollWidth: scrollWidth, scrollHeight: scrollHeight });
@@ -150,10 +174,11 @@ var MessageWidget = /** @class */ (function () {
 }());
 var MarkerNavigationWidget = /** @class */ (function (_super) {
     __extends(MarkerNavigationWidget, _super);
-    function MarkerNavigationWidget(editor, actions, _themeService) {
+    function MarkerNavigationWidget(editor, actions, _themeService, _openerService) {
         var _this = _super.call(this, editor, { showArrow: true, showFrame: true, isAccessible: true }) || this;
         _this.actions = actions;
         _this._themeService = _themeService;
+        _this._openerService = _openerService;
         _this._callOnDispose = new DisposableStore();
         _this._onDidSelectRelatedInformation = new Emitter();
         _this.onDidSelectRelatedInformation = _this._onDidSelectRelatedInformation.event;
@@ -194,14 +219,14 @@ var MarkerNavigationWidget = /** @class */ (function (_super) {
     };
     MarkerNavigationWidget.prototype._fillHead = function (container) {
         _super.prototype._fillHead.call(this, container);
-        this._actionbarWidget.push(this.actions, { label: false, icon: true });
+        this._actionbarWidget.push(this.actions, { label: false, icon: true, index: 0 });
     };
     MarkerNavigationWidget.prototype._fillTitleIcon = function (container) {
         this._icon = dom.append(container, dom.$(''));
     };
     MarkerNavigationWidget.prototype._getActionBarOptions = function () {
         return {
-            orientation: 1 /* HORIZONTAL_REVERSE */
+            orientation: 0 /* HORIZONTAL */
         };
     };
     MarkerNavigationWidget.prototype._fillBody = function (container) {
@@ -212,7 +237,7 @@ var MarkerNavigationWidget = /** @class */ (function (_super) {
         this._parentContainer.setAttribute('role', 'tooltip');
         this._container = document.createElement('div');
         container.appendChild(this._container);
-        this._message = new MessageWidget(this._container, this.editor, function (related) { return _this._onDidSelectRelatedInformation.fire(related); });
+        this._message = new MessageWidget(this._container, this.editor, function (related) { return _this._onDidSelectRelatedInformation.fire(related); }, this._openerService);
         this._disposables.add(this._message);
     };
     MarkerNavigationWidget.prototype.show = function (where, heightInLines) {
@@ -239,8 +264,9 @@ var MarkerNavigationWidget = /** @class */ (function (_super) {
                 : nls.localize('change', "{0} of {1} problem", markerIdx, markerCount);
             this.setTitle(basename(model.uri), detail);
         }
-        this._icon.className = SeverityIcon.className(MarkerSeverity.toSeverity(this._severity));
+        this._icon.className = "codicon " + SeverityIcon.className(MarkerSeverity.toSeverity(this._severity));
         this.editor.revealPositionInCenter(position, 0 /* Smooth */);
+        this.editor.focus();
     };
     MarkerNavigationWidget.prototype.updateMarker = function (marker) {
         this._container.classList.remove('stale');
@@ -277,8 +303,9 @@ export var editorMarkerNavigationWarning = registerColor('editorMarkerNavigation
 export var editorMarkerNavigationInfo = registerColor('editorMarkerNavigationInfo.background', { dark: infoDefault, light: infoDefault, hc: infoDefault }, nls.localize('editorMarkerNavigationInfo', 'Editor marker navigation widget info color.'));
 export var editorMarkerNavigationBackground = registerColor('editorMarkerNavigation.background', { dark: '#2D2D30', light: Color.white, hc: '#0C141F' }, nls.localize('editorMarkerNavigationBackground', 'Editor marker navigation widget background.'));
 registerThemingParticipant(function (theme, collector) {
-    var link = theme.getColor(textLinkForeground);
-    if (link) {
-        collector.addRule(".monaco-editor .marker-widget a { color: " + link + "; }");
+    var linkFg = theme.getColor(textLinkForeground);
+    if (linkFg) {
+        collector.addRule(".monaco-editor .marker-widget a { color: " + linkFg + "; }");
+        collector.addRule(".monaco-editor .marker-widget a.code-link span:hover { color: " + linkFg + "; }");
     }
 });

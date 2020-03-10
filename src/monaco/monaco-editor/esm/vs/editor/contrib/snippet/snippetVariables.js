@@ -9,6 +9,7 @@ import { Text } from './snippetParser.js';
 import { LanguageConfigurationRegistry } from '../../common/modes/languageConfigurationRegistry.js';
 import { getLeadingWhitespace, commonPrefixLength, isFalsyOrWhitespace, pad, endsWith } from '../../../base/common/strings.js';
 import { isSingleFolderWorkspaceIdentifier, toWorkspaceIdentifier, WORKSPACE_EXTENSION } from '../../../platform/workspaces/common/workspaces.js';
+import { normalizeDriveLetter } from '../../../base/common/labels.js';
 var CompositeSnippetVariableResolver = /** @class */ (function () {
     function CompositeSnippetVariableResolver(_delegates) {
         this._delegates = _delegates;
@@ -116,26 +117,31 @@ var ModelBasedVariableResolver = /** @class */ (function () {
 }());
 export { ModelBasedVariableResolver };
 var ClipboardBasedVariableResolver = /** @class */ (function () {
-    function ClipboardBasedVariableResolver(_clipboardText, _selectionIdx, _selectionCount) {
-        this._clipboardText = _clipboardText;
+    function ClipboardBasedVariableResolver(_readClipboardText, _selectionIdx, _selectionCount, _spread) {
+        this._readClipboardText = _readClipboardText;
         this._selectionIdx = _selectionIdx;
         this._selectionCount = _selectionCount;
+        this._spread = _spread;
         //
     }
     ClipboardBasedVariableResolver.prototype.resolve = function (variable) {
         if (variable.name !== 'CLIPBOARD') {
             return undefined;
         }
-        if (!this._clipboardText) {
+        var clipboardText = this._readClipboardText();
+        if (!clipboardText) {
             return undefined;
         }
-        var lines = this._clipboardText.split(/\r\n|\n|\r/).filter(function (s) { return !isFalsyOrWhitespace(s); });
-        if (lines.length === this._selectionCount) {
-            return lines[this._selectionIdx];
+        // `spread` is assigning each cursor a line of the clipboard
+        // text whenever there the line count equals the cursor count
+        // and when enabled
+        if (this._spread) {
+            var lines = clipboardText.split(/\r\n|\n|\r/).filter(function (s) { return !isFalsyOrWhitespace(s); });
+            if (lines.length === this._selectionCount) {
+                return lines[this._selectionIdx];
+            }
         }
-        else {
-            return this._clipboardText;
-        }
+        return clipboardText;
     };
     return ClipboardBasedVariableResolver;
 }());
@@ -222,13 +228,22 @@ var WorkspaceBasedVariableResolver = /** @class */ (function () {
         //
     }
     WorkspaceBasedVariableResolver.prototype.resolve = function (variable) {
-        if (variable.name !== 'WORKSPACE_NAME' || !this._workspaceService) {
+        if (!this._workspaceService) {
             return undefined;
         }
         var workspaceIdentifier = toWorkspaceIdentifier(this._workspaceService.getWorkspace());
         if (!workspaceIdentifier) {
             return undefined;
         }
+        if (variable.name === 'WORKSPACE_NAME') {
+            return this._resolveWorkspaceName(workspaceIdentifier);
+        }
+        else if (variable.name === 'WORKSPACE_FOLDER') {
+            return this._resoveWorkspacePath(workspaceIdentifier);
+        }
+        return undefined;
+    };
+    WorkspaceBasedVariableResolver.prototype._resolveWorkspaceName = function (workspaceIdentifier) {
         if (isSingleFolderWorkspaceIdentifier(workspaceIdentifier)) {
             return path.basename(workspaceIdentifier.path);
         }
@@ -238,6 +253,33 @@ var WorkspaceBasedVariableResolver = /** @class */ (function () {
         }
         return filename;
     };
+    WorkspaceBasedVariableResolver.prototype._resoveWorkspacePath = function (workspaceIdentifier) {
+        if (isSingleFolderWorkspaceIdentifier(workspaceIdentifier)) {
+            return normalizeDriveLetter(workspaceIdentifier.fsPath);
+        }
+        var filename = path.basename(workspaceIdentifier.configPath.path);
+        var folderpath = workspaceIdentifier.configPath.fsPath;
+        if (endsWith(folderpath, filename)) {
+            folderpath = folderpath.substr(0, folderpath.length - filename.length - 1);
+        }
+        return (folderpath ? normalizeDriveLetter(folderpath) : '/');
+    };
     return WorkspaceBasedVariableResolver;
 }());
 export { WorkspaceBasedVariableResolver };
+var RandomBasedVariableResolver = /** @class */ (function () {
+    function RandomBasedVariableResolver() {
+    }
+    RandomBasedVariableResolver.prototype.resolve = function (variable) {
+        var name = variable.name;
+        if (name === 'RANDOM') {
+            return Math.random().toString().slice(-6);
+        }
+        else if (name === 'RANDOM_HEX') {
+            return Math.random().toString(16).slice(-6);
+        }
+        return undefined;
+    };
+    return RandomBasedVariableResolver;
+}());
+export { RandomBasedVariableResolver };

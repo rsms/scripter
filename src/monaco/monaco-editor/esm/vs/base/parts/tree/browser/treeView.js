@@ -125,7 +125,7 @@ var ViewItem = /** @class */ (function () {
     });
     Object.defineProperty(ViewItem.prototype, "loading", {
         set: function (value) {
-            value ? this.addClass('loading') : this.removeClass('loading');
+            value ? this.addClass('codicon-loading') : this.removeClass('codicon-loading');
         },
         enumerable: true,
         configurable: true
@@ -241,7 +241,7 @@ var ViewItem = /** @class */ (function () {
                 paddingLeft = parseFloat(style.paddingLeft);
             }
             if (this.context.horizontalScrolling) {
-                this.element.style.width = 'fit-content';
+                this.element.style.width = Browser.isFirefox ? '-moz-fit-content' : 'fit-content';
             }
             try {
                 this.context.renderer.renderElement(this.context.tree, this.model.getElement(), this.templateId, this.row.templateData);
@@ -359,6 +359,7 @@ var TreeView = /** @class */ (function (_super) {
         _this.currentDropTarget = null;
         _this.currentDropTargets = null;
         _this.currentDropDisposable = Lifecycle.Disposable.None;
+        _this.gestureDisposable = Lifecycle.Disposable.None;
         _this.dragAndDropScrollInterval = null;
         _this.dragAndDropScrollTimeout = null;
         _this.dragAndDropMouseY = null;
@@ -422,7 +423,7 @@ var TreeView = /** @class */ (function (_super) {
             _this.wrapper.style.msContentZooming = 'none';
         }
         else {
-            Touch.Gesture.addTarget(_this.wrapper);
+            _this.gestureDisposable = Touch.Gesture.addTarget(_this.wrapper);
         }
         _this.rowsContainer = document.createElement('div');
         _this.rowsContainer.className = 'monaco-tree-rows';
@@ -751,13 +752,11 @@ var TreeView = /** @class */ (function (_super) {
             var doToInsertItemsAlreadyExist = false;
             if (!skipDiff) {
                 var lcs = new Diff.LcsDiff({
-                    getLength: function () { return previousChildrenIds_1.length; },
-                    getElementAtIndex: function (i) { return previousChildrenIds_1[i]; }
+                    getElements: function () { return previousChildrenIds_1; }
                 }, {
-                    getLength: function () { return afterModelItems_1.length; },
-                    getElementAtIndex: function (i) { return afterModelItems_1[i].id; }
+                    getElements: function () { return afterModelItems_1.map(function (item) { return item.id; }); }
                 }, null);
-                diff = lcs.ComputeDiff(false);
+                diff = lcs.ComputeDiff(false).changes;
                 // this means that the result of the diff algorithm would result
                 // in inserting items that were already registered. this can only
                 // happen if the data provider returns bad ids OR if the sorting
@@ -1353,6 +1352,7 @@ var TreeView = /** @class */ (function (_super) {
         if (this.context.cache) {
             this.context.cache.dispose();
         }
+        this.gestureDisposable.dispose();
         _super.prototype.dispose.call(this);
     };
     TreeView.BINDING = 'monaco-tree-row';

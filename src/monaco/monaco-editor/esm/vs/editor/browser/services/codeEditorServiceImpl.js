@@ -32,30 +32,86 @@ import { AbstractCodeEditorService } from './abstractCodeEditorService.js';
 import { isThemeColor } from '../../common/editorCommon.js';
 import { OverviewRulerLane } from '../../common/model.js';
 import { IThemeService } from '../../../platform/theme/common/themeService.js';
+var RefCountedStyleSheet = /** @class */ (function () {
+    function RefCountedStyleSheet(parent, editorId, styleSheet) {
+        this._parent = parent;
+        this._editorId = editorId;
+        this.styleSheet = styleSheet;
+        this._refCount = 0;
+    }
+    RefCountedStyleSheet.prototype.ref = function () {
+        this._refCount++;
+    };
+    RefCountedStyleSheet.prototype.unref = function () {
+        var _a;
+        this._refCount--;
+        if (this._refCount === 0) {
+            (_a = this.styleSheet.parentNode) === null || _a === void 0 ? void 0 : _a.removeChild(this.styleSheet);
+            this._parent._removeEditorStyleSheets(this._editorId);
+        }
+    };
+    return RefCountedStyleSheet;
+}());
+var GlobalStyleSheet = /** @class */ (function () {
+    function GlobalStyleSheet(styleSheet) {
+        this.styleSheet = styleSheet;
+    }
+    GlobalStyleSheet.prototype.ref = function () {
+    };
+    GlobalStyleSheet.prototype.unref = function () {
+    };
+    return GlobalStyleSheet;
+}());
 var CodeEditorServiceImpl = /** @class */ (function (_super) {
     __extends(CodeEditorServiceImpl, _super);
     function CodeEditorServiceImpl(themeService, styleSheet) {
-        if (styleSheet === void 0) { styleSheet = dom.createStyleSheet(); }
+        if (styleSheet === void 0) { styleSheet = null; }
         var _this = _super.call(this) || this;
         _this._decorationOptionProviders = new Map();
-        _this._styleSheet = styleSheet;
+        _this._editorStyleSheets = new Map();
+        _this._globalStyleSheet = styleSheet ? new GlobalStyleSheet(styleSheet) : null;
         _this._themeService = themeService;
         return _this;
     }
-    CodeEditorServiceImpl.prototype.registerDecorationType = function (key, options, parentTypeKey) {
+    CodeEditorServiceImpl.prototype._getOrCreateGlobalStyleSheet = function () {
+        if (!this._globalStyleSheet) {
+            this._globalStyleSheet = new GlobalStyleSheet(dom.createStyleSheet());
+        }
+        return this._globalStyleSheet;
+    };
+    CodeEditorServiceImpl.prototype._getOrCreateStyleSheet = function (editor) {
+        if (!editor) {
+            return this._getOrCreateGlobalStyleSheet();
+        }
+        var domNode = editor.getContainerDomNode();
+        if (!dom.isInShadowDOM(domNode)) {
+            return this._getOrCreateGlobalStyleSheet();
+        }
+        var editorId = editor.getId();
+        if (!this._editorStyleSheets.has(editorId)) {
+            var refCountedStyleSheet = new RefCountedStyleSheet(this, editorId, dom.createStyleSheet(domNode));
+            this._editorStyleSheets.set(editorId, refCountedStyleSheet);
+        }
+        return this._editorStyleSheets.get(editorId);
+    };
+    CodeEditorServiceImpl.prototype._removeEditorStyleSheets = function (editorId) {
+        this._editorStyleSheets.delete(editorId);
+    };
+    CodeEditorServiceImpl.prototype.registerDecorationType = function (key, options, parentTypeKey, editor) {
         var provider = this._decorationOptionProviders.get(key);
         if (!provider) {
+            var styleSheet = this._getOrCreateStyleSheet(editor);
             var providerArgs = {
-                styleSheet: this._styleSheet,
+                styleSheet: styleSheet.styleSheet,
                 key: key,
                 parentTypeKey: parentTypeKey,
                 options: options || Object.create(null)
             };
             if (!parentTypeKey) {
-                provider = new DecorationTypeOptionsProvider(this._themeService, providerArgs);
+                provider = new DecorationTypeOptionsProvider(this._themeService, styleSheet, providerArgs);
             }
             else {
-                provider = new DecorationSubTypeOptionsProvider(this._themeService, providerArgs);
+                provider = new DecorationSubTypeOptionsProvider(this._themeService, styleSheet, providerArgs);
             }
             this._decorationOptionProviders.set(key, provider);
         }
@@ -86,7 +142,9 @@ var CodeEditorServiceImpl = /** @class */ (function (_super) {
 }(AbstractCodeEditorService));
 export { CodeEditorServiceImpl };
 var DecorationSubTypeOptionsProvider = /** @class */ (function () {
-    function DecorationSubTypeOptionsProvider(themeService, providerArgs) {
+    function DecorationSubTypeOptionsProvider(themeService, styleSheet, providerArgs) {
+        this._styleSheet = styleSheet;
+        this._styleSheet.ref();
         this._parentTypeKey = providerArgs.parentTypeKey;
         this.refCount = 0;
         this._beforeContentRules = new DecorationCSSRules(3 /* BeforeContentClassName */, providerArgs, themeService);
@@ -111,13 +169,16 @@ var DecorationSubTypeOptionsProvider = /** @class */ (function () {
             this._afterContentRules.dispose();
             this._afterContentRules = null;
         }
+        this._styleSheet.unref();
     };
     return DecorationSubTypeOptionsProvider;
 }());
 var DecorationTypeOptionsProvider = /** @class */ (function () {
-    function DecorationTypeOptionsProvider(themeService, providerArgs) {
+    function DecorationTypeOptionsProvider(themeService, styleSheet, providerArgs) {
         var _this = this;
         this._disposables = new DisposableStore();
+        this._styleSheet = styleSheet;
+        this._styleSheet.ref();
         this.refCount = 0;
         var createCSSRules = function (type) {
             var rules = new DecorationCSSRules(type, providerArgs, themeService);
@@ -175,6 +236,7 @@ var DecorationTypeOptionsProvider = /** @class */ (function () {
     };
     DecorationTypeOptionsProvider.prototype.dispose = function () {
         this._disposables.dispose();
+        this._styleSheet.unref();
     };
     return DecorationTypeOptionsProvider;
 }());

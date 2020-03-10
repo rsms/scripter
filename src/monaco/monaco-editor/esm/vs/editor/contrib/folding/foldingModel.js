@@ -226,6 +226,30 @@ var FoldingModel = /** @class */ (function () {
 }());
 export { FoldingModel };
 /**
+ * Collapse or expand the regions at the given locations
+ * @param levels The number of levels. Use 1 to only impact the regions at the location, use Number.MAX_VALUE for all levels.
+ * @param lineNumbers the location of the regions to collapse or expand, or if not set, all regions in the model.
+ */
+export function toggleCollapseState(foldingModel, levels, lineNumbers) {
+    var toToggle = [];
+    var _loop_1 = function (lineNumber) {
+        var region = foldingModel.getRegionAtLine(lineNumber);
+        if (region) {
+            var doCollapse_1 = !region.isCollapsed;
+            toToggle.push(region);
+            if (levels > 1) {
+                var regionsInside = foldingModel.getRegionsInside(region, function (r, level) { return r.isCollapsed !== doCollapse_1 && level < levels; });
+                toToggle.push.apply(toToggle, regionsInside);
+            }
+        }
+    };
+    for (var _i = 0, lineNumbers_1 = lineNumbers; _i < lineNumbers_1.length; _i++) {
+        var lineNumber = lineNumbers_1[_i];
+        _loop_1(lineNumber);
+    }
+    foldingModel.toggleCollapseState(toToggle);
+}
+/**
  * Collapse or expand the regions at the given locations including all children.
  * @param doCollapse Wheter to collase or expand
  * @param levels The number of levels. Use 1 to only impact the regions at the location, use Number.MAX_VALUE for all levels.
@@ -235,8 +259,8 @@ export function setCollapseStateLevelsDown(foldingModel, doCollapse, levels, lin
     if (levels === void 0) { levels = Number.MAX_VALUE; }
     var toToggle = [];
     if (lineNumbers && lineNumbers.length > 0) {
-        for (var _i = 0, lineNumbers_1 = lineNumbers; _i < lineNumbers_1.length; _i++) {
-            var lineNumber = lineNumbers_1[_i];
+        for (var _i = 0, lineNumbers_2 = lineNumbers; _i < lineNumbers_2.length; _i++) {
+            var lineNumber = lineNumbers_2[_i];
             var region = foldingModel.getRegionAtLine(lineNumber);
             if (region) {
                 if (region.isCollapsed !== doCollapse) {
@@ -259,14 +283,30 @@ export function setCollapseStateLevelsDown(foldingModel, doCollapse, levels, lin
  * Collapse or expand the regions at the given locations including all parents.
  * @param doCollapse Wheter to collase or expand
  * @param levels The number of levels. Use 1 to only impact the regions at the location, use Number.MAX_VALUE for all levels.
- * @param lineNumbers the location of the regions to collapse or expand, or if not set, all regions in the model.
+ * @param lineNumbers the location of the regions to collapse or expand.
  */
 export function setCollapseStateLevelsUp(foldingModel, doCollapse, levels, lineNumbers) {
     var toToggle = [];
-    for (var _i = 0, lineNumbers_2 = lineNumbers; _i < lineNumbers_2.length; _i++) {
-        var lineNumber = lineNumbers_2[_i];
+    for (var _i = 0, lineNumbers_3 = lineNumbers; _i < lineNumbers_3.length; _i++) {
+        var lineNumber = lineNumbers_3[_i];
         var regions = foldingModel.getAllRegionsAtLine(lineNumber, function (region, level) { return region.isCollapsed !== doCollapse && level <= levels; });
         toToggle.push.apply(toToggle, regions);
+    }
+    foldingModel.toggleCollapseState(toToggle);
+}
+/**
+ * Collapse or expand a region at the given locations. If the inner most region is already collapsed/expanded, uses the first parent instead.
+ * @param doCollapse Wheter to collase or expand
+ * @param lineNumbers the location of the regions to collapse or expand.
+ */
+export function setCollapseStateUp(foldingModel, doCollapse, lineNumbers) {
+    var toToggle = [];
+    for (var _i = 0, lineNumbers_4 = lineNumbers; _i < lineNumbers_4.length; _i++) {
+        var lineNumber = lineNumbers_4[_i];
+        var regions = foldingModel.getAllRegionsAtLine(lineNumber, function (region) { return region.isCollapsed !== doCollapse; });
+        if (regions.length > 0) {
+            toToggle.push(regions[0]);
+        }
     }
     foldingModel.toggleCollapseState(toToggle);
 }

@@ -20,6 +20,8 @@ const builddir = path.normalize(path.join(__dirname, "..", "..", "build"))
 // worker scripts and that they are all in one place.
 const outdirname = `monaco-${monacoVersion}`
 
+console.log(`webpack building monaco at ${process.cwd()} -> ${outdirname}`)
+
 module.exports = (env, argv) => {
 const mode = argv.mode == 'production' ? 'production' : 'development'
 const isDevMode = mode == 'development'
@@ -41,8 +43,13 @@ return {
           'css-loader',
         ],
       },
-
-    ],
+      {
+        test: /\.(woff(2)?|ttf|eot|svg)$/,
+        use: {
+          loader: 'url-loader',
+        },
+      },
+    ]
   },
 
   // see https://github.com/webpack-contrib/mini-css-extract-plugin#minimizing-for-production
@@ -66,7 +73,8 @@ return {
 
     new MonacoWebpackPlugin({
       languages: [ "typescript" ],
-      output: outdirname,
+      publicPath: "/",
+      filename: `${outdirname}/[name].worker.js`,
       // TODO: slim things down by specifying only required features.
       // https://github.com/Microsoft/monaco-editor-webpack-plugin#options
     }),

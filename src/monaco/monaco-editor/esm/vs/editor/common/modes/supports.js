@@ -29,6 +29,10 @@ var ScopedLineTokens = /** @class */ (function () {
         var actualLineContent = this._actual.getLineContent();
         return actualLineContent.substring(this.firstCharOffset, this._lastCharOffset);
     };
+    ScopedLineTokens.prototype.getActualLineContentBefore = function (offset) {
+        var actualLineContent = this._actual.getLineContent();
+        return actualLineContent.substring(0, this.firstCharOffset + offset);
+    };
     ScopedLineTokens.prototype.getTokenCount = function () {
         return this._lastTokenIndex - this._firstTokenIndex;
     };

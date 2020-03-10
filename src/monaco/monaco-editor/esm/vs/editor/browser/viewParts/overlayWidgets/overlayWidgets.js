@@ -22,12 +22,14 @@ var ViewOverlayWidgets = /** @class */ (function (_super) {
     __extends(ViewOverlayWidgets, _super);
     function ViewOverlayWidgets(context) {
         var _this = _super.call(this, context) || this;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
         _this._widgets = {};
-        _this._verticalScrollbarWidth = _this._context.configuration.editor.layoutInfo.verticalScrollbarWidth;
-        _this._minimapWidth = _this._context.configuration.editor.layoutInfo.minimapWidth;
-        _this._horizontalScrollbarHeight = _this._context.configuration.editor.layoutInfo.horizontalScrollbarHeight;
-        _this._editorHeight = _this._context.configuration.editor.layoutInfo.height;
-        _this._editorWidth = _this._context.configuration.editor.layoutInfo.width;
+        _this._verticalScrollbarWidth = layoutInfo.verticalScrollbarWidth;
+        _this._minimapWidth = layoutInfo.minimapWidth;
+        _this._horizontalScrollbarHeight = layoutInfo.horizontalScrollbarHeight;
+        _this._editorHeight = layoutInfo.height;
+        _this._editorWidth = layoutInfo.width;
         _this._domNode = createFastDomNode(document.createElement('div'));
         PartFingerprints.write(_this._domNode, 4 /* OverlayWidgets */);
         _this._domNode.setClassName('overlayWidgets');
@@ -42,15 +44,14 @@ var ViewOverlayWidgets = /** @class */ (function (_super) {
     };
     // ---- begin view event handlers
     ViewOverlayWidgets.prototype.onConfigurationChanged = function (e) {
-        if (e.layoutInfo) {
-            this._verticalScrollbarWidth = this._context.configuration.editor.layoutInfo.verticalScrollbarWidth;
-            this._minimapWidth = this._context.configuration.editor.layoutInfo.minimapWidth;
-            this._horizontalScrollbarHeight = this._context.configuration.editor.layoutInfo.horizontalScrollbarHeight;
-            this._editorHeight = this._context.configuration.editor.layoutInfo.height;
-            this._editorWidth = this._context.configuration.editor.layoutInfo.width;
-            return true;
-        }
-        return false;
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._verticalScrollbarWidth = layoutInfo.verticalScrollbarWidth;
+        this._minimapWidth = layoutInfo.minimapWidth;
+        this._horizontalScrollbarHeight = layoutInfo.horizontalScrollbarHeight;
+        this._editorHeight = layoutInfo.height;
+        this._editorWidth = layoutInfo.width;
+        return true;
     };
     // ---- end view event handlers
     ViewOverlayWidgets.prototype.addWidget = function (widget) {

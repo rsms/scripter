@@ -26,12 +26,14 @@ var IndentGuidesOverlay = /** @class */ (function (_super) {
         var _this = _super.call(this) || this;
         _this._context = context;
         _this._primaryLineNumber = 0;
-        _this._lineHeight = _this._context.configuration.editor.lineHeight;
-        _this._spaceWidth = _this._context.configuration.editor.fontInfo.spaceWidth;
-        _this._enabled = _this._context.configuration.editor.viewInfo.renderIndentGuides;
-        _this._activeIndentEnabled = _this._context.configuration.editor.viewInfo.highlightActiveIndentGuide;
-        var wrappingColumn = _this._context.configuration.editor.wrappingInfo.wrappingColumn;
-        _this._maxIndentLeft = wrappingColumn === -1 ? -1 : (wrappingColumn * _this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth);
+        var options = _this._context.configuration.options;
+        var wrappingInfo = options.get(108 /* wrappingInfo */);
+        var fontInfo = options.get(34 /* fontInfo */);
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._spaceWidth = fontInfo.spaceWidth;
+        _this._enabled = options.get(70 /* renderIndentGuides */);
+        _this._activeIndentEnabled = options.get(43 /* highlightActiveIndentGuide */);
+        _this._maxIndentLeft = wrappingInfo.wrappingColumn === -1 ? -1 : (wrappingInfo.wrappingColumn * fontInfo.typicalHalfwidthCharacterWidth);
         _this._renderResult = null;
         _this._context.addEventHandler(_this);
         return _this;
@@ -43,20 +45,14 @@ var IndentGuidesOverlay = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     IndentGuidesOverlay.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.fontInfo) {
-            this._spaceWidth = this._context.configuration.editor.fontInfo.spaceWidth;
-        }
-        if (e.viewInfo) {
-            this._enabled = this._context.configuration.editor.viewInfo.renderIndentGuides;
-            this._activeIndentEnabled = this._context.configuration.editor.viewInfo.highlightActiveIndentGuide;
-        }
-        if (e.wrappingInfo || e.fontInfo) {
-            var wrappingColumn = this._context.configuration.editor.wrappingInfo.wrappingColumn;
-            this._maxIndentLeft = wrappingColumn === -1 ? -1 : (wrappingColumn * this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth);
-        }
+        var options = this._context.configuration.options;
+        var wrappingInfo = options.get(108 /* wrappingInfo */);
+        var fontInfo = options.get(34 /* fontInfo */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._spaceWidth = fontInfo.spaceWidth;
+        this._enabled = options.get(70 /* renderIndentGuides */);
+        this._activeIndentEnabled = options.get(43 /* highlightActiveIndentGuide */);
+        this._maxIndentLeft = wrappingInfo.wrappingColumn === -1 ? -1 : (wrappingInfo.wrappingColumn * fontInfo.typicalHalfwidthCharacterWidth);
         return true;
     };
     IndentGuidesOverlay.prototype.onCursorStateChanged = function (e) {
@@ -121,14 +117,16 @@ var IndentGuidesOverlay = /** @class */ (function (_super) {
             var lineIndex = lineNumber - visibleStartLineNumber;
             var indent = indents[lineIndex];
             var result = '';
-            var leftMostVisiblePosition = ctx.visibleRangeForPosition(new Position(lineNumber, 1));
-            var left = leftMostVisiblePosition ? leftMostVisiblePosition.left : 0;
-            for (var i = 1; i <= indent; i++) {
-                var className = (containsActiveIndentGuide && i === activeIndentLevel ? 'cigra' : 'cigr');
-                result += "<div class=\"" + className + "\" style=\"left:" + left + "px;height:" + lineHeight + "px;width:" + indentWidth + "px\"></div>";
-                left += indentWidth;
-                if (left > scrollWidth || (this._maxIndentLeft > 0 && left > this._maxIndentLeft)) {
-                    break;
+            if (indent >= 1) {
+                var leftMostVisiblePosition = ctx.visibleRangeForPosition(new Position(lineNumber, 1));
+                var left = leftMostVisiblePosition ? leftMostVisiblePosition.left : 0;
+                for (var i = 1; i <= indent; i++) {
+                    var className = (containsActiveIndentGuide && i === activeIndentLevel ? 'cigra' : 'cigr');
+                    result += "<div class=\"" + className + "\" style=\"left:" + left + "px;height:" + lineHeight + "px;width:" + indentWidth + "px\"></div>";
+                    left += indentWidth;
+                    if (left > scrollWidth || (this._maxIndentLeft > 0 && left > this._maxIndentLeft)) {
+                        break;
+                    }
                 }
             }
             output[lineIndex] = result;

@@ -105,7 +105,7 @@ var ShiftCommand = /** @class */ (function () {
                         // The current line is "miss-aligned", so let's see if this is expected...
                         // This can only happen when it has trailing commas in the indent
                         if (model.isCheapToTokenize(lineNumber - 1)) {
-                            var enterAction = LanguageConfigurationRegistry.getRawEnterActionAtPosition(model, lineNumber - 1, model.getLineMaxColumn(lineNumber - 1));
+                            var enterAction = LanguageConfigurationRegistry.getEnterAction(this._opts.autoIndent, model, new Range(lineNumber - 1, model.getLineMaxColumn(lineNumber - 1), lineNumber - 1, model.getLineMaxColumn(lineNumber - 1)));
                             if (enterAction) {
                                 extraSpaces = previousLineExtraSpaces;
                                 if (enterAction.appendText) {
@@ -144,7 +144,7 @@ var ShiftCommand = /** @class */ (function () {
                     desiredIndent = ShiftCommand.shiftIndent(lineText, indentationEndIndex + 1, tabSize, indentSize, insertSpaces);
                 }
                 this._addEditOperation(builder, new Range(lineNumber, 1, lineNumber, indentationEndIndex + 1), desiredIndent);
-                if (lineNumber === startLine) {
+                if (lineNumber === startLine && !this._selection.isEmpty()) {
                     // Force the startColumn to stay put because we're inserting after it
                     this._selectionStartColumnStaysPut = (this._selection.startColumn <= indentationEndIndex + 1);
                 }
@@ -184,7 +184,7 @@ var ShiftCommand = /** @class */ (function () {
                 }
                 else {
                     this._addEditOperation(builder, new Range(lineNumber, 1, lineNumber, 1), oneIndent);
-                    if (lineNumber === startLine) {
+                    if (lineNumber === startLine && !this._selection.isEmpty()) {
                         // Force the startColumn to stay put because we're inserting after it
                         this._selectionStartColumnStaysPut = (this._selection.startColumn === 1);
                     }

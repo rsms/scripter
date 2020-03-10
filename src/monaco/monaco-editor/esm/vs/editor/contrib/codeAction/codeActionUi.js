@@ -25,10 +25,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -59,108 +60,146 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+import { find } from '../../../base/common/arrays.js';
 import { onUnexpectedError } from '../../../base/common/errors.js';
+import { Lazy } from '../../../base/common/lazy.js';
 import { Disposable, MutableDisposable } from '../../../base/common/lifecycle.js';
 import { MessageController } from '../message/messageController.js';
-import { IContextMenuService } from '../../../platform/contextview/browser/contextView.js';
-import { IKeybindingService } from '../../../platform/keybinding/common/keybinding.js';
-import { CodeActionWidget } from './codeActionWidget.js';
+import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
+import { CodeActionMenu } from './codeActionMenu.js';
 import { LightBulbWidget } from './lightBulbWidget.js';
 var CodeActionUi = /** @class */ (function (_super) {
     __extends(CodeActionUi, _super);
-    function CodeActionUi(_editor, quickFixActionId, delegate, contextMenuService, keybindingService) {
+    function CodeActionUi(_editor, quickFixActionId, preferredFixActionId, delegate, instantiationService) {
         var _this = _super.call(this) || this;
         _this._editor = _editor;
         _this.delegate = delegate;
         _this._activeCodeActions = _this._register(new MutableDisposable());
-        _this._codeActionWidget = _this._register(new CodeActionWidget(_this._editor, contextMenuService, {
-            onSelectCodeAction: function (action) { return __awaiter(_this, void 0, void 0, function () {
-                return __generator(this, function (_a) {
-                    this.delegate.applyCodeAction(action, /* retrigger */ true);
-                    return [2 /*return*/];
-                });
-            }); }
-        }));
-        _this._lightBulbWidget = _this._register(new LightBulbWidget(_this._editor, quickFixActionId, keybindingService));
-        _this._register(_this._lightBulbWidget.onClick(_this._handleLightBulbSelect, _this));
+        _this._codeActionWidget = new Lazy(function () {
+            return _this._register(instantiationService.createInstance(CodeActionMenu, _this._editor, {
+                onSelectCodeAction: function (action) { return __awaiter(_this, void 0, void 0, function () {
+                    return __generator(this, function (_a) {
+                        this.delegate.applyCodeAction(action, /* retrigger */ true);
+                        return [2 /*return*/];
+                    });
+                }); }
+            }));
+        });
+        _this._lightBulbWidget = new Lazy(function () {
+            var widget = _this._register(instantiationService.createInstance(LightBulbWidget, _this._editor, quickFixActionId, preferredFixActionId));
+            _this._register(widget.onClick(function (e) { return _this.showCodeActionList(e.trigger, e.actions, e, { includeDisabledActions: false }); }));
+            return widget;
+        });
         return _this;
     }
     CodeActionUi.prototype.update = function (newState) {
+        var _a, _b, _c;
         return __awaiter(this, void 0, void 0, function () {
-            var actions, e_1;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var actions, e_1, validActionToApply, invalidAction, includeDisabledActions;
+            return __generator(this, function (_d) {
+                switch (_d.label) {
                     case 0:
                         if (newState.type !== 1 /* Triggered */) {
-                            this._lightBulbWidget.hide();
+                            (_a = this._lightBulbWidget.rawValue) === null || _a === void 0 ? void 0 : _a.hide();
                             return [2 /*return*/];
                         }
-                        _a.label = 1;
+                        _d.label = 1;
                     case 1:
-                        _a.trys.push([1, 3, , 4]);
+                        _d.trys.push([1, 3, , 4]);
                         return [4 /*yield*/, newState.actions];
                     case 2:
-                        actions = _a.sent();
+                        actions = _d.sent();
                         return [3 /*break*/, 4];
                     case 3:
-                        e_1 = _a.sent();
+                        e_1 = _d.sent();
                         onUnexpectedError(e_1);
                         return [2 /*return*/];
                     case 4:
-                        this._lightBulbWidget.update(actions, newState.position);
-                        if (!actions.actions.length && newState.trigger.context) {
-                            MessageController.get(this._editor).showMessage(newState.trigger.context.notAvailableMessage, newState.trigger.context.position);
-                            this._activeCodeActions.value = actions;
-                            return [2 /*return*/];
-                        }
-                        if (!(newState.trigger.type === 'manual')) return [3 /*break*/, 10];
-                        if (!(newState.trigger.filter && newState.trigger.filter.kind)) return [3 /*break*/, 9];
-                        if (!(actions.actions.length > 0)) return [3 /*break*/, 9];
-                        if (!(newState.trigger.autoApply === 1 /* First */ || (newState.trigger.autoApply === 0 /* IfSingle */ && actions.actions.length === 1))) return [3 /*break*/, 9];
-                        _a.label = 5;
+                        this._lightBulbWidget.getValue().update(actions, newState.trigger, newState.position);
+                        if (!(newState.trigger.type === 2 /* Manual */)) return [3 /*break*/, 11];
+                        if (!((_b = newState.trigger.filter) === null || _b === void 0 ? void 0 : _b.include)) return [3 /*break*/, 10];
+                        validActionToApply = this.tryGetValidActionToApply(newState.trigger, actions);
+                        if (!validActionToApply) return [3 /*break*/, 9];
+                        _d.label = 5;
                     case 5:
-                        _a.trys.push([5, , 7, 8]);
-                        return [4 /*yield*/, this.delegate.applyCodeAction(actions.actions[0], false)];
+                        _d.trys.push([5, , 7, 8]);
+                        return [4 /*yield*/, this.delegate.applyCodeAction(validActionToApply, false)];
                     case 6:
-                        _a.sent();
+                        _d.sent();
                         return [3 /*break*/, 8];
                     case 7:
                         actions.dispose();
                         return [7 /*endfinally*/];
                     case 8: return [2 /*return*/];
                     case 9:
-                        this._activeCodeActions.value = actions;
-                        this._codeActionWidget.show(actions, newState.position);
-                        return [3 /*break*/, 11];
+                        // Check to see if there is an action that we would have applied were it not invalid
+                        if (newState.trigger.context) {
+                            invalidAction = this.getInvalidActionThatWouldHaveBeenApplied(newState.trigger, actions);
+                            if (invalidAction && invalidAction.disabled) {
+                                MessageController.get(this._editor).showMessage(invalidAction.disabled, newState.trigger.context.position);
+                                actions.dispose();
+                                return [2 /*return*/];
+                            }
+                        }
+                        _d.label = 10;
                     case 10:
+                        includeDisabledActions = !!((_c = newState.trigger.filter) === null || _c === void 0 ? void 0 : _c.include);
+                        if (newState.trigger.context) {
+                            if (!actions.allActions.length || !includeDisabledActions && !actions.validActions.length) {
+                                MessageController.get(this._editor).showMessage(newState.trigger.context.notAvailableMessage, newState.trigger.context.position);
+                                this._activeCodeActions.value = actions;
+                                actions.dispose();
+                                return [2 /*return*/];
+                            }
+                        }
+                        this._activeCodeActions.value = actions;
+                        this._codeActionWidget.getValue().show(newState.trigger, actions, newState.position, { includeDisabledActions: includeDisabledActions });
+                        return [3 /*break*/, 12];
+                    case 11:
                         // auto magically triggered
-                        if (this._codeActionWidget.isVisible) {
+                        if (this._codeActionWidget.getValue().isVisible) {
                             // TODO: Figure out if we should update the showing menu?
                             actions.dispose();
                         }
                         else {
                             this._activeCodeActions.value = actions;
                         }
-                        _a.label = 11;
-                    case 11: return [2 /*return*/];
+                        _d.label = 12;
+                    case 12: return [2 /*return*/];
                 }
             });
         });
     };
-    CodeActionUi.prototype.showCodeActionList = function (actions, at) {
+    CodeActionUi.prototype.getInvalidActionThatWouldHaveBeenApplied = function (trigger, actions) {
+        if (!actions.allActions.length) {
+            return undefined;
+        }
+        if ((trigger.autoApply === "first" /* First */ && actions.validActions.length === 0)
+            || (trigger.autoApply === "ifSingle" /* IfSingle */ && actions.allActions.length === 1)) {
+            return find(actions.allActions, function (action) { return action.disabled; });
+        }
+        return undefined;
+    };
+    CodeActionUi.prototype.tryGetValidActionToApply = function (trigger, actions) {
+        if (!actions.validActions.length) {
+            return undefined;
+        }
+        if ((trigger.autoApply === "first" /* First */ && actions.validActions.length > 0)
+            || (trigger.autoApply === "ifSingle" /* IfSingle */ && actions.validActions.length === 1)) {
+            return actions.validActions[0];
+        }
+        return undefined;
+    };
+    CodeActionUi.prototype.showCodeActionList = function (trigger, actions, at, options) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                this._codeActionWidget.show(actions, at);
+                this._codeActionWidget.getValue().show(trigger, actions, at, options);
                 return [2 /*return*/];
             });
         });
     };
-    CodeActionUi.prototype._handleLightBulbSelect = function (e) {
-        this._codeActionWidget.show(e.actions, e);
-    };
     CodeActionUi = __decorate([
-        __param(3, IContextMenuService),
-        __param(4, IKeybindingService)
+        __param(4, IInstantiationService)
     ], CodeActionUi);
     return CodeActionUi;
 }(Disposable));

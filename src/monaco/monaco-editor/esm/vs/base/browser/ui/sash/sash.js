@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import './sash.css';
 import { dispose, Disposable, DisposableStore } from '../../../common/lifecycle.js';
 import { isIPad } from '../../browser.js';
@@ -51,10 +58,10 @@ var Sash = /** @class */ (function (_super) {
         }
         _this._register(domEvent(_this.el, 'mousedown')(_this.onMouseDown, _this));
         _this._register(domEvent(_this.el, 'dblclick')(_this.onMouseDoubleClick, _this));
-        Gesture.addTarget(_this.el);
+        _this._register(Gesture.addTarget(_this.el));
         _this._register(domEvent(_this.el, EventType.Start)(_this.onTouchStart, _this));
         if (isIPad) {
-            // see also http://ux.stackexchange.com/questions/39023/what-is-the-optimum-button-size-of-touch-screen-applications
+            // see also https://ux.stackexchange.com/questions/39023/what-is-the-optimum-button-size-of-touch-screen-applications
             addClass(_this.el, 'touch');
         }
         _this.setOrientation(options.orientation || 0 /* VERTICAL */);
@@ -147,7 +154,7 @@ var Sash = /** @class */ (function (_super) {
         }
         // Select both iframes and webviews; internally Electron nests an iframe
         // in its <webview> component, but this isn't queryable.
-        var iframes = getElementsByTagName('iframe').concat(getElementsByTagName('webview'));
+        var iframes = __spreadArrays(getElementsByTagName('iframe'), getElementsByTagName('webview'));
         for (var _i = 0, iframes_1 = iframes; _i < iframes_1.length; _i++) {
             var iframe = iframes_1[_i];
             iframe.style.pointerEvents = 'none'; // disable mouse events on iframes as long as we drag the sash
@@ -310,10 +317,7 @@ var Sash = /** @class */ (function (_super) {
     };
     Sash.prototype.dispose = function () {
         _super.prototype.dispose.call(this);
-        if (this.el && this.el.parentElement) {
-            this.el.parentElement.removeChild(this.el);
-        }
-        this.el = null; // StrictNullOverride: nulling out ok in dispose
+        this.el.remove();
     };
     return Sash;
 }(Disposable));

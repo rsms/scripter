@@ -22,7 +22,7 @@ export function values(forEachable) {
 }
 export function keys(map) {
     var result = [];
-    map.forEach(function (value, key) { return result.push(key); });
+    map.forEach(function (_value, key) { return result.push(key); });
     return result;
 }
 var StringIterator = /** @class */ (function () {
@@ -54,7 +54,9 @@ var StringIterator = /** @class */ (function () {
 }());
 export { StringIterator };
 var PathIterator = /** @class */ (function () {
-    function PathIterator() {
+    function PathIterator(_splitOnBackslash) {
+        if (_splitOnBackslash === void 0) { _splitOnBackslash = true; }
+        this._splitOnBackslash = _splitOnBackslash;
     }
     PathIterator.prototype.reset = function (key) {
         this._value = key.replace(/\\$|\/$/, '');
@@ -71,7 +73,7 @@ var PathIterator = /** @class */ (function () {
         var justSeps = true;
         for (; this._to < this._value.length; this._to++) {
             var ch = this._value.charCodeAt(this._to);
-            if (ch === 47 /* Slash */ || ch === 92 /* Backslash */) {
+            if (ch === 47 /* Slash */ || this._splitOnBackslash && ch === 92 /* Backslash */) {
                 if (justSeps) {
                     this._from++;
                 }

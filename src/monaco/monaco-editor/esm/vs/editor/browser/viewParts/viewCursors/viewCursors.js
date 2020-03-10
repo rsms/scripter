@@ -27,10 +27,11 @@ var ViewCursors = /** @class */ (function (_super) {
     __extends(ViewCursors, _super);
     function ViewCursors(context) {
         var _this = _super.call(this, context) || this;
-        _this._readOnly = _this._context.configuration.editor.readOnly;
-        _this._cursorBlinking = _this._context.configuration.editor.viewInfo.cursorBlinking;
-        _this._cursorStyle = _this._context.configuration.editor.viewInfo.cursorStyle;
-        _this._cursorSmoothCaretAnimation = _this._context.configuration.editor.viewInfo.cursorSmoothCaretAnimation;
+        var options = _this._context.configuration.options;
+        _this._readOnly = options.get(68 /* readOnly */);
+        _this._cursorBlinking = options.get(16 /* cursorBlinking */);
+        _this._cursorStyle = options.get(18 /* cursorStyle */);
+        _this._cursorSmoothCaretAnimation = options.get(17 /* cursorSmoothCaretAnimation */);
         _this._selectionIsEmpty = true;
         _this._isVisible = false;
         _this._primaryCursor = new ViewCursor(_this._context);
@@ -58,19 +59,14 @@ var ViewCursors = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     ViewCursors.prototype.onConfigurationChanged = function (e) {
-        if (e.readOnly) {
-            this._readOnly = this._context.configuration.editor.readOnly;
-        }
-        if (e.viewInfo) {
-            this._cursorBlinking = this._context.configuration.editor.viewInfo.cursorBlinking;
-            this._cursorStyle = this._context.configuration.editor.viewInfo.cursorStyle;
-            this._cursorSmoothCaretAnimation = this._context.configuration.editor.viewInfo.cursorSmoothCaretAnimation;
-        }
-        this._primaryCursor.onConfigurationChanged(e);
+        var options = this._context.configuration.options;
+        this._readOnly = options.get(68 /* readOnly */);
+        this._cursorBlinking = options.get(16 /* cursorBlinking */);
+        this._cursorStyle = options.get(18 /* cursorStyle */);
+        this._cursorSmoothCaretAnimation = options.get(17 /* cursorSmoothCaretAnimation */);
         this._updateBlinking();
-        if (e.viewInfo) {
-            this._updateDomClassName();
-        }
+        this._updateDomClassName();
+        this._primaryCursor.onConfigurationChanged(e);
         for (var i = 0, len = this._secondaryCursors.length; i < len; i++) {
             this._secondaryCursors[i].onConfigurationChanged(e);
         }

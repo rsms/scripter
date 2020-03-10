@@ -10,11 +10,12 @@ import { Selection } from '../../common/core/selection.js';
 import { LanguageConfigurationRegistry } from '../../common/modes/languageConfigurationRegistry.js';
 import { BlockCommentCommand } from './blockCommentCommand.js';
 var LineCommentCommand = /** @class */ (function () {
-    function LineCommentCommand(selection, tabSize, type) {
+    function LineCommentCommand(selection, tabSize, type, insertSpace) {
         this._selection = selection;
-        this._selectionId = null;
         this._tabSize = tabSize;
         this._type = type;
+        this._insertSpace = insertSpace;
+        this._selectionId = null;
         this._deltaColumn = 0;
         this._moveEndPositionDown = false;
     }
@@ -46,7 +47,7 @@ var LineCommentCommand = /** @class */ (function () {
      * Analyze lines and decide which lines are relevant and what the toggle should do.
      * Also, build up several offsets and lengths useful in the generation of editor operations.
      */
-    LineCommentCommand._analyzeLines = function (type, model, lines, startLineNumber) {
+    LineCommentCommand._analyzeLines = function (type, insertSpace, model, lines, startLineNumber) {
         var onlyWhitespaceLines = true;
         var shouldRemoveComments;
         if (type === 0 /* Toggle */) {
@@ -92,7 +93,8 @@ var LineCommentCommand = /** @class */ (function () {
                     lineData.ignore = true;
                 }
             }
-            if (shouldRemoveComments) {
+            if (shouldRemoveComments && insertSpace) {
+                // Remove a following space if present
                 var commentStrEndOffset = lineContentStartOffset + lineData.commentStrLength;
                 if (commentStrEndOffset < lineContent.length && lineContent.charCodeAt(commentStrEndOffset) === 32 /* Space */) {
                     lineData.commentStrLength += 1;
@@ -116,14 +118,14 @@ var LineCommentCommand = /** @class */ (function () {
     /**
      * Analyze all lines and decide exactly what to do => not supported | insert line comments | remove line comments
      */
-    LineCommentCommand._gatherPreflightData = function (type, model, startLineNumber, endLineNumber) {
+    LineCommentCommand._gatherPreflightData = function (type, insertSpace, model, startLineNumber, endLineNumber) {
         var lines = LineCommentCommand._gatherPreflightCommentStrings(model, startLineNumber, endLineNumber);
         if (lines === null) {
             return {
                 supported: false
             };
         }
-        return LineCommentCommand._analyzeLines(type, model, lines, startLineNumber);
+        return LineCommentCommand._analyzeLines(type, insertSpace, model, lines, startLineNumber);
     };
     /**
      * Given a successful analysis, execute either insert line comments, either remove line comments
@@ -135,7 +137,7 @@ var LineCommentCommand = /** @class */ (function () {
         }
         else {
             LineCommentCommand._normalizeInsertionPoint(model, data.lines, s.startLineNumber, this._tabSize);
-            ops = LineCommentCommand._createAddLineCommentsOperations(data.lines, s.startLineNumber);
+            ops = this._createAddLineCommentsOperations(data.lines, s.startLineNumber);
         }
         var cursorPosition = new Position(s.positionLineNumber, s.positionColumn);
         for (var i = 0, len = ops.length; i < len; i++) {
@@ -206,10 +208,10 @@ var LineCommentCommand = /** @class */ (function () {
                     // Line is empty or contains only whitespace
                     firstNonWhitespaceIndex = lineContent.length;
                 }
-                ops = BlockCommentCommand._createAddBlockCommentOperations(new Range(s.startLineNumber, firstNonWhitespaceIndex + 1, s.startLineNumber, lineContent.length + 1), startToken, endToken);
+                ops = BlockCommentCommand._createAddBlockCommentOperations(new Range(s.startLineNumber, firstNonWhitespaceIndex + 1, s.startLineNumber, lineContent.length + 1), startToken, endToken, this._insertSpace);
             }
             else {
-                ops = BlockCommentCommand._createAddBlockCommentOperations(new Range(s.startLineNumber, model.getLineFirstNonWhitespaceColumn(s.startLineNumber), s.endLineNumber, model.getLineMaxColumn(s.endLineNumber)), startToken, endToken);
+                ops = BlockCommentCommand._createAddBlockCommentOperations(new Range(s.startLineNumber, model.getLineFirstNonWhitespaceColumn(s.startLineNumber), s.endLineNumber, model.getLineMaxColumn(s.endLineNumber)), startToken, endToken, this._insertSpace);
             }
             if (ops.length === 1) {
                 // Leave cursor after token and Space
@@ -229,7 +231,7 @@ var LineCommentCommand = /** @class */ (function () {
             this._moveEndPositionDown = true;
             s = s.setEndPosition(s.endLineNumber - 1, model.getLineMaxColumn(s.endLineNumber - 1));
         }
-        var data = LineCommentCommand._gatherPreflightData(this._type, model, s.startLineNumber, s.endLineNumber);
+        var data = LineCommentCommand._gatherPreflightData(this._type, this._insertSpace, model, s.startLineNumber, s.endLineNumber);
         if (data.supported) {
             return this._executeLineComments(model, builder, data, s);
         }
@@ -259,18 +261,18 @@ var LineCommentCommand = /** @class */ (function () {
     /**
      * Generate edit operations in the add line comment case
      */
-    LineCommentCommand._createAddLineCommentsOperations = function (lines, startLineNumber) {
+    LineCommentCommand.prototype._createAddLineCommentsOperations = function (lines, startLineNumber) {
         var res = [];
+        var afterCommentStr = this._insertSpace ? ' ' : '';
         for (var i = 0, len = lines.length; i < len; i++) {
             var lineData = lines[i];
             if (lineData.ignore) {
                 continue;
             }
-            res.push(EditOperation.insert(new Position(startLineNumber + i, lineData.commentStrOffset + 1), lineData.commentStr + ' '));
+            res.push(EditOperation.insert(new Position(startLineNumber + i, lineData.commentStrOffset + 1), lineData.commentStr + afterCommentStr));
         }
         return res;
     };
-    // TODO@Alex -> duplicated in characterHardWrappingLineMapper
     LineCommentCommand.nextVisibleColumn = function (currentVisibleColumn, tabSize, isTab, columnSize) {
         if (isTab) {
             return currentVisibleColumn + (tabSize - (currentVisibleColumn % tabSize));
@@ -281,7 +283,7 @@ var LineCommentCommand = /** @class */ (function () {
      * Adjust insertion points to have them vertically aligned in the add line comment case
      */
     LineCommentCommand._normalizeInsertionPoint = function (model, lines, startLineNumber, tabSize) {
-        var minVisibleColumn = Number.MAX_VALUE;
+        var minVisibleColumn = 1073741824 /* MAX_SAFE_SMALL_INTEGER */;
         var j;
         var lenJ;
         for (var i = 0, len = lines.length; i < len; i++) {

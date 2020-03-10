@@ -25,7 +25,7 @@ var LineRange = /** @class */ (function () {
 }());
 export { LineRange };
 var RenderLineInput = /** @class */ (function () {
-    function RenderLineInput(useMonospaceOptimizations, canUseHalfwidthRightwardsArrow, lineContent, continuesWithWrappedLine, isBasicASCII, containsRTL, fauxIndentLength, lineTokens, lineDecorations, tabSize, spaceWidth, stopRenderingLineAfter, renderWhitespace, renderControlCharacters, fontLigatures, selectionsOnLine) {
+    function RenderLineInput(useMonospaceOptimizations, canUseHalfwidthRightwardsArrow, lineContent, continuesWithWrappedLine, isBasicASCII, containsRTL, fauxIndentLength, lineTokens, lineDecorations, tabSize, startVisibleColumn, spaceWidth, middotWidth, stopRenderingLineAfter, renderWhitespace, renderControlCharacters, fontLigatures, selectionsOnLine) {
         this.useMonospaceOptimizations = useMonospaceOptimizations;
         this.canUseHalfwidthRightwardsArrow = canUseHalfwidthRightwardsArrow;
         this.lineContent = lineContent;
@@ -36,7 +36,9 @@ var RenderLineInput = /** @class */ (function () {
         this.lineTokens = lineTokens;
         this.lineDecorations = lineDecorations;
         this.tabSize = tabSize;
+        this.startVisibleColumn = startVisibleColumn;
         this.spaceWidth = spaceWidth;
+        this.middotWidth = middotWidth;
         this.stopRenderingLineAfter = stopRenderingLineAfter;
         this.renderWhitespace = (renderWhitespace === 'all'
             ? 3 /* All */
@@ -75,6 +77,7 @@ var RenderLineInput = /** @class */ (function () {
             && this.containsRTL === other.containsRTL
             && this.fauxIndentLength === other.fauxIndentLength
             && this.tabSize === other.tabSize
+            && this.startVisibleColumn === other.startVisibleColumn
             && this.spaceWidth === other.spaceWidth
             && this.stopRenderingLineAfter === other.stopRenderingLineAfter
             && this.renderWhitespace === other.renderWhitespace
@@ -192,20 +195,23 @@ export function renderViewLine(input, sb) {
         var content = '<span><span>\u00a0</span></span>';
         if (input.lineDecorations.length > 0) {
             // This line is empty, but it contains inline decorations
-            var classNames = [];
+            var beforeClassNames = [];
+            var afterClassNames = [];
             for (var i = 0, len = input.lineDecorations.length; i < len; i++) {
                 var lineDecoration = input.lineDecorations[i];
                 if (lineDecoration.type === 1 /* Before */) {
-                    classNames.push(input.lineDecorations[i].className);
+                    beforeClassNames.push(input.lineDecorations[i].className);
                     containsForeignElements |= 1 /* Before */;
                 }
                 if (lineDecoration.type === 2 /* After */) {
-                    classNames.push(input.lineDecorations[i].className);
+                    afterClassNames.push(input.lineDecorations[i].className);
                     containsForeignElements |= 2 /* After */;
                 }
             }
             if (containsForeignElements !== 0 /* None */) {
-                content = "<span><span class=\"" + classNames.join(' ') + "\"></span></span>";
+                var beforeSpan = (beforeClassNames.length > 0 ? "<span class=\"" + beforeClassNames.join(' ') + "\"></span>" : "");
+                var afterSpan = (afterClassNames.length > 0 ? "<span class=\"" + afterClassNames.join(' ') + "\"></span>" : "");
+                content = "<span>" + beforeSpan + afterSpan + "</span>";
             }
         }
         sb.appendASCIIString(content);
@@ -229,7 +235,7 @@ export function renderViewLine2(input) {
     return new RenderLineOutput2(out.characterMapping, sb.build(), out.containsRTL, out.containsForeignElements);
 }
 var ResolvedRenderLineInput = /** @class */ (function () {
-    function ResolvedRenderLineInput(fontIsMonospace, canUseHalfwidthRightwardsArrow, lineContent, len, isOverflowing, parts, containsForeignElements, tabSize, containsRTL, spaceWidth, renderWhitespace, renderControlCharacters) {
+    function ResolvedRenderLineInput(fontIsMonospace, canUseHalfwidthRightwardsArrow, lineContent, len, isOverflowing, parts, containsForeignElements, fauxIndentLength, tabSize, startVisibleColumn, containsRTL, spaceWidth, middotWidth, renderWhitespace, renderControlCharacters) {
         this.fontIsMonospace = fontIsMonospace;
         this.canUseHalfwidthRightwardsArrow = canUseHalfwidthRightwardsArrow;
         this.lineContent = lineContent;
@@ -237,9 +243,12 @@ var ResolvedRenderLineInput = /** @class */ (function () {
         this.isOverflowing = isOverflowing;
         this.parts = parts;
         this.containsForeignElements = containsForeignElements;
+        this.fauxIndentLength = fauxIndentLength;
         this.tabSize = tabSize;
+        this.startVisibleColumn = startVisibleColumn;
         this.containsRTL = containsRTL;
         this.spaceWidth = spaceWidth;
+        this.middotWidth = middotWidth;
         this.renderWhitespace = renderWhitespace;
         this.renderControlCharacters = renderControlCharacters;
         //
@@ -261,7 +270,7 @@ function resolveRenderLineInput(input) {
     }
     var tokens = transformAndRemoveOverflowing(input.lineTokens, input.fauxIndentLength, len);
     if (input.renderWhitespace === 3 /* All */ || input.renderWhitespace === 1 /* Boundary */ || (input.renderWhitespace === 2 /* Selection */ && !!input.selectionsOnLine)) {
-        tokens = _applyRenderWhitespace(lineContent, len, input.continuesWithWrappedLine, tokens, input.fauxIndentLength, input.tabSize, useMonospaceOptimizations, input.selectionsOnLine, input.renderWhitespace === 1 /* Boundary */);
+        tokens = _applyRenderWhitespace(lineContent, len, input.continuesWithWrappedLine, tokens, input.fauxIndentLength, input.tabSize, input.startVisibleColumn, useMonospaceOptimizations, input.selectionsOnLine, input.renderWhitespace === 1 /* Boundary */);
     }
     var containsForeignElements = 0 /* None */;
     if (input.lineDecorations.length > 0) {
@@ -284,7 +293,7 @@ function resolveRenderLineInput(input) {
         // We can never split RTL text, as it ruins the rendering
         tokens = splitLargeTokens(lineContent, tokens, !input.isBasicASCII || input.fontLigatures);
     }
-    return new ResolvedRenderLineInput(useMonospaceOptimizations, input.canUseHalfwidthRightwardsArrow, lineContent, len, isOverflowing, tokens, containsForeignElements, input.tabSize, input.containsRTL, input.spaceWidth, input.renderWhitespace, input.renderControlCharacters);
+    return new ResolvedRenderLineInput(useMonospaceOptimizations, input.canUseHalfwidthRightwardsArrow, lineContent, len, isOverflowing, tokens, containsForeignElements, input.fauxIndentLength, input.tabSize, input.startVisibleColumn, input.containsRTL, input.spaceWidth, input.middotWidth, input.renderWhitespace, input.renderControlCharacters);
 }
 /**
  * In the rendering phase, characters are always looped until token.endIndex.
@@ -377,7 +386,7 @@ function splitLargeTokens(lineContent, tokens, onlyAtSpaces) {
  * Moreover, a token is created for every visual indent because on some fonts the glyphs used for rendering whitespace (&rarr; or &middot;) do not have the same width as &nbsp;.
  * The rendering phase will generate `style="width:..."` for these tokens.
  */
-function _applyRenderWhitespace(lineContent, len, continuesWithWrappedLine, tokens, fauxIndentLength, tabSize, useMonospaceOptimizations, selections, onlyBoundary) {
+function _applyRenderWhitespace(lineContent, len, continuesWithWrappedLine, tokens, fauxIndentLength, tabSize, startVisibleColumn, useMonospaceOptimizations, selections, onlyBoundary) {
     var result = [], resultLen = 0;
     var tokenIndex = 0;
     var tokenType = tokens[tokenIndex].type;
@@ -393,23 +402,10 @@ function _applyRenderWhitespace(lineContent, len, continuesWithWrappedLine, toke
     else {
         lastNonWhitespaceIndex = strings.lastNonWhitespaceIndex(lineContent);
     }
-    var tmpIndent = 0;
-    for (var charIndex = 0; charIndex < fauxIndentLength; charIndex++) {
-        var chCode = lineContent.charCodeAt(charIndex);
-        if (chCode === 9 /* Tab */) {
-            tmpIndent = tabSize;
-        }
-        else if (strings.isFullWidthCharacter(chCode)) {
-            tmpIndent += 2;
-        }
-        else {
-            tmpIndent++;
-        }
-    }
-    tmpIndent = tmpIndent % tabSize;
     var wasInWhitespace = false;
     var currentSelectionIndex = 0;
     var currentSelection = selections && selections[currentSelectionIndex];
+    var tmpIndent = startVisibleColumn % tabSize;
     for (var charIndex = fauxIndentLength; charIndex < len; charIndex++) {
         var chCode = lineContent.charCodeAt(charIndex);
         if (currentSelection && charIndex >= currentSelection.endOffset) {
@@ -560,14 +556,19 @@ function _renderLine(input, sb) {
     var len = input.len;
     var isOverflowing = input.isOverflowing;
     var parts = input.parts;
+    var fauxIndentLength = input.fauxIndentLength;
     var tabSize = input.tabSize;
+    var startVisibleColumn = input.startVisibleColumn;
     var containsRTL = input.containsRTL;
     var spaceWidth = input.spaceWidth;
+    var middotWidth = input.middotWidth;
     var renderWhitespace = input.renderWhitespace;
     var renderControlCharacters = input.renderControlCharacters;
+    // use U+2E31 - WORD SEPARATOR MIDDLE DOT or U+00B7 - MIDDLE DOT
+    var spaceRenderWhitespaceCharacter = (middotWidth > spaceWidth ? 0x2E31 : 0xB7);
     var characterMapping = new CharacterMapping(len + 1, parts.length);
     var charIndex = 0;
-    var tabsCharDelta = 0;
+    var visibleColumn = startVisibleColumn;
     var charOffsetInPart = 0;
     var prevPartContentCnt = 0;
     var partAbsoluteOffset = 0;
@@ -586,24 +587,20 @@ function _renderLine(input, sb) {
             var partContentCnt = 0;
             {
                 var _charIndex = charIndex;
-                var _tabsCharDelta = tabsCharDelta;
+                var _visibleColumn = visibleColumn;
                 for (; _charIndex < partEndIndex; _charIndex++) {
                     var charCode = lineContent.charCodeAt(_charIndex);
-                    if (charCode === 9 /* Tab */) {
-                        var insertSpacesCount = tabSize - (_charIndex + _tabsCharDelta) % tabSize;
-                        _tabsCharDelta += insertSpacesCount - 1;
-                        partContentCnt += insertSpacesCount;
-                    }
-                    else {
-                        // must be CharCode.Space
-                        partContentCnt++;
+                    var charWidth = (charCode === 9 /* Tab */ ? (tabSize - (_visibleColumn % tabSize)) : 1) | 0;
+                    partContentCnt += charWidth;
+                    if (_charIndex >= fauxIndentLength) {
+                        _visibleColumn += charWidth;
                     }
                 }
             }
             if (!fontIsMonospace) {
                 var partIsOnlyWhitespace = (partType === 'vs-whitespace');
                 if (partIsOnlyWhitespace || !containsForeignElements) {
-                    sb.appendASCIIString(' style="width:');
+                    sb.appendASCIIString(' style="display:inline-block;width:');
                     sb.appendASCIIString(String(spaceWidth * partContentCnt));
                     sb.appendASCIIString('px"');
                 }
@@ -612,29 +609,27 @@ function _renderLine(input, sb) {
             for (; charIndex < partEndIndex; charIndex++) {
                 characterMapping.setPartData(charIndex, partIndex, charOffsetInPart, partAbsoluteOffset);
                 var charCode = lineContent.charCodeAt(charIndex);
+                var charWidth = void 0;
                 if (charCode === 9 /* Tab */) {
-                    var insertSpacesCount = tabSize - (charIndex + tabsCharDelta) % tabSize;
-                    tabsCharDelta += insertSpacesCount - 1;
-                    charOffsetInPart += insertSpacesCount - 1;
-                    if (insertSpacesCount > 0) {
-                        if (!canUseHalfwidthRightwardsArrow || insertSpacesCount > 1) {
-                            sb.write1(0x2192); // RIGHTWARDS ARROW
-                        }
-                        else {
-                            sb.write1(0xFFEB); // HALFWIDTH RIGHTWARDS ARROW
-                        }
-                        insertSpacesCount--;
+                    charWidth = (tabSize - (visibleColumn % tabSize)) | 0;
+                    if (!canUseHalfwidthRightwardsArrow || charWidth > 1) {
+                        sb.write1(0x2192); // RIGHTWARDS ARROW
                     }
-                    while (insertSpacesCount > 0) {
+                    else {
+                        sb.write1(0xFFEB); // HALFWIDTH RIGHTWARDS ARROW
+                    }
+                    for (var space = 2; space <= charWidth; space++) {
                         sb.write1(0xA0); // &nbsp;
-                        insertSpacesCount--;
                     }
                 }
-                else {
-                    // must be CharCode.Space
-                    sb.write1(0xB7); // &middot;
+                else { // must be CharCode.Space
+                    charWidth = 1;
+                    sb.write1(spaceRenderWhitespaceCharacter); // &middot; or word separator middle dot
                 }
-                charOffsetInPart++;
+                charOffsetInPart += charWidth;
+                if (charIndex >= fauxIndentLength) {
+                    visibleColumn += charWidth;
+                }
             }
             prevPartContentCnt = partContentCnt;
         }
@@ -647,56 +642,51 @@ function _renderLine(input, sb) {
             for (; charIndex < partEndIndex; charIndex++) {
                 characterMapping.setPartData(charIndex, partIndex, charOffsetInPart, partAbsoluteOffset);
                 var charCode = lineContent.charCodeAt(charIndex);
+                var producedCharacters = 1;
+                var charWidth = 1;
                 switch (charCode) {
                     case 9 /* Tab */:
-                        var insertSpacesCount = tabSize - (charIndex + tabsCharDelta) % tabSize;
-                        tabsCharDelta += insertSpacesCount - 1;
-                        charOffsetInPart += insertSpacesCount - 1;
-                        while (insertSpacesCount > 0) {
+                        producedCharacters = (tabSize - (visibleColumn % tabSize));
+                        charWidth = producedCharacters;
+                        for (var space = 1; space <= producedCharacters; space++) {
                             sb.write1(0xA0); // &nbsp;
-                            partContentCnt++;
-                            insertSpacesCount--;
                         }
                         break;
                     case 32 /* Space */:
                         sb.write1(0xA0); // &nbsp;
-                        partContentCnt++;
                         break;
                     case 60 /* LessThan */:
                         sb.appendASCIIString('&lt;');
-                        partContentCnt++;
                         break;
                     case 62 /* GreaterThan */:
                         sb.appendASCIIString('&gt;');
-                        partContentCnt++;
                         break;
                     case 38 /* Ampersand */:
                         sb.appendASCIIString('&amp;');
-                        partContentCnt++;
                         break;
                     case 0 /* Null */:
                         sb.appendASCIIString('&#00;');
-                        partContentCnt++;
                         break;
                     case 65279 /* UTF8_BOM */:
                     case 8232 /* LINE_SEPARATOR_2028 */:
                         sb.write1(0xFFFD);
-                        partContentCnt++;
                         break;
                     default:
                         if (strings.isFullWidthCharacter(charCode)) {
-                            tabsCharDelta++;
+                            charWidth++;
                         }
                         if (renderControlCharacters && charCode < 32) {
                             sb.write1(9216 + charCode);
-                            partContentCnt++;
                         }
                         else {
                             sb.write1(charCode);
-                            partContentCnt++;
                         }
                 }
-                charOffsetInPart++;
+                charOffsetInPart += producedCharacters;
+                partContentCnt += producedCharacters;
+                if (charIndex >= fauxIndentLength) {
+                    visibleColumn += charWidth;
+                }
             }
             prevPartContentCnt = partContentCnt;
         }

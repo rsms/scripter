@@ -13,17 +13,13 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-import { inputBackground, inputForeground, inputBorder, foreground, editorBackground, contrastBorder, listFocusBackground, listFocusForeground, listActiveSelectionBackground, listActiveSelectionForeground, listInactiveSelectionForeground, listInactiveSelectionBackground, listInactiveFocusBackground, listHoverBackground, listHoverForeground, listDropBackground, pickerGroupBorder, pickerGroupForeground, widgetShadow, inputValidationInfoBorder, inputValidationInfoBackground, inputValidationWarningBorder, inputValidationWarningBackground, inputValidationErrorBorder, inputValidationErrorBackground, activeContrastBorder, badgeBackground, badgeForeground, progressBarBackground, inputValidationInfoForeground, inputValidationWarningForeground, inputValidationErrorForeground, menuForeground, menuBackground, menuSelectionForeground, menuSelectionBackground, menuSelectionBorder, menuBorder, menuSeparatorBackground, darken, listFilterWidgetOutline, listFilterWidgetNoMatchesOutline, listFilterWidgetBackground, treeIndentGuidesStroke } from './colorRegistry.js';
-import { mixin } from '../../../base/common/objects.js';
+import { inputBackground, inputForeground, inputBorder, foreground, editorBackground, contrastBorder, listFocusBackground, listFocusForeground, listActiveSelectionBackground, listActiveSelectionForeground, listInactiveSelectionForeground, listInactiveSelectionBackground, listInactiveFocusBackground, listHoverBackground, listHoverForeground, listDropBackground, pickerGroupBorder, pickerGroupForeground, widgetShadow, inputValidationInfoBorder, inputValidationInfoBackground, inputValidationWarningBorder, inputValidationWarningBackground, inputValidationErrorBorder, inputValidationErrorBackground, activeContrastBorder, badgeBackground, badgeForeground, progressBarBackground, inputValidationInfoForeground, inputValidationWarningForeground, inputValidationErrorForeground, menuForeground, menuBackground, menuSelectionForeground, menuSelectionBackground, menuSelectionBorder, menuBorder, menuSeparatorBackground, darken, listFilterWidgetOutline, listFilterWidgetNoMatchesOutline, listFilterWidgetBackground, treeIndentGuidesStroke, resolveColorValue } from './colorRegistry.js';
 export function computeStyles(theme, styleMap) {
     var styles = Object.create(null);
     for (var key in styleMap) {
         var value = styleMap[key];
-        if (typeof value === 'string') {
-            styles[key] = theme.getColor(value);
-        }
-        else if (typeof value === 'function') {
-            styles[key] = value(theme);
+        if (value) {
+            styles[key] = resolveColorValue(value, theme);
         }
     }
     return styles;
@@ -87,7 +83,7 @@ export function attachQuickOpenStyler(widget, themeService, style) {
     }, widget);
 }
 export function attachListStyler(widget, themeService, overrides) {
-    return attachStyler(themeService, mixin(overrides || Object.create(null), defaultListStyles, false), widget);
+    return attachStyler(themeService, __assign(__assign({}, defaultListStyles), (overrides || {})), widget);
 }
 export var defaultListStyles = {
     listFocusBackground: listFocusBackground,
@@ -122,5 +118,5 @@ export var defaultMenuStyles = {
     separatorColor: menuSeparatorBackground
 };
 export function attachMenuStyler(widget, themeService, style) {
-    return attachStyler(themeService, __assign({}, defaultMenuStyles, style), widget);
+    return attachStyler(themeService, __assign(__assign({}, defaultMenuStyles), style), widget);
 }

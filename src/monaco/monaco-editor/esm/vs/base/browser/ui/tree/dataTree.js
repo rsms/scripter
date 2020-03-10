@@ -19,15 +19,16 @@ import { AbstractTree } from './abstractTree.js';
 import { ObjectTreeModel } from './objectTreeModel.js';
 var DataTree = /** @class */ (function (_super) {
     __extends(DataTree, _super);
-    function DataTree(container, delegate, renderers, dataSource, options) {
+    function DataTree(user, container, delegate, renderers, dataSource, options) {
         if (options === void 0) { options = {}; }
-        var _this = _super.call(this, container, delegate, renderers, options) || this;
+        var _this = _super.call(this, user, container, delegate, renderers, options) || this;
+        _this.user = user;
         _this.dataSource = dataSource;
         _this.identityProvider = options.identityProvider;
         return _this;
     }
-    DataTree.prototype.createModel = function (view, options) {
-        return new ObjectTreeModel(view, options);
+    DataTree.prototype.createModel = function (user, view, options) {
+        return new ObjectTreeModel(user, view, options);
     };
     return DataTree;
 }(AbstractTree));

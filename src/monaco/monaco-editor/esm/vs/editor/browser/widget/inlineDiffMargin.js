@@ -16,10 +16,11 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -69,9 +70,9 @@ var InlineDiffMargin = /** @class */ (function (_super) {
         // make sure the diff margin shows above overlay.
         _this._marginDomNode.style.zIndex = '10';
         _this._diffActions = document.createElement('div');
-        _this._diffActions.className = 'lightbulb-glyph';
+        _this._diffActions.className = 'codicon codicon-lightbulb lightbulb-glyph';
         _this._diffActions.style.position = 'absolute';
-        var lineHeight = editor.getConfiguration().lineHeight;
+        var lineHeight = editor.getOption(49 /* lineHeight */);
         var lineFeed = editor.getModel().getEOL();
         _this._diffActions.style.right = '0px';
         _this._diffActions.style.visibility = 'hidden';
@@ -107,7 +108,7 @@ var InlineDiffMargin = /** @class */ (function (_super) {
             }); });
             actions.push(copyLineAction);
         }
-        var readOnly = editor.getConfiguration().readOnly;
+        var readOnly = editor.getOption(68 /* readOnly */);
         if (!readOnly) {
             actions.push(new Action('diff.inline.revertChange', nls.localize('diff.inline.revertChange.label', "Revert this change"), undefined, true, function () { return __awaiter(_this, void 0, void 0, function () {
                 var column, column;
@@ -134,15 +135,12 @@ var InlineDiffMargin = /** @class */ (function (_super) {
                 });
             }); }));
         }
-        _this._register(dom.addStandardDisposableListener(_this._diffActions, 'mousedown', function (e) {
-            var _a = dom.getDomNodePagePosition(_this._diffActions), top = _a.top, height = _a.height;
-            var pad = Math.floor(lineHeight / 3);
-            e.preventDefault();
+        var showContextMenu = function (x, y) {
             _this._contextMenuService.showContextMenu({
                 getAnchor: function () {
                     return {
-                        x: e.posx,
-                        y: top + height + pad
+                        x: x,
+                        y: y
                     };
                 },
                 getActions: function () {
@@ -153,6 +151,12 @@ var InlineDiffMargin = /** @class */ (function (_super) {
                 },
                 autoSelectFirstItem: true
             });
+        };
+        _this._register(dom.addStandardDisposableListener(_this._diffActions, 'mousedown', function (e) {
+            var _a = dom.getDomNodePagePosition(_this._diffActions), top = _a.top, height = _a.height;
+            var pad = Math.floor(lineHeight / 3);
+            e.preventDefault();
+            showContextMenu(e.posx, top + height + pad);
         }));
         _this._register(editor.onMouseMove(function (e) {
             if (e.target.type === 8 /* CONTENT_VIEW_ZONE */ || e.target.type === 5 /* GUTTER_VIEW_ZONE */) {
@@ -167,6 +171,19 @@ var InlineDiffMargin = /** @class */ (function (_super) {
             }
             else {
                 _this.visibility = false;
+            }
+        }));
+        _this._register(editor.onMouseDown(function (e) {
+            if (!e.event.rightButton) {
+                return;
+            }
+            if (e.target.type === 8 /* CONTENT_VIEW_ZONE */ || e.target.type === 5 /* GUTTER_VIEW_ZONE */) {
+                var viewZoneId = e.target.detail.viewZoneId;
+                if (viewZoneId === _this._viewZoneId) {
+                    e.event.preventDefault();
+                    currentLineNumberOffset = _this._updateLightBulbPosition(_this._marginDomNode, e.event.browserEvent.y, lineHeight);
+                    showContextMenu(e.event.posx, e.event.posy + lineHeight);
+                }
             }
         }));
         return _this;

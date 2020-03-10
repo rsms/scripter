@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { registerEditorAction, registerEditorCommand, registerEditorContribution } from '../../browser/editorExtensions.js';
 import { CodeActionCommand, OrganizeImportsAction, QuickFixAction, QuickFixController, RefactorAction, SourceAction, AutoFixAction, FixAllAction } from './codeActionCommands.js';
-registerEditorContribution(QuickFixController);
+registerEditorContribution(QuickFixController.ID, QuickFixController);
 registerEditorAction(QuickFixAction);
 registerEditorAction(RefactorAction);
 registerEditorAction(SourceAction);

@@ -20,6 +20,7 @@ import { Disposable } from '../../../base/common/lifecycle.js';
 import { FrankensteinMode } from '../modes/abstractMode.js';
 import { NULL_LANGUAGE_IDENTIFIER } from '../modes/nullMode.js';
 import { LanguagesRegistry } from './languagesRegistry.js';
+import { firstOrDefault } from '../../../base/common/arrays.js';
 var LanguageSelection = /** @class */ (function (_super) {
     __extends(LanguageSelection, _super);
     function LanguageSelection(onLanguagesMaybeChanged, selector) {
@@ -62,17 +63,11 @@ var ModeServiceImpl = /** @class */ (function () {
     };
     ModeServiceImpl.prototype.getModeIdByFilepathOrFirstLine = function (resource, firstLine) {
         var modeIds = this._registry.getModeIdsFromFilepathOrFirstLine(resource, firstLine);
-        if (modeIds.length > 0) {
-            return modeIds[0];
-        }
-        return null;
+        return firstOrDefault(modeIds, null);
     };
     ModeServiceImpl.prototype.getModeId = function (commaSeparatedMimetypesOrCommaSeparatedIds) {
         var modeIds = this._registry.extractModeIds(commaSeparatedMimetypesOrCommaSeparatedIds);
-        if (modeIds.length > 0) {
-            return modeIds[0];
-        }
-        return null;
+        return firstOrDefault(modeIds, null);
     };
     ModeServiceImpl.prototype.getLanguageIdentifier = function (modeId) {
         return this._registry.getLanguageIdentifier(modeId);

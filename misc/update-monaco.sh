@@ -37,6 +37,12 @@ rm -rf src/monaco/monaco-editor
 mv build/monaco-archive/package src/monaco/monaco-editor
 rm -rf build/monaco-archive
 
+# backup
+echo "putting verbatim copy of monaco-editor -> _local/monaco-editor-verbatim"
+mkdir -p _local
+rm -rf _local/monaco-editor-verbatim
+cp -a src/monaco/monaco-editor _local/monaco-editor-verbatim
+
 # Move type defs
 rm -f src/monaco/monaco.d.ts
 mv src/monaco/monaco-editor/monaco.d.ts src/monaco/monaco.d.ts

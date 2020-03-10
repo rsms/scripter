@@ -33,13 +33,15 @@ var LineNumbersOverlay = /** @class */ (function (_super) {
         return _this;
     }
     LineNumbersOverlay.prototype._readConfig = function () {
-        var config = this._context.configuration.editor;
-        this._lineHeight = config.lineHeight;
-        this._renderLineNumbers = config.viewInfo.renderLineNumbers;
-        this._renderCustomLineNumbers = config.viewInfo.renderCustomLineNumbers;
-        this._renderFinalNewline = config.viewInfo.renderFinalNewline;
-        this._lineNumbersLeft = config.layoutInfo.lineNumbersLeft;
-        this._lineNumbersWidth = config.layoutInfo.lineNumbersWidth;
+        var options = this._context.configuration.options;
+        this._lineHeight = options.get(49 /* lineHeight */);
+        var lineNumbers = options.get(50 /* lineNumbers */);
+        this._renderLineNumbers = lineNumbers.renderType;
+        this._renderCustomLineNumbers = lineNumbers.renderFn;
+        this._renderFinalNewline = options.get(71 /* renderFinalNewline */);
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._lineNumbersLeft = layoutInfo.lineNumbersLeft;
+        this._lineNumbersWidth = layoutInfo.lineNumbersWidth;
     };
     LineNumbersOverlay.prototype.dispose = function () {
         this._context.removeEventHandler(this);
@@ -84,13 +86,6 @@ var LineNumbersOverlay = /** @class */ (function (_super) {
             return '';
         }
         var modelLineNumber = modelPosition.lineNumber;
-        if (!this._renderFinalNewline) {
-            var lineCount = this._context.model.getLineCount();
-            var lineContent = this._context.model.getLineContent(modelLineNumber);
-            if (modelLineNumber === lineCount && lineContent === '') {
-                return '';
-            }
-        }
         if (this._renderCustomLineNumbers) {
             return this._renderCustomLineNumbers(modelLineNumber);
         }
@@ -121,9 +116,17 @@ var LineNumbersOverlay = /** @class */ (function (_super) {
         var visibleStartLineNumber = ctx.visibleRange.startLineNumber;
         var visibleEndLineNumber = ctx.visibleRange.endLineNumber;
         var common = '<div class="' + LineNumbersOverlay.CLASS_NAME + lineHeightClassName + '" style="left:' + this._lineNumbersLeft.toString() + 'px;width:' + this._lineNumbersWidth.toString() + 'px;">';
+        var lineCount = this._context.model.getLineCount();
         var output = [];
         for (var lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {
             var lineIndex = lineNumber - visibleStartLineNumber;
+            if (!this._renderFinalNewline) {
+                if (lineNumber === lineCount && this._context.model.getLineLength(lineNumber) === 0) {
+                    // Do not render last (empty) line
+                    output[lineIndex] = '';
+                    continue;
+                }
+            }
             var renderLineNumber = this._getLineRenderLineNumber(lineNumber);
             if (renderLineNumber) {
                 output[lineIndex] = (common

@@ -58,7 +58,8 @@ var RenderingContext = /** @class */ (function (_super) {
 }(RestrictedRenderingContext));
 export { RenderingContext };
 var LineVisibleRanges = /** @class */ (function () {
-    function LineVisibleRanges(lineNumber, ranges) {
+    function LineVisibleRanges(outsideRenderedLine, lineNumber, ranges) {
+        this.outsideRenderedLine = outsideRenderedLine;
         this.lineNumber = lineNumber;
         this.ranges = ranges;
     }
@@ -76,3 +77,19 @@ var HorizontalRange = /** @class */ (function () {
     return HorizontalRange;
 }());
 export { HorizontalRange };
+var HorizontalPosition = /** @class */ (function () {
+    function HorizontalPosition(outsideRenderedLine, left) {
+        this.outsideRenderedLine = outsideRenderedLine;
+        this.left = Math.round(left);
+    }
+    return HorizontalPosition;
+}());
+export { HorizontalPosition };
+var VisibleRanges = /** @class */ (function () {
+    function VisibleRanges(outsideRenderedLine, ranges) {
+        this.outsideRenderedLine = outsideRenderedLine;
+        this.ranges = ranges;
+    }
+    return VisibleRanges;
+}());
+export { VisibleRanges };

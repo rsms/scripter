@@ -23,59 +23,56 @@ import * as platform from '../../../../base/common/platform.js';
 import * as strings from '../../../../base/common/strings.js';
 import { RenderedLinesCollection } from '../../view/viewLayer.js';
 import { PartFingerprints, ViewPart } from '../../view/viewPart.js';
+import { MINIMAP_GUTTER_WIDTH } from '../../../common/config/editorOptions.js';
 import { Range } from '../../../common/core/range.js';
-import { MinimapTokensColorTracker } from '../../../common/view/minimapCharRenderer.js';
-import { getOrCreateMinimapCharRenderer } from '../../../common/view/runtimeMinimapCharRenderer.js';
+import { MinimapTokensColorTracker } from '../../../common/viewModel/minimapTokensColorTracker.js';
 import * as viewEvents from '../../../common/view/viewEvents.js';
-import { scrollbarShadow, scrollbarSliderActiveBackground, scrollbarSliderBackground, scrollbarSliderHoverBackground } from '../../../../platform/theme/common/colorRegistry.js';
+import { scrollbarShadow, scrollbarSliderActiveBackground, scrollbarSliderBackground, scrollbarSliderHoverBackground, minimapSelection } from '../../../../platform/theme/common/colorRegistry.js';
 import { registerThemingParticipant } from '../../../../platform/theme/common/themeService.js';
-function getMinimapLineHeight(renderMinimap) {
-    if (renderMinimap === 2 /* Large */) {
-        return 4 /* x2_CHAR_HEIGHT */;
+import { EventType, Gesture } from '../../../../base/browser/touch.js';
+import { MinimapCharRendererFactory } from './minimapCharRendererFactory.js';
+import { MinimapPosition } from '../../../common/model.js';
+import { once } from '../../../../base/common/functional.js';
+function getMinimapLineHeight(renderMinimap, scale) {
+    if (renderMinimap === 1 /* Text */) {
+        return 2 /* BASE_CHAR_HEIGHT */ * scale;
     }
-    if (renderMinimap === 4 /* LargeBlocks */) {
-        return 4 /* x2_CHAR_HEIGHT */ + 2;
-    }
-    if (renderMinimap === 1 /* Small */) {
-        return 2 /* x1_CHAR_HEIGHT */;
-    }
-    // RenderMinimap.SmallBlocks
-    return 2 /* x1_CHAR_HEIGHT */ + 1;
+    // RenderMinimap.Blocks
+    return (2 /* BASE_CHAR_HEIGHT */ + 1) * scale;
 }
-function getMinimapCharWidth(renderMinimap) {
-    if (renderMinimap === 2 /* Large */) {
-        return 2 /* x2_CHAR_WIDTH */;
+function getMinimapCharWidth(renderMinimap, scale) {
+    if (renderMinimap === 1 /* Text */) {
+        return 1 /* BASE_CHAR_WIDTH */ * scale;
     }
-    if (renderMinimap === 4 /* LargeBlocks */) {
-        return 2 /* x2_CHAR_WIDTH */;
-    }
-    if (renderMinimap === 1 /* Small */) {
-        return 1 /* x1_CHAR_WIDTH */;
-    }
-    // RenderMinimap.SmallBlocks
-    return 1 /* x1_CHAR_WIDTH */;
+    // RenderMinimap.Blocks
+    return 1 /* BASE_CHAR_WIDTH */ * scale;
 }
 /**
  * The orthogonal distance to the slider at which dragging "resets". This implements "snapping"
  */
 var MOUSE_DRAG_RESET_DISTANCE = 140;
+var GUTTER_DECORATION_WIDTH = 2;
 var MinimapOptions = /** @class */ (function () {
     function MinimapOptions(configuration) {
-        var pixelRatio = configuration.editor.pixelRatio;
-        var layoutInfo = configuration.editor.layoutInfo;
-        var viewInfo = configuration.editor.viewInfo;
-        var fontInfo = configuration.editor.fontInfo;
+        var _this = this;
+        var options = configuration.options;
+        var pixelRatio = options.get(105 /* pixelRatio */);
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        var fontInfo = options.get(34 /* fontInfo */);
         this.renderMinimap = layoutInfo.renderMinimap | 0;
-        this.scrollBeyondLastLine = viewInfo.scrollBeyondLastLine;
-        this.showSlider = viewInfo.minimap.showSlider;
+        this.scrollBeyondLastLine = options.get(80 /* scrollBeyondLastLine */);
+        var minimapOpts = options.get(54 /* minimap */);
+        this.showSlider = minimapOpts.showSlider;
+        this.fontScale = Math.round(minimapOpts.scale * pixelRatio);
+        this.charRenderer = once(function () { return MinimapCharRendererFactory.create(_this.fontScale, fontInfo.fontFamily); });
         this.pixelRatio = pixelRatio;
         this.typicalHalfwidthCharacterWidth = fontInfo.typicalHalfwidthCharacterWidth;
-        this.lineHeight = configuration.editor.lineHeight;
+        this.lineHeight = options.get(49 /* lineHeight */);
         this.minimapLeft = layoutInfo.minimapLeft;
         this.minimapWidth = layoutInfo.minimapWidth;
         this.minimapHeight = layoutInfo.height;
-        this.canvasInnerWidth = Math.max(1, Math.floor(pixelRatio * this.minimapWidth));
-        this.canvasInnerHeight = Math.max(1, Math.floor(pixelRatio * this.minimapHeight));
+        this.canvasInnerWidth = Math.floor(pixelRatio * this.minimapWidth);
+        this.canvasInnerHeight = Math.floor(pixelRatio * this.minimapHeight);
         this.canvasOuterWidth = this.canvasInnerWidth / pixelRatio;
         this.canvasOuterHeight = this.canvasInnerHeight / pixelRatio;
     }
@@ -86,6 +83,7 @@ var MinimapOptions = /** @class */ (function () {
             && this.pixelRatio === other.pixelRatio
             && this.typicalHalfwidthCharacterWidth === other.typicalHalfwidthCharacterWidth
             && this.lineHeight === other.lineHeight
+            && this.fontScale === other.fontScale
             && this.minimapLeft === other.minimapLeft
             && this.minimapWidth === other.minimapWidth
             && this.minimapHeight === other.minimapHeight
@@ -113,9 +111,12 @@ var MinimapLayout = /** @class */ (function () {
         var desiredSliderPosition = this.sliderTop + delta;
         return Math.round(desiredSliderPosition / this._computedSliderRatio);
     };
+    MinimapLayout.prototype.getDesiredScrollTopFromTouchLocation = function (pageY) {
+        return Math.round((pageY - this.sliderHeight / 2) / this._computedSliderRatio);
+    };
     MinimapLayout.create = function (options, viewportStartLineNumber, viewportEndLineNumber, viewportHeight, viewportContainsWhitespaceGaps, lineCount, scrollTop, scrollHeight, previousLayout) {
         var pixelRatio = options.pixelRatio;
-        var minimapLineHeight = getMinimapLineHeight(options.renderMinimap);
+        var minimapLineHeight = getMinimapLineHeight(options.renderMinimap, options.fontScale);
         var minimapLinesFitting = Math.floor(options.canvasInnerHeight / minimapLineHeight);
         var lineHeight = options.lineHeight;
         // The visible line count in a viewport can change due to a number of reasons:
@@ -296,10 +297,13 @@ var Minimap = /** @class */ (function (_super) {
     __extends(Minimap, _super);
     function Minimap(context) {
         var _this = _super.call(this, context) || this;
+        _this._selections = [];
         _this._renderDecorations = false;
+        _this._gestureInProgress = false;
         _this._options = new MinimapOptions(_this._context.configuration);
         _this._lastRenderData = null;
         _this._buffers = null;
+        _this._selectionColor = _this._context.theme.getColor(minimapSelection);
         _this._domNode = createFastDomNode(document.createElement('div'));
         PartFingerprints.write(_this._domNode, 8 /* Minimap */);
         _this._domNode.setClassName(_this._getMinimapDomNodeClassName());
@@ -322,6 +326,7 @@ var Minimap = /** @class */ (function (_super) {
         _this._slider.setPosition('absolute');
         _this._slider.setClassName('minimap-slider');
         _this._slider.setLayerHinting(true);
+        _this._slider.setContain('strict');
         _this._domNode.appendChild(_this._slider);
         _this._sliderHorizontal = createFastDomNode(document.createElement('div'));
         _this._sliderHorizontal.setPosition('absolute');
@@ -338,12 +343,12 @@ var Minimap = /** @class */ (function (_super) {
             if (!_this._lastRenderData) {
                 return;
             }
-            var minimapLineHeight = getMinimapLineHeight(renderMinimap);
+            var minimapLineHeight = getMinimapLineHeight(renderMinimap, _this._options.fontScale);
             var internalOffsetY = _this._options.pixelRatio * e.browserEvent.offsetY;
             var lineIndex = Math.floor(internalOffsetY / minimapLineHeight);
             var lineNumber = lineIndex + _this._lastRenderData.renderedLayout.startLineNumber;
             lineNumber = Math.min(lineNumber, _this._context.model.getLineCount());
-            _this._context.privateViewEventBus.emit(new viewEvents.ViewRevealRangeRequestEvent(new Range(lineNumber, 1, lineNumber, 1), 1 /* Center */, false, 0 /* Smooth */));
+            _this._context.privateViewEventBus.emit(new viewEvents.ViewRevealRangeRequestEvent('mouse', new Range(lineNumber, 1, lineNumber, 1), 1 /* Center */, false, 0 /* Smooth */));
         });
         _this._sliderMouseMoveMonitor = new GlobalMouseMoveMonitor();
         _this._sliderMouseDownListener = dom.addStandardDisposableListener(_this._slider.domNode, 'mousedown', function (e) {
@@ -354,7 +359,7 @@ var Minimap = /** @class */ (function (_super) {
                 var initialMouseOrthogonalPosition_1 = e.posx;
                 var initialSliderState_1 = _this._lastRenderData.renderedLayout;
                 _this._slider.toggleClassName('active', true);
-                _this._sliderMouseMoveMonitor.startMonitoring(standardMouseMoveMerger, function (mouseMoveData) {
+                _this._sliderMouseMoveMonitor.startMonitoring(e.target, e.buttons, standardMouseMoveMerger, function (mouseMoveData) {
                     var mouseOrthogonalDelta = Math.abs(mouseMoveData.posx - initialMouseOrthogonalPosition_1);
                     if (platform.isWindows && mouseOrthogonalDelta > MOUSE_DRAG_RESET_DISTANCE) {
                         // The mouse has wondered away from the scrollbar => reset dragging
@@ -372,12 +377,46 @@ var Minimap = /** @class */ (function (_super) {
                 });
             }
         });
+        _this._gestureDisposable = Gesture.addTarget(_this._domNode.domNode);
+        _this._sliderTouchStartListener = dom.addDisposableListener(_this._domNode.domNode, EventType.Start, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (_this._lastRenderData) {
+                _this._slider.toggleClassName('active', true);
+                _this._gestureInProgress = true;
+                _this.scrollDueToTouchEvent(e);
+            }
+        });
+        _this._sliderTouchMoveListener = dom.addStandardDisposableListener(_this._domNode.domNode, EventType.Change, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (_this._lastRenderData && _this._gestureInProgress) {
+                _this.scrollDueToTouchEvent(e);
+            }
+        });
+        _this._sliderTouchEndListener = dom.addStandardDisposableListener(_this._domNode.domNode, EventType.End, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            _this._gestureInProgress = false;
+            _this._slider.toggleClassName('active', false);
+        });
         return _this;
     }
+    Minimap.prototype.scrollDueToTouchEvent = function (touch) {
+        var startY = this._domNode.domNode.getBoundingClientRect().top;
+        var scrollTop = this._lastRenderData.renderedLayout.getDesiredScrollTopFromTouchLocation(touch.pageY - startY);
+        this._context.viewLayout.setScrollPositionNow({
+            scrollTop: scrollTop
+        });
+    };
     Minimap.prototype.dispose = function () {
         this._mouseDownListener.dispose();
         this._sliderMouseMoveMonitor.dispose();
         this._sliderMouseDownListener.dispose();
+        this._gestureDisposable.dispose();
+        this._sliderTouchStartListener.dispose();
+        this._sliderTouchMoveListener.dispose();
+        this._sliderTouchEndListener.dispose();
         _super.prototype.dispose.call(this);
     };
     Minimap.prototype._getMinimapDomNodeClassName = function () {
@@ -406,9 +445,11 @@ var Minimap = /** @class */ (function (_super) {
     };
     Minimap.prototype._getBuffer = function () {
         if (!this._buffers) {
-            this._buffers = new MinimapBuffers(this._canvas.domNode.getContext('2d'), this._options.canvasInnerWidth, this._options.canvasInnerHeight, this._tokensColorTracker.getColor(2 /* DefaultBackground */));
+            if (this._options.canvasInnerWidth > 0 && this._options.canvasInnerHeight > 0) {
+                this._buffers = new MinimapBuffers(this._canvas.domNode.getContext('2d'), this._options.canvasInnerWidth, this._options.canvasInnerHeight, this._tokensColorTracker.getColor(2 /* DefaultBackground */));
+            }
         }
-        return this._buffers.getBuffer();
+        return this._buffers ? this._buffers.getBuffer() : null;
     };
     Minimap.prototype._onOptionsMaybeChanged = function () {
         var opts = new MinimapOptions(this._context.configuration);
@@ -425,6 +466,11 @@ var Minimap = /** @class */ (function (_super) {
     // ---- begin view event handlers
     Minimap.prototype.onConfigurationChanged = function (e) {
         return this._onOptionsMaybeChanged();
+    };
+    Minimap.prototype.onCursorStateChanged = function (e) {
+        this._selections = e.selections;
+        this._renderDecorations = true;
+        return true;
     };
     Minimap.prototype.onFlushed = function (e) {
         this._lastRenderData = null;
@@ -473,9 +519,9 @@ var Minimap = /** @class */ (function (_super) {
     };
     Minimap.prototype.onThemeChanged = function (e) {
         this._context.model.invalidateMinimapColorCache();
-        // Only bother calling render if decorations are currently shown
-        this._renderDecorations = !!this._lastDecorations;
-        return !!this._lastDecorations;
+        this._selectionColor = this._context.theme.getColor(minimapSelection);
+        this._renderDecorations = true;
+        return true;
     };
     // --- end event handlers
     Minimap.prototype.prepareRender = function (ctx) {
@@ -500,7 +546,7 @@ var Minimap = /** @class */ (function (_super) {
         this._slider.setHeight(layout.sliderHeight);
         // Compute horizontal slider coordinates
         var scrollLeftChars = renderingCtx.scrollLeft / this._options.typicalHalfwidthCharacterWidth;
-        var horizontalSliderLeft = Math.min(this._options.minimapWidth, Math.round(scrollLeftChars * getMinimapCharWidth(this._options.renderMinimap) / this._options.pixelRatio));
+        var horizontalSliderLeft = Math.min(this._options.minimapWidth, Math.round(scrollLeftChars * getMinimapCharWidth(this._options.renderMinimap, this._options.fontScale) / this._options.pixelRatio));
         this._sliderHorizontal.setLeft(horizontalSliderLeft);
         this._sliderHorizontal.setWidth(this._options.minimapWidth - horizontalSliderLeft);
         this._sliderHorizontal.setTop(0);
@@ -513,33 +559,52 @@ var Minimap = /** @class */ (function (_super) {
             this._renderDecorations = false;
             var decorations = this._context.model.getDecorationsInViewport(new Range(layout.startLineNumber, 1, layout.endLineNumber, this._context.model.getLineMaxColumn(layout.endLineNumber)));
             var _a = this._options, renderMinimap = _a.renderMinimap, canvasInnerWidth = _a.canvasInnerWidth, canvasInnerHeight = _a.canvasInnerHeight;
-            var lineHeight = getMinimapLineHeight(renderMinimap);
-            var characterWidth = getMinimapCharWidth(renderMinimap);
+            var lineHeight = getMinimapLineHeight(renderMinimap, this._options.fontScale);
+            var characterWidth = getMinimapCharWidth(renderMinimap, this._options.fontScale);
             var tabSize = this._context.model.getOptions().tabSize;
             var canvasContext = this._decorationsCanvas.domNode.getContext('2d');
             canvasContext.clearRect(0, 0, canvasInnerWidth, canvasInnerHeight);
-            // Loop over decorations, ignoring those that don't have the minimap property set and rendering rectangles for each line the decoration spans
             var lineOffsetMap = new Map();
+            for (var i = 0; i < this._selections.length; i++) {
+                var selection = this._selections[i];
+                for (var line = selection.startLineNumber; line <= selection.endLineNumber; line++) {
+                    this.renderDecorationOnLine(canvasContext, lineOffsetMap, selection, this._selectionColor, layout, line, lineHeight, lineHeight, tabSize, characterWidth);
+                }
+            }
+            // Loop over decorations, ignoring those that don't have the minimap property set and rendering rectangles for each line the decoration spans
             for (var i = 0; i < decorations.length; i++) {
                 var decoration = decorations[i];
                 if (!decoration.options.minimap) {
                     continue;
                 }
+                var decorationColor = decoration.options.minimap.getColor(this._context.theme);
                 for (var line = decoration.range.startLineNumber; line <= decoration.range.endLineNumber; line++) {
-                    this.renderDecorationOnLine(canvasContext, lineOffsetMap, decoration, layout, line, lineHeight, lineHeight, tabSize, characterWidth);
+                    switch (decoration.options.minimap.position) {
+                        case MinimapPosition.Inline:
+                            this.renderDecorationOnLine(canvasContext, lineOffsetMap, decoration.range, decorationColor, layout, line, lineHeight, lineHeight, tabSize, characterWidth);
+                            continue;
+                        case MinimapPosition.Gutter:
+                            var y = (line - layout.startLineNumber) * lineHeight;
+                            var x = 2;
+                            this.renderDecoration(canvasContext, decorationColor, x, y, GUTTER_DECORATION_WIDTH, lineHeight);
+                            continue;
+                    }
                 }
             }
-            this._lastDecorations = decorations;
         }
     };
-    Minimap.prototype.renderDecorationOnLine = function (canvasContext, lineOffsetMap, decoration, layout, lineNumber, height, lineHeight, tabSize, charWidth) {
+    Minimap.prototype.renderDecorationOnLine = function (canvasContext, lineOffsetMap, decorationRange, decorationColor, layout, lineNumber, height, lineHeight, tabSize, charWidth) {
         var y = (lineNumber - layout.startLineNumber) * lineHeight;
+        // Skip rendering the line if it's vertically outside our viewport
+        if (y + height < 0 || y > this._options.canvasInnerHeight) {
+            return;
+        }
         // Cache line offset data so that it is only read once per line
         var lineIndexToXOffset = lineOffsetMap.get(lineNumber);
         var isFirstDecorationForLine = !lineIndexToXOffset;
         if (!lineIndexToXOffset) {
             var lineData = this._context.model.getLineContent(lineNumber);
-            lineIndexToXOffset = [0];
+            lineIndexToXOffset = [MINIMAP_GUTTER_WIDTH];
             for (var i = 1; i < lineData.length + 1; i++) {
                 var charCode = lineData.charCodeAt(i - 1);
                 var dx = charCode === 9 /* Tab */
@@ -551,33 +616,32 @@ var Minimap = /** @class */ (function (_super) {
             }
             lineOffsetMap.set(lineNumber, lineIndexToXOffset);
         }
-        var _a = decoration.range, startColumn = _a.startColumn, endColumn = _a.endColumn, startLineNumber = _a.startLineNumber, endLineNumber = _a.endLineNumber;
-        var x = startLineNumber === lineNumber ? lineIndexToXOffset[startColumn - 1] : 0;
+        var startColumn = decorationRange.startColumn, endColumn = decorationRange.endColumn, startLineNumber = decorationRange.startLineNumber, endLineNumber = decorationRange.endLineNumber;
+        var x = startLineNumber === lineNumber ? lineIndexToXOffset[startColumn - 1] : MINIMAP_GUTTER_WIDTH;
         var endColumnForLine = endLineNumber > lineNumber ? lineIndexToXOffset.length - 1 : endColumn - 1;
         if (endColumnForLine > 0) {
             // If the decoration starts at the last character of the column and spans over it, ensure it has a width
             var width = lineIndexToXOffset[endColumnForLine] - x || 2;
-            this.renderDecoration(canvasContext, decoration.options.minimap, x, y, width, height);
+            this.renderDecoration(canvasContext, decorationColor, x, y, width, height);
         }
         if (isFirstDecorationForLine) {
-            this.renderLineHighlight(canvasContext, decoration.options.minimap, y, height);
+            this.renderLineHighlight(canvasContext, decorationColor, y, height);
         }
     };
-    Minimap.prototype.renderLineHighlight = function (canvasContext, minimapOptions, y, height) {
-        var decorationColor = minimapOptions.getColor(this._context.theme);
+    Minimap.prototype.renderLineHighlight = function (canvasContext, decorationColor, y, height) {
         canvasContext.fillStyle = decorationColor && decorationColor.transparent(0.5).toString() || '';
-        canvasContext.fillRect(0, y, canvasContext.canvas.width, height);
+        canvasContext.fillRect(MINIMAP_GUTTER_WIDTH, y, canvasContext.canvas.width, height);
     };
-    Minimap.prototype.renderDecoration = function (canvasContext, minimapOptions, x, y, width, height) {
-        var decorationColor = minimapOptions.getColor(this._context.theme);
+    Minimap.prototype.renderDecoration = function (canvasContext, decorationColor, x, y, width, height) {
         canvasContext.fillStyle = decorationColor && decorationColor.toString() || '';
         canvasContext.fillRect(x, y, width, height);
     };
     Minimap.prototype.renderLines = function (layout) {
         var renderMinimap = this._options.renderMinimap;
+        var charRenderer = this._options.charRenderer();
         var startLineNumber = layout.startLineNumber;
         var endLineNumber = layout.endLineNumber;
-        var minimapLineHeight = getMinimapLineHeight(renderMinimap);
+        var minimapLineHeight = getMinimapLineHeight(renderMinimap, this._options.fontScale);
         // Check if nothing changed w.r.t. lines from last frame
         if (this._lastRenderData && this._lastRenderData.linesEquals(layout)) {
             var _lastData = this._lastRenderData._get();
@@ -586,6 +650,10 @@ var Minimap = /** @class */ (function (_super) {
         }
         // Oh well!! We need to repaint some lines...
         var imageData = this._getBuffer();
+        if (!imageData) {
+            // 0 width or 0 height canvas, nothing to do
+            return null;
+        }
         // Render untouched lines by using last rendered data.
         var _a = Minimap._renderUntouchedLines(imageData, startLineNumber, endLineNumber, minimapLineHeight, this._lastRenderData), _dirtyY1 = _a[0], _dirtyY2 = _a[1], needed = _a[2];
         // Fetch rendering info from view model for rest of lines that need rendering.
@@ -598,7 +666,7 @@ var Minimap = /** @class */ (function (_super) {
         var renderedLines = [];
         for (var lineIndex = 0, lineCount = endLineNumber - startLineNumber + 1; lineIndex < lineCount; lineIndex++) {
             if (needed[lineIndex]) {
-                Minimap._renderLine(imageData, background, useLighterFont, renderMinimap, this._tokensColorTracker, getOrCreateMinimapCharRenderer(), dy, tabSize, lineInfo.data[lineIndex]);
+                Minimap._renderLine(imageData, background, useLighterFont, renderMinimap, this._tokensColorTracker, charRenderer, dy, tabSize, lineInfo.data[lineIndex], this._options.fontScale);
             }
             renderedLines[lineIndex] = new MinimapLine(dy);
             dy += minimapLineHeight;
@@ -686,12 +754,12 @@ var Minimap = /** @class */ (function (_super) {
         var dirtyY2 = (dirtyPixel2 === -1 ? -1 : dirtyPixel2 / (WIDTH * 4));
         return [dirtyY1, dirtyY2, needed];
     };
-    Minimap._renderLine = function (target, backgroundColor, useLighterFont, renderMinimap, colorTracker, minimapCharRenderer, dy, tabSize, lineData) {
+    Minimap._renderLine = function (target, backgroundColor, useLighterFont, renderMinimap, colorTracker, minimapCharRenderer, dy, tabSize, lineData, fontScale) {
         var content = lineData.content;
         var tokens = lineData.tokens;
-        var charWidth = getMinimapCharWidth(renderMinimap);
+        var charWidth = getMinimapCharWidth(renderMinimap, fontScale);
         var maxDx = target.width - charWidth;
-        var dx = 0;
+        var dx = MINIMAP_GUTTER_WIDTH;
         var charIndex = 0;
         var tabsCharDelta = 0;
         for (var tokenIndex = 0, tokensLen = tokens.getCount(); tokenIndex < tokensLen; tokenIndex++) {
@@ -718,18 +786,11 @@ var Minimap = /** @class */ (function (_super) {
                     // Render twice for a full width character
                     var count = strings.isFullWidthCharacter(charCode) ? 2 : 1;
                     for (var i = 0; i < count; i++) {
-                        if (renderMinimap === 2 /* Large */) {
-                            minimapCharRenderer.x2RenderChar(target, dx, dy, charCode, tokenColor, backgroundColor, useLighterFont);
+                        if (renderMinimap === 2 /* Blocks */) {
+                            minimapCharRenderer.blockRenderChar(target, dx, dy, tokenColor, backgroundColor, useLighterFont);
                         }
-                        else if (renderMinimap === 1 /* Small */) {
-                            minimapCharRenderer.x1RenderChar(target, dx, dy, charCode, tokenColor, backgroundColor, useLighterFont);
-                        }
-                        else if (renderMinimap === 4 /* LargeBlocks */) {
-                            minimapCharRenderer.x2BlockRenderChar(target, dx, dy, tokenColor, backgroundColor, useLighterFont);
-                        }
-                        else {
-                            // RenderMinimap.SmallBlocks
-                            minimapCharRenderer.x1BlockRenderChar(target, dx, dy, tokenColor, backgroundColor, useLighterFont);
+                        else { // RenderMinimap.Text
+                            minimapCharRenderer.renderChar(target, dx, dy, charCode, tokenColor, backgroundColor, fontScale, useLighterFont);
                         }
                         dx += charWidth;
                         if (dx > maxDx) {

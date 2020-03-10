@@ -43,6 +43,10 @@ var LineTokens = /** @class */ (function () {
         }
         return 0;
     };
+    LineTokens.prototype.getMetadata = function (tokenIndex) {
+        var metadata = this._tokens[(tokenIndex << 1) + 1];
+        return metadata;
+    };
     LineTokens.prototype.getLanguageId = function (tokenIndex) {
         var metadata = this._tokens[(tokenIndex << 1) + 1];
         return TokenMetadata.getLanguageId(metadata);

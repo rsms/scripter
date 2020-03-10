@@ -176,6 +176,11 @@ export function distinctES6(array) {
         return true;
     });
 }
+export function fromSet(set) {
+    var result = [];
+    set.forEach(function (o) { return result.push(o); });
+    return result;
+}
 export function firstIndex(array, fn) {
     for (var i = 0; i < array.length; i++) {
         var element = array[i];
@@ -189,6 +194,9 @@ export function first(array, fn, notFoundValue) {
     if (notFoundValue === void 0) { notFoundValue = undefined; }
     var index = firstIndex(array, fn);
     return index < 0 ? notFoundValue : array[index];
+}
+export function firstOrDefault(array, notFoundValue) {
+    return array.length > 0 ? array[0] : notFoundValue;
 }
 export function flatten(arr) {
     var _a;
@@ -244,6 +252,15 @@ export function pushToEnd(arr, value) {
         arr.splice(index, 1);
         arr.push(value);
     }
+}
+export function find(arr, predicate) {
+    for (var i = 0; i < arr.length; i++) {
+        var element = arr[i];
+        if (predicate(element, i, arr)) {
+            return element;
+        }
+    }
+    return undefined;
 }
 export function asArray(x) {
     return Array.isArray(x) ? x : [x];

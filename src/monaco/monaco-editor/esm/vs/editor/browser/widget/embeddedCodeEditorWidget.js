@@ -36,7 +36,7 @@ import { IAccessibilityService } from '../../../platform/accessibility/common/ac
 var EmbeddedCodeEditorWidget = /** @class */ (function (_super) {
     __extends(EmbeddedCodeEditorWidget, _super);
     function EmbeddedCodeEditorWidget(domElement, options, parentEditor, instantiationService, codeEditorService, commandService, contextKeyService, themeService, notificationService, accessibilityService) {
-        var _this = _super.call(this, domElement, parentEditor.getRawConfiguration(), {}, instantiationService, codeEditorService, commandService, contextKeyService, themeService, notificationService, accessibilityService) || this;
+        var _this = _super.call(this, domElement, parentEditor.getRawOptions(), {}, instantiationService, codeEditorService, commandService, contextKeyService, themeService, notificationService, accessibilityService) || this;
         _this._parentEditor = parentEditor;
         _this._overwriteOptions = options;
         // Overwrite parent's options
@@ -48,7 +48,7 @@ var EmbeddedCodeEditorWidget = /** @class */ (function (_super) {
         return this._parentEditor;
     };
     EmbeddedCodeEditorWidget.prototype._onParentConfigurationChanged = function (e) {
-        _super.prototype.updateOptions.call(this, this._parentEditor.getRawConfiguration());
+        _super.prototype.updateOptions.call(this, this._parentEditor.getRawOptions());
         _super.prototype.updateOptions.call(this, this._overwriteOptions);
     };
     EmbeddedCodeEditorWidget.prototype.updateOptions = function (newOptions) {

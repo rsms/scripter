@@ -120,7 +120,7 @@ export { ViewOverlays };
 var ViewOverlayLine = /** @class */ (function () {
     function ViewOverlayLine(configuration, dynamicOverlays) {
         this._configuration = configuration;
-        this._lineHeight = this._configuration.editor.lineHeight;
+        this._lineHeight = this._configuration.options.get(49 /* lineHeight */);
         this._dynamicOverlays = dynamicOverlays;
         this._domNode = null;
         this._renderedContent = null;
@@ -141,9 +141,7 @@ var ViewOverlayLine = /** @class */ (function () {
         // Nothing
     };
     ViewOverlayLine.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._configuration.editor.lineHeight;
-        }
+        this._lineHeight = this._configuration.options.get(49 /* lineHeight */);
     };
     ViewOverlayLine.prototype.renderLine = function (lineNumber, deltaTop, viewportData, sb) {
         var result = '';
@@ -178,16 +176,18 @@ var ContentViewOverlays = /** @class */ (function (_super) {
     __extends(ContentViewOverlays, _super);
     function ContentViewOverlays(context) {
         var _this = _super.call(this, context) || this;
-        _this._contentWidth = _this._context.configuration.editor.layoutInfo.contentWidth;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        _this._contentWidth = layoutInfo.contentWidth;
         _this.domNode.setHeight(0);
         return _this;
     }
     // --- begin event handlers
     ContentViewOverlays.prototype.onConfigurationChanged = function (e) {
-        if (e.layoutInfo) {
-            this._contentWidth = this._context.configuration.editor.layoutInfo.contentWidth;
-        }
-        return _super.prototype.onConfigurationChanged.call(this, e);
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._contentWidth = layoutInfo.contentWidth;
+        return _super.prototype.onConfigurationChanged.call(this, e) || true;
     };
     ContentViewOverlays.prototype.onScrollChanged = function (e) {
         return _super.prototype.onScrollChanged.call(this, e) || e.scrollWidthChanged;
@@ -204,23 +204,20 @@ var MarginViewOverlays = /** @class */ (function (_super) {
     __extends(MarginViewOverlays, _super);
     function MarginViewOverlays(context) {
         var _this = _super.call(this, context) || this;
-        _this._contentLeft = _this._context.configuration.editor.layoutInfo.contentLeft;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        _this._contentLeft = layoutInfo.contentLeft;
         _this.domNode.setClassName('margin-view-overlays');
         _this.domNode.setWidth(1);
-        Configuration.applyFontInfo(_this.domNode, _this._context.configuration.editor.fontInfo);
+        Configuration.applyFontInfo(_this.domNode, options.get(34 /* fontInfo */));
         return _this;
     }
     MarginViewOverlays.prototype.onConfigurationChanged = function (e) {
-        var shouldRender = false;
-        if (e.fontInfo) {
-            Configuration.applyFontInfo(this.domNode, this._context.configuration.editor.fontInfo);
-            shouldRender = true;
-        }
-        if (e.layoutInfo) {
-            this._contentLeft = this._context.configuration.editor.layoutInfo.contentLeft;
-            shouldRender = true;
-        }
-        return _super.prototype.onConfigurationChanged.call(this, e) || shouldRender;
+        var options = this._context.configuration.options;
+        Configuration.applyFontInfo(this.domNode, options.get(34 /* fontInfo */));
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._contentLeft = layoutInfo.contentLeft;
+        return _super.prototype.onConfigurationChanged.call(this, e) || true;
     };
     MarginViewOverlays.prototype.onScrollChanged = function (e) {
         return _super.prototype.onScrollChanged.call(this, e) || e.scrollHeightChanged;

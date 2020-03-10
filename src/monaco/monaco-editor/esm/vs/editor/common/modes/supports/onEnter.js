@@ -27,43 +27,49 @@ var OnEnterSupport = /** @class */ (function () {
                 });
             }
         });
-        this._regExpRules = opts.regExpRules || [];
+        this._regExpRules = opts.onEnterRules || [];
     }
-    OnEnterSupport.prototype.onEnter = function (oneLineAboveText, beforeEnterText, afterEnterText) {
+    OnEnterSupport.prototype.onEnter = function (autoIndent, oneLineAboveText, beforeEnterText, afterEnterText) {
         // (1): `regExpRules`
-        for (var i = 0, len = this._regExpRules.length; i < len; i++) {
-            var rule = this._regExpRules[i];
-            var regResult = [{
-                    reg: rule.beforeText,
-                    text: beforeEnterText
-                }, {
-                    reg: rule.afterText,
-                    text: afterEnterText
-                }, {
-                    reg: rule.oneLineAboveText,
-                    text: oneLineAboveText
-                }].every(function (obj) {
-                return obj.reg ? obj.reg.test(obj.text) : true;
-            });
-            if (regResult) {
-                return rule.action;
+        if (autoIndent >= 3 /* Advanced */) {
+            for (var i = 0, len = this._regExpRules.length; i < len; i++) {
+                var rule = this._regExpRules[i];
+                var regResult = [{
+                        reg: rule.beforeText,
+                        text: beforeEnterText
+                    }, {
+                        reg: rule.afterText,
+                        text: afterEnterText
+                    }, {
+                        reg: rule.oneLineAboveText,
+                        text: oneLineAboveText
+                    }].every(function (obj) {
+                    return obj.reg ? obj.reg.test(obj.text) : true;
+                });
+                if (regResult) {
+                    return rule.action;
+                }
             }
         }
         // (2): Special indent-outdent
-        if (beforeEnterText.length > 0 && afterEnterText.length > 0) {
-            for (var i = 0, len = this._brackets.length; i < len; i++) {
-                var bracket = this._brackets[i];
-                if (bracket.openRegExp.test(beforeEnterText) && bracket.closeRegExp.test(afterEnterText)) {
-                    return { indentAction: IndentAction.IndentOutdent };
+        if (autoIndent >= 2 /* Brackets */) {
+            if (beforeEnterText.length > 0 && afterEnterText.length > 0) {
+                for (var i = 0, len = this._brackets.length; i < len; i++) {
+                    var bracket = this._brackets[i];
+                    if (bracket.openRegExp.test(beforeEnterText) && bracket.closeRegExp.test(afterEnterText)) {
+                        return { indentAction: IndentAction.IndentOutdent };
+                    }
                 }
             }
         }
         // (4): Open bracket based logic
-        if (beforeEnterText.length > 0) {
-            for (var i = 0, len = this._brackets.length; i < len; i++) {
-                var bracket = this._brackets[i];
-                if (bracket.openRegExp.test(beforeEnterText)) {
-                    return { indentAction: IndentAction.Indent };
+        if (autoIndent >= 2 /* Brackets */) {
+            if (beforeEnterText.length > 0) {
+                for (var i = 0, len = this._brackets.length; i < len; i++) {
+                    var bracket = this._brackets[i];
+                    if (bracket.openRegExp.test(beforeEnterText)) {
+                        return { indentAction: IndentAction.Indent };
+                    }
                 }
             }
         }

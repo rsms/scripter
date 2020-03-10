@@ -236,10 +236,9 @@ var ContextKeyEqualsExpr = /** @class */ (function () {
         return false;
     };
     ContextKeyEqualsExpr.prototype.evaluate = function (context) {
-        /* tslint:disable:triple-equals */
         // Intentional ==
+        // eslint-disable-next-line eqeqeq
         return (context.getValue(this.key) == this.value);
-        /* tslint:enable:triple-equals */
     };
     ContextKeyEqualsExpr.prototype.keys = function () {
         return [this.key];
@@ -289,10 +288,9 @@ var ContextKeyNotEqualsExpr = /** @class */ (function () {
         return false;
     };
     ContextKeyNotEqualsExpr.prototype.evaluate = function (context) {
-        /* tslint:disable:triple-equals */
         // Intentional !=
+        // eslint-disable-next-line eqeqeq
         return (context.getValue(this.key) != this.value);
-        /* tslint:enable:triple-equals */
     };
     ContextKeyNotEqualsExpr.prototype.keys = function () {
         return [this.key];
@@ -490,7 +488,7 @@ var ContextKeyAndExpr = /** @class */ (function () {
                 }
                 if (e instanceof ContextKeyOrExpr) {
                     // Not allowed, because we don't have parens!
-                    throw new Error("It is not allowed to have an or expression here due to lack of parens!");
+                    throw new Error("It is not allowed to have an or expression here due to lack of parens! For example \"a && (b||c)\" is not supported, use \"(a&&b) || (a&&c)\" instead.");
                 }
                 expr.push(e);
             }

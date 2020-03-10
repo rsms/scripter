@@ -160,9 +160,6 @@ var RangeMap = /** @class */ (function () {
         }
         return -1;
     };
-    RangeMap.prototype.dispose = function () {
-        this.groups = null; // StrictNullOverride: nulling out ok in dispose
-    };
     return RangeMap;
 }());
 export { RangeMap };

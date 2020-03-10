@@ -229,7 +229,7 @@ var Renderer = /** @class */ (function () {
         var icon = document.createElement('span');
         row1.appendChild(icon);
         // Label
-        var label = new IconLabel(row1, { supportHighlights: true, supportDescriptionHighlights: true, supportOcticons: true });
+        var label = new IconLabel(row1, { supportHighlights: true, supportDescriptionHighlights: true, supportCodicons: true });
         // Keybinding
         var keybindingContainer = document.createElement('span');
         row1.appendChild(keybindingContainer);
@@ -302,7 +302,7 @@ var Renderer = /** @class */ (function () {
             }
             else {
                 DOM.removeClass(groupData.container, 'results-group-separator');
-                groupData.container.style.borderTopColor = null;
+                groupData.container.style.borderTopColor = '';
             }
             // Group Label
             var groupLabel = group.getGroupLabel() || '';
@@ -325,7 +325,7 @@ var Renderer = /** @class */ (function () {
             options.title = entry.getTooltip();
             options.descriptionTitle = entry.getDescriptionTooltip() || entry.getDescription(); // tooltip over description because it could overflow
             options.descriptionMatches = descriptionHighlights || [];
-            data.label.setLabel(types.withNullAsUndefined(entry.getLabel()), entry.getDescription(), options);
+            data.label.setLabel(entry.getLabel() || '', entry.getDescription(), options);
             // Meta
             data.detail.set(entry.getDetail(), detailHighlights);
             // Keybinding

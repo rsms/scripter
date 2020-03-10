@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 var _a;
 var Scanner = /** @class */ (function () {
     function Scanner() {
@@ -118,7 +125,7 @@ var Marker = /** @class */ (function () {
         var parent = child.parent;
         var idx = parent.children.indexOf(child);
         var newChildren = parent.children.slice(0);
-        newChildren.splice.apply(newChildren, [idx, 1].concat(others));
+        newChildren.splice.apply(newChildren, __spreadArrays([idx, 1], others));
         parent._children = newChildren;
         (function _fixParent(children, parent) {
             for (var _i = 0, children_1 = children; _i < children_1.length; _i++) {
@@ -398,7 +405,7 @@ var Variable = /** @class */ (function (_super) {
 }(TransformableMarker));
 export { Variable };
 function walk(marker, visitor) {
-    var stack = marker.slice();
+    var stack = __spreadArrays(marker);
     while (stack.length > 0) {
         var marker_1 = stack.shift();
         var recurse = visitor(marker_1);
@@ -579,26 +586,24 @@ var SnippetParser = /** @class */ (function () {
         return false;
     };
     SnippetParser.prototype._until = function (type) {
-        if (this._token.type === 14 /* EOF */) {
-            return false;
-        }
-        var res = '';
-        var pos = this._token.pos;
-        var prevToken = { type: 14 /* EOF */, pos: 0, len: 0 };
-        while (this._token.type !== type || prevToken.type === 5 /* Backslash */) {
-            if (this._token.type === type) {
-                res += this._scanner.value.substring(pos, prevToken.pos);
-                pos = this._token.pos;
-            }
-            prevToken = this._token;
-            this._token = this._scanner.next();
+        var start = this._token;
+        while (this._token.type !== type) {
             if (this._token.type === 14 /* EOF */) {
                 return false;
             }
+            else if (this._token.type === 5 /* Backslash */) {
+                var nextToken = this._scanner.next();
+                if (nextToken.type !== 0 /* Dollar */
+                    && nextToken.type !== 4 /* CurlyClose */
+                    && nextToken.type !== 5 /* Backslash */) {
+                    return false;
+                }
+            }
+            this._token = this._scanner.next();
         }
-        res += this._scanner.value.substring(pos, this._token.pos);
+        var value = this._scanner.value.substring(start.pos, this._token.pos).replace(/\\(\$|}|\\)/g, '$1');
         this._token = this._scanner.next();
-        return res;
+        return value;
     };
     SnippetParser.prototype._parse = function (marker) {
         return this._parseEscaped(marker)

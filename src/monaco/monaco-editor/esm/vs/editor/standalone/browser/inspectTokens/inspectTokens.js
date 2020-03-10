@@ -33,7 +33,7 @@ import { TokenMetadata, TokenizationRegistry } from '../../../common/modes.js';
 import { NULL_STATE, nullTokenize, nullTokenize2 } from '../../../common/modes/nullMode.js';
 import { IModeService } from '../../../common/services/modeService.js';
 import { IStandaloneThemeService } from '../../common/standaloneThemeService.js';
-import { editorHoverBackground, editorHoverBorder } from '../../../../platform/theme/common/colorRegistry.js';
+import { editorHoverBackground, editorHoverBorder, editorHoverForeground } from '../../../../platform/theme/common/colorRegistry.js';
 import { HIGH_CONTRAST, registerThemingParticipant } from '../../../../platform/theme/common/themeService.js';
 import { InspectTokensNLS } from '../../../common/standaloneStrings.js';
 var InspectTokensController = /** @class */ (function (_super) {
@@ -50,9 +50,6 @@ var InspectTokensController = /** @class */ (function (_super) {
     }
     InspectTokensController.get = function (editor) {
         return editor.getContribution(InspectTokensController.ID);
-    };
-    InspectTokensController.prototype.getId = function () {
-        return InspectTokensController.ID;
     };
     InspectTokensController.prototype.dispose = function () {
         this.stop();
@@ -272,7 +269,7 @@ var InspectTokensWidget = /** @class */ (function (_super) {
     InspectTokensWidget._ID = 'editor.contrib.inspectTokensWidget';
     return InspectTokensWidget;
 }(Disposable));
-registerEditorContribution(InspectTokensController);
+registerEditorContribution(InspectTokensController.ID, InspectTokensController);
 registerEditorAction(InspectTokens);
 registerThemingParticipant(function (theme, collector) {
     var border = theme.getColor(editorHoverBorder);
@@ -284,5 +281,9 @@ registerThemingParticipant(function (theme, collector) {
     var background = theme.getColor(editorHoverBackground);
     if (background) {
         collector.addRule(".monaco-editor .tokens-inspect-widget { background-color: " + background + "; }");
+    }
+    var foreground = theme.getColor(editorHoverForeground);
+    if (foreground) {
+        collector.addRule(".monaco-editor .tokens-inspect-widget { color: " + foreground + "; }");
     }
 });

@@ -2,6 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
+import { TreeError } from './tree.js';
 import { tail2 } from '../../../common/arrays.js';
 import { Emitter, EventBufferer } from '../../../common/event.js';
 import { Iterator } from '../../../common/iterator.js';
@@ -15,14 +23,13 @@ export function getVisibleState(visibility) {
         default: return visibility;
     }
 }
-function treeNodeToElement(node) {
-    var element = node.element, collapsed = node.collapsed;
-    var children = Iterator.map(Iterator.fromArray(node.children), treeNodeToElement);
-    return { element: element, children: children, collapsed: collapsed };
+function isCollapsibleStateUpdate(update) {
+    return typeof update.collapsible === 'boolean';
 }
 var IndexTreeModel = /** @class */ (function () {
-    function IndexTreeModel(list, rootElement, options) {
+    function IndexTreeModel(user, list, rootElement, options) {
         if (options === void 0) { options = {}; }
+        this.user = user;
         this.list = list;
         this.rootRef = [];
         this.eventBufferer = new EventBufferer();
@@ -53,7 +60,7 @@ var IndexTreeModel = /** @class */ (function () {
         var _a;
         var _this = this;
         if (location.length === 0) {
-            throw new Error('Invalid tree location');
+            throw new TreeError(this.user, 'Invalid tree location');
         }
         var _b = this.getParentNodeWithListIndex(location), parentNode = _b.parentNode, listIndex = _b.listIndex, revealed = _b.revealed, visible = _b.visible;
         var treeListElementsToInsert = [];
@@ -79,7 +86,7 @@ var IndexTreeModel = /** @class */ (function () {
                 child.visibleChildIndex = visibleChildStartIndex + insertedVisibleChildrenCount++;
             }
         });
-        var deletedNodes = (_a = parentNode.children).splice.apply(_a, [lastIndex, deleteCount].concat(nodesToInsert));
+        var deletedNodes = (_a = parentNode.children).splice.apply(_a, __spreadArrays([lastIndex, deleteCount], nodesToInsert));
         // figure out what is the count of deleted visible children
         var deletedVisibleChildrenCount = 0;
         for (var _i = 0, deletedNodes_1 = deletedNodes; _i < deletedNodes_1.length; _i++) {
@@ -100,7 +107,7 @@ var IndexTreeModel = /** @class */ (function () {
         // update parent's visible children count
         parentNode.visibleChildrenCount += insertedVisibleChildrenCount - deletedVisibleChildrenCount;
         if (revealed && visible) {
-            var visibleDeleteCount = deletedNodes.reduce(function (r, node) { return r + node.renderNodeCount; }, 0);
+            var visibleDeleteCount = deletedNodes.reduce(function (r, node) { return r + (node.visible ? node.renderNodeCount : 0); }, 0);
             this._updateAncestorsRenderNodeCount(parentNode, renderNodeCount - visibleDeleteCount);
             this.list.splice(listIndex, visibleDeleteCount, treeListElementsToInsert);
         }
@@ -111,18 +118,19 @@ var IndexTreeModel = /** @class */ (function () {
             };
             deletedNodes.forEach(visit_1);
         }
-        var result = Iterator.map(Iterator.fromArray(deletedNodes), treeNodeToElement);
         this._onDidSplice.fire({ insertedNodes: nodesToInsert, deletedNodes: deletedNodes });
-        return result;
     };
     IndexTreeModel.prototype.rerender = function (location) {
         if (location.length === 0) {
-            throw new Error('Invalid tree location');
+            throw new TreeError(this.user, 'Invalid tree location');
         }
         var _a = this.getTreeNodeWithListIndex(location), node = _a.node, listIndex = _a.listIndex, revealed = _a.revealed;
         if (revealed) {
             this.list.splice(listIndex, 1, [node]);
         }
+    };
+    IndexTreeModel.prototype.has = function (location) {
+        return this.hasTreeNode(location);
     };
     IndexTreeModel.prototype.getListIndex = function (location) {
         var _a = this.getTreeNodeWithListIndex(location), listIndex = _a.listIndex, visible = _a.visible, revealed = _a.revealed;
@@ -130,6 +138,18 @@ var IndexTreeModel = /** @class */ (function () {
     };
     IndexTreeModel.prototype.getListRenderCount = function (location) {
         return this.getTreeNode(location).renderNodeCount;
+    };
+    IndexTreeModel.prototype.isCollapsible = function (location) {
+        return this.getTreeNode(location).collapsible;
+    };
+    IndexTreeModel.prototype.setCollapsible = function (location, collapsible) {
+        var _this = this;
+        var node = this.getTreeNode(location);
+        if (typeof collapsible === 'undefined') {
+            collapsible = !node.collapsible;
+        }
+        var update = { collapsible: collapsible };
+        return this.eventBufferer.bufferEvents(function () { return _this._setCollapseState(location, update); });
     };
     IndexTreeModel.prototype.isCollapsed = function (location) {
         return this.getTreeNode(location).collapsed;
@@ -140,12 +160,13 @@ var IndexTreeModel = /** @class */ (function () {
         if (typeof collapsed === 'undefined') {
             collapsed = !node.collapsed;
         }
-        return this.eventBufferer.bufferEvents(function () { return _this._setCollapsed(location, collapsed, recursive); });
+        var update = { collapsed: collapsed, recursive: recursive || false };
+        return this.eventBufferer.bufferEvents(function () { return _this._setCollapseState(location, update); });
     };
-    IndexTreeModel.prototype._setCollapsed = function (location, collapsed, recursive) {
+    IndexTreeModel.prototype._setCollapseState = function (location, update) {
         var _a = this.getTreeNodeWithListIndex(location), node = _a.node, listIndex = _a.listIndex, revealed = _a.revealed;
-        var result = this._setListNodeCollapsed(node, listIndex, revealed, collapsed, recursive || false);
-        if (node !== this.root && this.autoExpandSingleChildren && !collapsed && !recursive) {
+        var result = this._setListNodeCollapseState(node, listIndex, revealed, update);
+        if (node !== this.root && this.autoExpandSingleChildren && result && !isCollapsibleStateUpdate(update) && node.collapsible && !node.collapsed && !update.recursive) {
             var onlyVisibleChildIndex = -1;
             for (var i = 0; i < node.children.length; i++) {
                 var child = node.children[i];
@@ -160,14 +181,14 @@ var IndexTreeModel = /** @class */ (function () {
                 }
             }
             if (onlyVisibleChildIndex > -1) {
-                this._setCollapsed(location.concat([onlyVisibleChildIndex]), false, false);
+                this._setCollapseState(__spreadArrays(location, [onlyVisibleChildIndex]), update);
             }
         }
         return result;
     };
-    IndexTreeModel.prototype._setListNodeCollapsed = function (node, listIndex, revealed, collapsed, recursive) {
-        var result = this._setNodeCollapsed(node, collapsed, recursive, false);
-        if (!revealed || !node.visible) {
+    IndexTreeModel.prototype._setListNodeCollapseState = function (node, listIndex, revealed, update) {
+        var result = this._setNodeCollapseState(node, update, false);
+        if (!revealed || !node.visible || !result) {
             return result;
         }
         var previousRenderNodeCount = node.renderNodeCount;
@@ -176,18 +197,31 @@ var IndexTreeModel = /** @class */ (function () {
         this.list.splice(listIndex + 1, deleteCount, toInsert.slice(1));
         return result;
     };
-    IndexTreeModel.prototype._setNodeCollapsed = function (node, collapsed, recursive, deep) {
-        var result = node.collapsible && node.collapsed !== collapsed;
-        if (node.collapsible) {
-            node.collapsed = collapsed;
+    IndexTreeModel.prototype._setNodeCollapseState = function (node, update, deep) {
+        var result;
+        if (node === this.root) {
+            result = false;
+        }
+        else {
+            if (isCollapsibleStateUpdate(update)) {
+                result = node.collapsible !== update.collapsible;
+                node.collapsible = update.collapsible;
+            }
+            else if (!node.collapsible) {
+                result = false;
+            }
+            else {
+                result = node.collapsed !== update.collapsed;
+                node.collapsed = update.collapsed;
+            }
             if (result) {
                 this._onDidChangeCollapseState.fire({ node: node, deep: deep });
             }
         }
-        if (recursive) {
+        if (!isCollapsibleStateUpdate(update) && update.recursive) {
             for (var _i = 0, _a = node.children; _i < _a.length; _i++) {
                 var child = _a[_i];
-                result = this._setNodeCollapsed(child, collapsed, true, true) || result;
+                result = this._setNodeCollapseState(child, update, true) || result;
             }
         }
         return result;
@@ -200,7 +234,7 @@ var IndexTreeModel = /** @class */ (function () {
                 node = node.parent;
                 location = location.slice(0, location.length - 1);
                 if (node.collapsed) {
-                    _this._setCollapsed(location, false);
+                    _this._setCollapseState(location, { collapsed: false, recursive: false });
                 }
             }
         });
@@ -294,6 +328,7 @@ var IndexTreeModel = /** @class */ (function () {
             visibility = this._filterNode(node, parentVisibility);
             if (visibility === 0 /* Hidden */) {
                 node.visible = false;
+                node.renderNodeCount = 0;
                 return false;
             }
             if (revealed) {
@@ -358,6 +393,18 @@ var IndexTreeModel = /** @class */ (function () {
         }
     };
     // cheap
+    IndexTreeModel.prototype.hasTreeNode = function (location, node) {
+        if (node === void 0) { node = this.root; }
+        if (!location || location.length === 0) {
+            return true;
+        }
+        var index = location[0], rest = location.slice(1);
+        if (index < 0 || index > node.children.length) {
+            return false;
+        }
+        return this.hasTreeNode(rest, node.children[index]);
+    };
+    // cheap
     IndexTreeModel.prototype.getTreeNode = function (location, node) {
         if (node === void 0) { node = this.root; }
         if (!location || location.length === 0) {
@@ -365,7 +412,7 @@ var IndexTreeModel = /** @class */ (function () {
         }
         var index = location[0], rest = location.slice(1);
         if (index < 0 || index > node.children.length) {
-            throw new Error('Invalid tree location');
+            throw new TreeError(this.user, 'Invalid tree location');
         }
         return this.getTreeNode(rest, node.children[index]);
     };
@@ -377,7 +424,7 @@ var IndexTreeModel = /** @class */ (function () {
         var _a = this.getParentNodeWithListIndex(location), parentNode = _a.parentNode, listIndex = _a.listIndex, revealed = _a.revealed, visible = _a.visible;
         var index = location[location.length - 1];
         if (index < 0 || index > parentNode.children.length) {
-            throw new Error('Invalid tree location');
+            throw new TreeError(this.user, 'Invalid tree location');
         }
         var node = parentNode.children[index];
         return { node: node, listIndex: listIndex, revealed: revealed, visible: visible && node.visible };
@@ -389,7 +436,7 @@ var IndexTreeModel = /** @class */ (function () {
         if (visible === void 0) { visible = true; }
         var index = location[0], rest = location.slice(1);
         if (index < 0 || index > node.children.length) {
-            throw new Error('Invalid tree location');
+            throw new TreeError(this.user, 'Invalid tree location');
         }
         // TODO@joao perf!
         for (var i = 0; i < index; i++) {
@@ -409,17 +456,23 @@ var IndexTreeModel = /** @class */ (function () {
     // TODO@joao perf!
     IndexTreeModel.prototype.getNodeLocation = function (node) {
         var location = [];
-        while (node.parent) {
-            location.push(node.parent.children.indexOf(node));
-            node = node.parent;
+        var indexTreeNode = node; // typing woes
+        while (indexTreeNode.parent) {
+            location.push(indexTreeNode.parent.children.indexOf(indexTreeNode));
+            indexTreeNode = indexTreeNode.parent;
         }
         return location.reverse();
     };
     IndexTreeModel.prototype.getParentNodeLocation = function (location) {
-        if (location.length <= 1) {
+        if (location.length === 0) {
+            return undefined;
+        }
+        else if (location.length === 1) {
             return [];
         }
-        return tail2(location)[0];
+        else {
+            return tail2(location)[0];
+        }
     };
     return IndexTreeModel;
 }());

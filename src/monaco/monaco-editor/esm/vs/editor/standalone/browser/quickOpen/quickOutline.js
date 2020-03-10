@@ -16,6 +16,8 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import './quickOutline.css';
+import '../../../../base/browser/ui/codiconLabel/codiconLabel.js'; // The codicon symbol styles are defined here and must be loaded
+import '../../../contrib/documentSymbols/outlineTree.js'; // The codicon symbol colors are defined here and must be loaded
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { matchesFuzzy } from '../../../../base/common/filters.js';
 import * as strings from '../../../../base/common/strings.js';
@@ -23,7 +25,7 @@ import { QuickOpenEntryGroup, QuickOpenModel } from '../../../../base/parts/quic
 import { registerEditorAction } from '../../../browser/editorExtensions.js';
 import { Range } from '../../../common/core/range.js';
 import { EditorContextKeys } from '../../../common/editorContextKeys.js';
-import { DocumentSymbolProviderRegistry, symbolKindToCssClass } from '../../../common/modes.js';
+import { DocumentSymbolProviderRegistry, SymbolKinds } from '../../../common/modes.js';
 import { getDocumentSymbols } from '../../../contrib/quickOpen/quickOpen.js';
 import { BaseEditorQuickOpenAction } from './editorQuickOpen.js';
 import { QuickOutlineNLS } from '../../../common/standaloneStrings.js';
@@ -100,7 +102,7 @@ var QuickOutlineAction = /** @class */ (function (_super) {
                 primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 45 /* KEY_O */,
                 weight: 100 /* EditorContrib */
             },
-            menuOpts: {
+            contextMenuOpts: {
                 group: 'navigation',
                 order: 3
             }
@@ -164,7 +166,7 @@ var QuickOutlineAction = /** @class */ (function (_super) {
                     description = element.containerName;
                 }
                 // Add
-                results.push(this.symbolEntry(label, symbolKindToCssClass(element.kind), description, element.range, highlights, editor, controller));
+                results.push(this.symbolEntry(label, SymbolKinds.toCssClassName(element.kind), description, element.range, highlights, editor, controller));
             }
         }
         // Sort properly if actually searching

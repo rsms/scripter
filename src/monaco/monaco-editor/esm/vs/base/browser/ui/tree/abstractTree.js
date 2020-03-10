@@ -26,14 +26,21 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import './media/tree.css';
 import { dispose, Disposable, toDisposable, DisposableStore } from '../../../common/lifecycle.js';
-import { List, mightProducePrintableCharacter, MouseController } from '../list/listWidget.js';
-import { append, $, toggleClass, getDomNodePagePosition, removeClass, addClass, hasClass, createStyleSheet, clearNode } from '../../dom.js';
+import { List, MouseController, DefaultKeyboardNavigationDelegate } from '../list/listWidget.js';
+import { append, $, toggleClass, getDomNodePagePosition, removeClass, addClass, hasClass, createStyleSheet, clearNode, addClasses, removeClasses } from '../../dom.js';
 import { Event, Relay, Emitter, EventBufferer } from '../../../common/event.js';
 import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { StaticDND, DragAndDropData } from '../../dnd.js';
-import { range, equals, distinctES6 } from '../../../common/arrays.js';
+import { range, equals, distinctES6, fromSet } from '../../../common/arrays.js';
 import { ElementsDragAndDropData } from '../list/listView.js';
 import { domEvent } from '../../event.js';
 import { fuzzyScore, FuzzyScore } from '../../../common/filters.js';
@@ -44,10 +51,18 @@ import { isMacintosh } from '../../../common/platform.js';
 import { values } from '../../../common/map.js';
 import { clamp } from '../../../common/numbers.js';
 import { SetMap } from '../../../common/collections.js';
+var TreeElementsDragAndDropData = /** @class */ (function (_super) {
+    __extends(TreeElementsDragAndDropData, _super);
+    function TreeElementsDragAndDropData(data) {
+        var _this = _super.call(this, data.elements.map(function (node) { return node.element; })) || this;
+        _this.data = data;
+        return _this;
+    }
+    return TreeElementsDragAndDropData;
+}(ElementsDragAndDropData));
 function asTreeDragAndDropData(data) {
     if (data instanceof ElementsDragAndDropData) {
-        var nodes = data.elements;
-        return new ElementsDragAndDropData(nodes.map(function (node) { return node.element; }));
+        return new TreeElementsDragAndDropData(data);
     }
     return data;
 }
@@ -60,9 +75,9 @@ var TreeNodeListDragAndDrop = /** @class */ (function () {
     TreeNodeListDragAndDrop.prototype.getDragURI = function (node) {
         return this.dnd.getDragURI(node.element);
     };
-    TreeNodeListDragAndDrop.prototype.getDragLabel = function (nodes) {
+    TreeNodeListDragAndDrop.prototype.getDragLabel = function (nodes, originalEvent) {
         if (this.dnd.getDragLabel) {
-            return this.dnd.getDragLabel(nodes.map(function (node) { return node.element; }));
+            return this.dnd.getDragLabel(nodes.map(function (node) { return node.element; }), originalEvent);
         }
         return undefined;
     };
@@ -93,7 +108,7 @@ var TreeNodeListDragAndDrop = /** @class */ (function () {
                 _this.autoExpandNode = undefined;
             }, 500);
         }
-        if (typeof result === 'boolean' || !result.accept || typeof result.bubble === 'undefined') {
+        if (typeof result === 'boolean' || !result.accept || typeof result.bubble === 'undefined' || result.feedback) {
             if (!raw) {
                 var accept = typeof result === 'boolean' ? result : result.accept;
                 var effect = typeof result === 'boolean' ? undefined : result.effect;
@@ -102,52 +117,69 @@ var TreeNodeListDragAndDrop = /** @class */ (function () {
             return result;
         }
         if (result.bubble === 1 /* Up */) {
-            var parentNode = targetNode.parent;
             var model_1 = this.modelProvider();
-            var parentIndex = parentNode && model_1.getListIndex(model_1.getNodeLocation(parentNode));
+            var ref_1 = model_1.getNodeLocation(targetNode);
+            var parentRef = model_1.getParentNodeLocation(ref_1);
+            var parentNode = model_1.getNode(parentRef);
+            var parentIndex = parentRef && model_1.getListIndex(parentRef);
             return this.onDragOver(data, parentNode, parentIndex, originalEvent, false);
         }
         var model = this.modelProvider();
         var ref = model.getNodeLocation(targetNode);
         var start = model.getListIndex(ref);
         var length = model.getListRenderCount(ref);
-        return __assign({}, result, { feedback: range(start, start + length) });
+        return __assign(__assign({}, result), { feedback: range(start, start + length) });
     };
     TreeNodeListDragAndDrop.prototype.drop = function (data, targetNode, targetIndex, originalEvent) {
         this.autoExpandDisposable.dispose();
         this.autoExpandNode = undefined;
         this.dnd.drop(asTreeDragAndDropData(data), targetNode && targetNode.element, targetIndex, originalEvent);
     };
+    TreeNodeListDragAndDrop.prototype.onDragEnd = function (originalEvent) {
+        if (this.dnd.onDragEnd) {
+            this.dnd.onDragEnd(originalEvent);
+        }
+    };
     return TreeNodeListDragAndDrop;
 }());
 function asListOptions(modelProvider, options) {
-    return options && __assign({}, options, { identityProvider: options.identityProvider && {
+    return options && __assign(__assign({}, options), { identityProvider: options.identityProvider && {
             getId: function (el) {
                 return options.identityProvider.getId(el.element);
             }
         }, dnd: options.dnd && new TreeNodeListDragAndDrop(modelProvider, options.dnd), multipleSelectionController: options.multipleSelectionController && {
             isSelectionSingleChangeEvent: function (e) {
-                return options.multipleSelectionController.isSelectionSingleChangeEvent(__assign({}, e, { element: e.element }));
+                return options.multipleSelectionController.isSelectionSingleChangeEvent(__assign(__assign({}, e), { element: e.element }));
             },
             isSelectionRangeChangeEvent: function (e) {
-                return options.multipleSelectionController.isSelectionRangeChangeEvent(__assign({}, e, { element: e.element }));
+                return options.multipleSelectionController.isSelectionRangeChangeEvent(__assign(__assign({}, e), { element: e.element }));
             }
-        }, accessibilityProvider: options.accessibilityProvider && {
-            getAriaLabel: function (e) {
+        }, accessibilityProvider: options.accessibilityProvider && __assign(__assign({}, options.accessibilityProvider), { getAriaLabel: function (e) {
                 return options.accessibilityProvider.getAriaLabel(e.element);
             },
             getAriaLevel: function (node) {
                 return node.depth;
-            }
-        }, keyboardNavigationLabelProvider: options.keyboardNavigationLabelProvider && __assign({}, options.keyboardNavigationLabelProvider, { getKeyboardNavigationLabel: function (node) {
+            }, getActiveDescendantId: options.accessibilityProvider.getActiveDescendantId && (function (node) {
+                return options.accessibilityProvider.getActiveDescendantId(node.element);
+            }) }), keyboardNavigationLabelProvider: options.keyboardNavigationLabelProvider && __assign(__assign({}, options.keyboardNavigationLabelProvider), { getKeyboardNavigationLabel: function (node) {
                 return options.keyboardNavigationLabelProvider.getKeyboardNavigationLabel(node.element);
             } }), enableKeyboardNavigation: options.simpleKeyboardNavigation, ariaProvider: {
             getSetSize: function (node) {
-                return node.parent.visibleChildrenCount;
+                var model = modelProvider();
+                var ref = model.getNodeLocation(node);
+                var parentRef = model.getParentNodeLocation(ref);
+                var parentNode = model.getNode(parentRef);
+                return parentNode.visibleChildrenCount;
             },
             getPosInSet: function (node) {
                 return node.visibleChildIndex + 1;
-            }
+            },
+            isChecked: options.ariaProvider && options.ariaProvider.isChecked ? function (node) {
+                return options.ariaProvider.isChecked(node.element);
+            } : undefined,
+            getRole: options.ariaProvider && options.ariaProvider.getRole ? function (node) {
+                return options.ariaProvider.getRole(node.element);
+            } : undefined
         } });
 }
 var ComposedTreeDelegate = /** @class */ (function () {
@@ -181,10 +213,8 @@ var EventCollection = /** @class */ (function () {
     function EventCollection(onDidChange, _elements) {
         var _this = this;
         if (_elements === void 0) { _elements = []; }
-        this.onDidChange = onDidChange;
         this._elements = _elements;
-        this.disposables = new DisposableStore();
-        onDidChange(function (e) { return _this._elements = e; }, null, this.disposables);
+        this.onDidChange = Event.forEach(onDidChange, function (elements) { return _this._elements = elements; });
     }
     Object.defineProperty(EventCollection.prototype, "elements", {
         get: function () {
@@ -193,24 +223,23 @@ var EventCollection = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
-    EventCollection.prototype.dispose = function () {
-        this.disposables.dispose();
-    };
     return EventCollection;
 }());
 var TreeRenderer = /** @class */ (function () {
-    function TreeRenderer(renderer, onDidChangeCollapseState, activeNodes, options) {
+    function TreeRenderer(renderer, modelProvider, onDidChangeCollapseState, activeNodes, options) {
         if (options === void 0) { options = {}; }
         this.renderer = renderer;
+        this.modelProvider = modelProvider;
         this.activeNodes = activeNodes;
         this.renderedElements = new Map();
         this.renderedNodes = new Map();
         this.indent = TreeRenderer.DefaultIndent;
-        this._renderIndentGuides = RenderIndentGuides.None;
+        this.hideTwistiesOfChildlessElements = false;
+        this.shouldRenderIndentGuides = false;
         this.renderedIndentGuides = new SetMap();
         this.activeIndentNodes = new Set();
         this.indentGuidesDisposable = Disposable.None;
-        this.disposables = [];
+        this.disposables = new DisposableStore();
         this.templateId = renderer.templateId;
         this.updateOptions(options);
         Event.map(onDidChangeCollapseState, function (e) { return e.node; })(this.onDidChangeNodeTwistieState, this, this.disposables);
@@ -224,19 +253,20 @@ var TreeRenderer = /** @class */ (function () {
             this.indent = clamp(options.indent, 0, 40);
         }
         if (typeof options.renderIndentGuides !== 'undefined') {
-            var renderIndentGuides = options.renderIndentGuides;
-            if (renderIndentGuides !== this._renderIndentGuides) {
-                this._renderIndentGuides = renderIndentGuides;
-                if (renderIndentGuides) {
+            var shouldRenderIndentGuides = options.renderIndentGuides !== RenderIndentGuides.None;
+            if (shouldRenderIndentGuides !== this.shouldRenderIndentGuides) {
+                this.shouldRenderIndentGuides = shouldRenderIndentGuides;
+                this.indentGuidesDisposable.dispose();
+                if (shouldRenderIndentGuides) {
                     var disposables = new DisposableStore();
                     this.activeNodes.onDidChange(this._onDidChangeActiveNodes, this, disposables);
                     this.indentGuidesDisposable = disposables;
                     this._onDidChangeActiveNodes(this.activeNodes.elements);
                 }
-                else {
-                    this.indentGuidesDisposable.dispose();
-                }
             }
+        }
+        if (typeof options.hideTwistiesOfChildlessElements !== 'undefined') {
+            this.hideTwistiesOfChildlessElements = options.hideTwistiesOfChildlessElements;
         }
     };
     TreeRenderer.prototype.renderTemplate = function (container) {
@@ -253,7 +283,7 @@ var TreeRenderer = /** @class */ (function () {
             this.renderedElements.set(node.element, node);
         }
         var indent = TreeRenderer.DefaultIndent + (node.depth - 1) * this.indent;
-        templateData.twistie.style.marginLeft = indent + "px";
+        templateData.twistie.style.paddingLeft = indent + "px";
         templateData.indent.style.width = indent + this.indent - 16 + "px";
         this.renderTwistie(node, templateData);
         if (typeof height === 'number') {
@@ -294,8 +324,13 @@ var TreeRenderer = /** @class */ (function () {
         if (this.renderer.renderTwistie) {
             this.renderer.renderTwistie(node.element, templateData.twistie);
         }
-        toggleClass(templateData.twistie, 'collapsible', node.collapsible);
-        toggleClass(templateData.twistie, 'collapsed', node.collapsible && node.collapsed);
+        if (node.collapsible && (!this.hideTwistiesOfChildlessElements || node.visibleChildrenCount > 0)) {
+            addClasses(templateData.twistie, 'codicon', 'codicon-chevron-down', 'collapsible');
+            toggleClass(templateData.twistie, 'collapsed', node.collapsed);
+        }
+        else {
+            removeClasses(templateData.twistie, 'codicon', 'codicon-chevron-down', 'collapsible', 'collapsed');
+        }
         if (node.collapsible) {
             templateData.container.setAttribute('aria-expanded', String(!node.collapsed));
         }
@@ -307,13 +342,19 @@ var TreeRenderer = /** @class */ (function () {
         var _this = this;
         clearNode(templateData.indent);
         templateData.indentGuidesDisposable.dispose();
-        if (this._renderIndentGuides === RenderIndentGuides.None) {
+        if (!this.shouldRenderIndentGuides) {
             return;
         }
         var disposableStore = new DisposableStore();
+        var model = this.modelProvider();
         var node = target;
         var _loop_1 = function () {
-            var parent_1 = node.parent;
+            var ref = model.getNodeLocation(node);
+            var parentRef = model.getParentNodeLocation(ref);
+            if (!parentRef) {
+                return "break";
+            }
+            var parent_1 = model.getNode(parentRef);
             var guide = $('.indent-guide', { style: "width: " + this_1.indent + "px" });
             if (this_1.activeIndentNodes.has(parent_1)) {
                 addClass(guide, 'active');
@@ -329,23 +370,33 @@ var TreeRenderer = /** @class */ (function () {
             node = parent_1;
         };
         var this_1 = this;
-        while (node.parent && node.parent.parent) {
-            _loop_1();
+        while (true) {
+            var state_1 = _loop_1();
+            if (state_1 === "break")
+                break;
         }
         templateData.indentGuidesDisposable = disposableStore;
     };
     TreeRenderer.prototype._onDidChangeActiveNodes = function (nodes) {
         var _this = this;
-        if (this._renderIndentGuides === RenderIndentGuides.None) {
+        if (!this.shouldRenderIndentGuides) {
             return;
         }
         var set = new Set();
+        var model = this.modelProvider();
         nodes.forEach(function (node) {
-            if (node.collapsible && node.children.length > 0 && !node.collapsed) {
-                set.add(node);
+            var ref = model.getNodeLocation(node);
+            try {
+                var parentRef = model.getParentNodeLocation(ref);
+                if (node.collapsible && node.children.length > 0 && !node.collapsed) {
+                    set.add(node);
+                }
+                else if (parentRef) {
+                    set.add(model.getNode(parentRef));
+                }
             }
-            else if (node.parent) {
-                set.add(node.parent);
+            catch (_a) {
+                // noop
             }
         });
         this.activeIndentNodes.forEach(function (node) {
@@ -364,7 +415,7 @@ var TreeRenderer = /** @class */ (function () {
         this.renderedNodes.clear();
         this.renderedElements.clear();
         this.indentGuidesDisposable.dispose();
-        this.disposables = dispose(this.disposables);
+        dispose(this.disposables);
     };
     TreeRenderer.DefaultIndent = 8;
     return TreeRenderer;
@@ -378,7 +429,7 @@ var TypeFilter = /** @class */ (function () {
         this._matchCount = 0;
         this._pattern = '';
         this._lowercasePattern = '';
-        this.disposables = [];
+        this.disposables = new DisposableStore();
         tree.onWillRefilter(this.reset, this, this.disposables);
     }
     Object.defineProperty(TypeFilter.prototype, "totalCount", {
@@ -448,16 +499,16 @@ var TypeFilter = /** @class */ (function () {
         this._matchCount = 0;
     };
     TypeFilter.prototype.dispose = function () {
-        this.disposables = dispose(this.disposables);
+        dispose(this.disposables);
     };
     return TypeFilter;
 }());
 var TypeFilterController = /** @class */ (function () {
-    function TypeFilterController(tree, model, view, filter, keyboardNavigationLabelProvider) {
+    function TypeFilterController(tree, model, view, filter, keyboardNavigationDelegate) {
         this.tree = tree;
         this.view = view;
         this.filter = filter;
-        this.keyboardNavigationLabelProvider = keyboardNavigationLabelProvider;
+        this.keyboardNavigationDelegate = keyboardNavigationDelegate;
         this._enabled = false;
         this._pattern = '';
         this._empty = false;
@@ -466,8 +517,8 @@ var TypeFilterController = /** @class */ (function () {
         this.automaticKeyboardNavigation = true;
         this.triggered = false;
         this._onDidChangePattern = new Emitter();
-        this.enabledDisposables = [];
-        this.disposables = [];
+        this.enabledDisposables = new DisposableStore();
+        this.disposables = new DisposableStore();
         this.domNode = $(".monaco-list-type-filter." + this.positionClassName);
         this.domNode.draggable = true;
         domEvent(this.domNode, 'dragstart')(this.onDragStart, this, this.disposables);
@@ -475,13 +526,13 @@ var TypeFilterController = /** @class */ (function () {
         this.labelDomNode = append(this.domNode, $('span.label'));
         var controls = append(this.domNode, $('.controls'));
         this._filterOnType = !!tree.options.filterOnType;
-        this.filterOnTypeDomNode = append(controls, $('input.filter'));
+        this.filterOnTypeDomNode = append(controls, $('input.filter.codicon.codicon-list-selection'));
         this.filterOnTypeDomNode.type = 'checkbox';
         this.filterOnTypeDomNode.checked = this._filterOnType;
         this.filterOnTypeDomNode.tabIndex = -1;
         this.updateFilterOnTypeTitle();
         domEvent(this.filterOnTypeDomNode, 'input')(this.onDidChangeFilterOnType, this, this.disposables);
-        this.clearDomNode = append(controls, $('button.clear'));
+        this.clearDomNode = append(controls, $('button.clear.codicon.codicon-close'));
         this.clearDomNode.tabIndex = -1;
         this.clearDomNode.title = localize('clear', "Clear");
         this.keyboardNavigationEventFilter = tree.options.keyboardNavigationEventFilter;
@@ -528,13 +579,13 @@ var TypeFilterController = /** @class */ (function () {
         if (this._enabled) {
             return;
         }
-        var isPrintableCharEvent = this.keyboardNavigationLabelProvider.mightProducePrintableCharacter ? function (e) { return _this.keyboardNavigationLabelProvider.mightProducePrintableCharacter(e); } : function (e) { return mightProducePrintableCharacter(e); };
         var onKeyDown = Event.chain(domEvent(this.view.getHTMLElement(), 'keydown'))
             .filter(function (e) { return !isInputElement(e.target) || e.target === _this.filterOnTypeDomNode; })
+            .filter(function (e) { return e.key !== 'Dead' && !/^Media/.test(e.key); })
             .map(function (e) { return new StandardKeyboardEvent(e); })
             .filter(this.keyboardNavigationEventFilter || (function () { return true; }))
             .filter(function () { return _this.automaticKeyboardNavigation || _this.triggered; })
-            .filter(function (e) { return isPrintableCharEvent(e) || ((_this.pattern.length > 0 || _this.triggered) && ((e.keyCode === 9 /* Escape */ || e.keyCode === 1 /* Backspace */) && !e.altKey && !e.ctrlKey && !e.metaKey) || (e.keyCode === 1 /* Backspace */ && (isMacintosh ? (e.altKey && !e.metaKey) : e.ctrlKey) && !e.shiftKey)); })
+            .filter(function (e) { return _this.keyboardNavigationDelegate.mightProducePrintableCharacter(e) || ((_this.pattern.length > 0 || _this.triggered) && ((e.keyCode === 9 /* Escape */ || e.keyCode === 1 /* Backspace */) && !e.altKey && !e.ctrlKey && !e.metaKey) || (e.keyCode === 1 /* Backspace */ && (isMacintosh ? (e.altKey && !e.metaKey) : e.ctrlKey) && !e.shiftKey)); })
             .forEach(function (e) { e.stopPropagation(); e.preventDefault(); })
             .event;
         var onClear = domEvent(this.clearDomNode, 'click');
@@ -551,7 +602,7 @@ var TypeFilterController = /** @class */ (function () {
             return;
         }
         this.domNode.remove();
-        this.enabledDisposables = dispose(this.enabledDisposables);
+        this.enabledDisposables.clear();
         this.tree.refilter();
         this.render();
         this._enabled = false;
@@ -606,7 +657,7 @@ var TypeFilterController = /** @class */ (function () {
         var containerWidth = container.clientWidth;
         var midContainerWidth = containerWidth / 2;
         var width = this.domNode.clientWidth;
-        var disposables = [];
+        var disposables = new DisposableStore();
         var positionClassName = this.positionClassName;
         var updatePosition = function () {
             switch (positionClassName) {
@@ -637,18 +688,18 @@ var TypeFilterController = /** @class */ (function () {
         var onDragEnd = function () {
             _this.positionClassName = positionClassName;
             _this.domNode.className = "monaco-list-type-filter " + _this.positionClassName;
-            _this.domNode.style.top = null;
-            _this.domNode.style.left = null;
+            _this.domNode.style.top = '';
+            _this.domNode.style.left = '';
             dispose(disposables);
         };
         updatePosition();
         removeClass(this.domNode, positionClassName);
         addClass(this.domNode, 'dragging');
-        disposables.push(toDisposable(function () { return removeClass(_this.domNode, 'dragging'); }));
+        disposables.add(toDisposable(function () { return removeClass(_this.domNode, 'dragging'); }));
         domEvent(document, 'dragover')(onDragOver, null, disposables);
         domEvent(this.domNode, 'dragend')(onDragEnd, null, disposables);
         StaticDND.CurrentDragAndDropData = new DragAndDropData('vscode-ui');
-        disposables.push(toDisposable(function () { return StaticDND.CurrentDragAndDropData = undefined; }));
+        disposables.add(toDisposable(function () { return StaticDND.CurrentDragAndDropData = undefined; }));
     };
     TypeFilterController.prototype.onDidSpliceModel = function () {
         if (!this._enabled || this.pattern.length === 0) {
@@ -697,9 +748,14 @@ var TypeFilterController = /** @class */ (function () {
         return !FuzzyScore.isDefault(node.filterData);
     };
     TypeFilterController.prototype.dispose = function () {
-        this.disable();
+        if (this._enabled) {
+            this.domNode.remove();
+            this.enabledDisposables.dispose();
+            this._enabled = false;
+            this.triggered = false;
+        }
         this._onDidChangePattern.dispose();
-        this.disposables = dispose(this.disposables);
+        dispose(this.disposables);
     };
     return TypeFilterController;
 }());
@@ -744,7 +800,7 @@ var Trait = /** @class */ (function () {
         this._set(nodes, false, browserEvent);
     };
     Trait.prototype._set = function (nodes, silent, browserEvent) {
-        this.nodes = nodes.slice();
+        this.nodes = __spreadArrays(nodes);
         this.elements = undefined;
         this._nodeSet = undefined;
         if (!silent) {
@@ -756,7 +812,7 @@ var Trait = /** @class */ (function () {
         if (!this.elements) {
             this.elements = this.nodes.map(function (node) { return node.element; });
         }
-        return this.elements.slice();
+        return __spreadArrays(this.elements);
     };
     Trait.prototype.getNodes = function () {
         return this.nodes;
@@ -781,7 +837,6 @@ var Trait = /** @class */ (function () {
         var insertedNodesVisitor = function (node) { return insertedNodesMap.set(_this.identityProvider.getId(node.element).toString(), node); };
         insertedNodes.forEach(function (node) { return dfs(node, insertedNodesVisitor); });
         var nodes = [];
-        var silent = true;
         for (var _i = 0, _b = this.nodes; _i < _b.length; _i++) {
             var node = _b[_i];
             var id = this.identityProvider.getId(node.element).toString();
@@ -794,12 +849,9 @@ var Trait = /** @class */ (function () {
                 if (insertedNode) {
                     nodes.push(insertedNode);
                 }
-                else {
-                    silent = false;
-                }
             }
         }
-        this._set(nodes, silent);
+        this._set(nodes, true);
     };
     Trait.prototype.createNodeSet = function () {
         var set = new Set();
@@ -843,12 +895,14 @@ var TreeNodeListMouseController = /** @class */ (function (_super) {
         if (expandOnlyOnTwistieClick && !onTwistie) {
             return _super.prototype.onPointer.call(this, e);
         }
-        var model = this.tree.model; // internal
-        var location = model.getNodeLocation(node);
-        var recursive = e.browserEvent.altKey;
-        model.setCollapsed(location, undefined, recursive);
-        if (expandOnlyOnTwistieClick && onTwistie) {
-            return;
+        if (node.collapsible) {
+            var model = this.tree.model; // internal
+            var location_1 = model.getNodeLocation(node);
+            var recursive = e.browserEvent.altKey;
+            model.setCollapsed(location_1, undefined, recursive);
+            if (expandOnlyOnTwistieClick && onTwistie) {
+                return;
+            }
         }
         _super.prototype.onPointer.call(this, e);
     };
@@ -867,8 +921,8 @@ var TreeNodeListMouseController = /** @class */ (function (_super) {
  */
 var TreeNodeList = /** @class */ (function (_super) {
     __extends(TreeNodeList, _super);
-    function TreeNodeList(container, virtualDelegate, renderers, focusTrait, selectionTrait, options) {
-        var _this = _super.call(this, container, virtualDelegate, renderers, options) || this;
+    function TreeNodeList(user, container, virtualDelegate, renderers, focusTrait, selectionTrait, options) {
+        var _this = _super.call(this, user, container, virtualDelegate, renderers, options) || this;
         _this.focusTrait = focusTrait;
         _this.selectionTrait = selectionTrait;
         return _this;
@@ -894,10 +948,10 @@ var TreeNodeList = /** @class */ (function (_super) {
             }
         });
         if (additionalFocus.length > 0) {
-            _super.prototype.setFocus.call(this, distinctES6(_super.prototype.getFocus.call(this).concat(additionalFocus)));
+            _super.prototype.setFocus.call(this, distinctES6(__spreadArrays(_super.prototype.getFocus.call(this), additionalFocus)));
         }
         if (additionalSelection.length > 0) {
-            _super.prototype.setSelection.call(this, distinctES6(_super.prototype.getSelection.call(this).concat(additionalSelection)));
+            _super.prototype.setSelection.call(this, distinctES6(__spreadArrays(_super.prototype.getSelection.call(this), additionalSelection)));
         }
     };
     TreeNodeList.prototype.setFocus = function (indexes, browserEvent, fromAPI) {
@@ -919,13 +973,12 @@ var TreeNodeList = /** @class */ (function (_super) {
     return TreeNodeList;
 }(List));
 var AbstractTree = /** @class */ (function () {
-    function AbstractTree(container, delegate, renderers, _options) {
-        var _a;
+    function AbstractTree(user, container, delegate, renderers, _options) {
         var _this = this;
         if (_options === void 0) { _options = {}; }
         this._options = _options;
         this.eventBufferer = new EventBufferer();
-        this.disposables = [];
+        this.disposables = new DisposableStore();
         this._onWillRefilter = new Emitter();
         this.onWillRefilter = this._onWillRefilter.event;
         this._onDidUpdateOptions = new Emitter();
@@ -933,25 +986,48 @@ var AbstractTree = /** @class */ (function () {
         var onDidChangeCollapseStateRelay = new Relay();
         var onDidChangeActiveNodes = new Relay();
         var activeNodes = new EventCollection(onDidChangeActiveNodes.event);
-        this.disposables.push(activeNodes);
-        this.renderers = renderers.map(function (r) { return new TreeRenderer(r, onDidChangeCollapseStateRelay.event, activeNodes, _options); });
-        (_a = this.disposables).push.apply(_a, this.renderers);
+        this.renderers = renderers.map(function (r) { return new TreeRenderer(r, function () { return _this.model; }, onDidChangeCollapseStateRelay.event, activeNodes, _options); });
+        for (var _i = 0, _a = this.renderers; _i < _a.length; _i++) {
+            var r = _a[_i];
+            this.disposables.add(r);
+        }
         var filter;
         if (_options.keyboardNavigationLabelProvider) {
             filter = new TypeFilter(this, _options.keyboardNavigationLabelProvider, _options.filter);
-            _options = __assign({}, _options, { filter: filter }); // TODO need typescript help here
-            this.disposables.push(filter);
+            _options = __assign(__assign({}, _options), { filter: filter }); // TODO need typescript help here
+            this.disposables.add(filter);
         }
         this.focus = new Trait(_options.identityProvider);
         this.selection = new Trait(_options.identityProvider);
-        this.view = new TreeNodeList(container, treeDelegate, this.renderers, this.focus, this.selection, __assign({}, asListOptions(function () { return _this.model; }, _options), { tree: this }));
-        this.model = this.createModel(this.view, _options);
+        this.view = new TreeNodeList(user, container, treeDelegate, this.renderers, this.focus, this.selection, __assign(__assign({}, asListOptions(function () { return _this.model; }, _options)), { tree: this }));
+        this.model = this.createModel(user, this.view, _options);
         onDidChangeCollapseStateRelay.input = this.model.onDidChangeCollapseState;
-        this.model.onDidSplice(function (e) {
-            _this.focus.onDidModelSplice(e);
-            _this.selection.onDidModelSplice(e);
-        }, null, this.disposables);
-        onDidChangeActiveNodes.input = Event.map(Event.any(this.focus.onDidChange, this.selection.onDidChange, this.model.onDidSplice), function () { return _this.focus.getNodes().concat(_this.selection.getNodes()); });
+        var onDidModelSplice = Event.forEach(this.model.onDidSplice, function (e) {
+            _this.eventBufferer.bufferEvents(function () {
+                _this.focus.onDidModelSplice(e);
+                _this.selection.onDidModelSplice(e);
+            });
+        });
+        // Make sure the `forEach` always runs
+        onDidModelSplice(function () { return null; }, null, this.disposables);
+        // Active nodes can change when the model changes or when focus or selection change.
+        // We debounce it with 0 delay since these events may fire in the same stack and we only
+        // want to run this once. It also doesn't matter if it runs on the next tick since it's only
+        // a nice to have UI feature.
+        onDidChangeActiveNodes.input = Event.chain(Event.any(onDidModelSplice, this.focus.onDidChange, this.selection.onDidChange))
+            .debounce(function () { return null; }, 0)
+            .map(function () {
+            var set = new Set();
+            for (var _i = 0, _a = _this.focus.getNodes(); _i < _a.length; _i++) {
+                var node = _a[_i];
+                set.add(node);
+            }
+            for (var _b = 0, _c = _this.selection.getNodes(); _b < _c.length; _b++) {
+                var node = _c[_b];
+                set.add(node);
+            }
+            return fromSet(set);
+        }).event;
         if (_options.keyboardSupport !== false) {
             var onKeyDown = Event.chain(this.view.onKeyDown)
                 .filter(function (e) { return !isInputElement(e.target); })
@@ -961,9 +1037,10 @@ var AbstractTree = /** @class */ (function () {
             onKeyDown.filter(function (e) { return e.keyCode === 10 /* Space */; }).on(this.onSpace, this, this.disposables);
         }
         if (_options.keyboardNavigationLabelProvider) {
-            this.typeFilterController = new TypeFilterController(this, this.model, this.view, filter, _options.keyboardNavigationLabelProvider);
+            var delegate_1 = _options.keyboardNavigationDelegate || DefaultKeyboardNavigationDelegate;
+            this.typeFilterController = new TypeFilterController(this, this.model, this.view, filter, delegate_1);
             this.focusNavigationFilter = function (node) { return _this.typeFilterController.shouldAllowFocus(node); };
-            this.disposables.push(this.typeFilterController);
+            this.disposables.add(this.typeFilterController);
         }
         this.styleElement = createStyleSheet(this.view.getHTMLElement());
         toggleClass(this.getHTMLElement(), 'always', this._options.renderIndentGuides === RenderIndentGuides.Always);
@@ -1010,7 +1087,7 @@ var AbstractTree = /** @class */ (function () {
     });
     AbstractTree.prototype.updateOptions = function (optionsUpdate) {
         if (optionsUpdate === void 0) { optionsUpdate = {}; }
-        this._options = __assign({}, this._options, optionsUpdate);
+        this._options = __assign(__assign({}, this._options), optionsUpdate);
         for (var _i = 0, _a = this.renderers; _i < _a.length; _i++) {
             var renderer = _a[_i];
             renderer.updateOptions(optionsUpdate);
@@ -1065,10 +1142,6 @@ var AbstractTree = /** @class */ (function () {
         }
         this.view.style(styles);
     };
-    // Tree
-    AbstractTree.prototype.getNode = function (location) {
-        return this.model.getNode(location);
-    };
     AbstractTree.prototype.collapse = function (location, recursive) {
         if (recursive === void 0) { recursive = false; }
         return this.model.setCollapsed(location, true, recursive);
@@ -1076,6 +1149,12 @@ var AbstractTree = /** @class */ (function () {
     AbstractTree.prototype.expand = function (location, recursive) {
         if (recursive === void 0) { recursive = false; }
         return this.model.setCollapsed(location, false, recursive);
+    };
+    AbstractTree.prototype.isCollapsible = function (location) {
+        return this.model.isCollapsible(location);
+    };
+    AbstractTree.prototype.setCollapsible = function (location, collapsible) {
+        return this.model.setCollapsible(location, collapsible);
     };
     AbstractTree.prototype.isCollapsed = function (location) {
         return this.model.isCollapsed(location);
@@ -1142,7 +1221,7 @@ var AbstractTree = /** @class */ (function () {
         var didChange = this.model.setCollapsed(location, true);
         if (!didChange) {
             var parentLocation = this.model.getParentNodeLocation(location);
-            if (parentLocation === null) {
+            if (!parentLocation) {
                 return;
             }
             var parentListIndex = this.model.getListIndex(parentLocation);
@@ -1183,7 +1262,7 @@ var AbstractTree = /** @class */ (function () {
         this.model.setCollapsed(location, undefined, recursive);
     };
     AbstractTree.prototype.dispose = function () {
-        this.disposables = dispose(this.disposables);
+        dispose(this.disposables);
         this.view.dispose();
     };
     return AbstractTree;

@@ -54,9 +54,18 @@ var CodeLensCache = /** @class */ (function () {
         });
     }
     CodeLensCache.prototype.put = function (model, data) {
-        var lensModel = new CodeLensModel();
-        lensModel.add({ lenses: data.lenses.map(function (v) { return v.symbol; }), dispose: function () { } }, this._fakeProvider);
-        var item = new CacheItem(model.getLineCount(), lensModel);
+        // create a copy of the model that is without command-ids
+        // but with comand-labels
+        var copyItems = data.lenses.map(function (item) {
+            var _a;
+            return {
+                range: item.symbol.range,
+                command: item.symbol.command && { id: '', title: (_a = item.symbol.command) === null || _a === void 0 ? void 0 : _a.title },
+            };
+        });
+        var copyModel = new CodeLensModel();
+        copyModel.add({ lenses: copyItems, dispose: function () { } }, this._fakeProvider);
+        var item = new CacheItem(model.getLineCount(), copyModel);
         this._cache.set(model.uri.toString(), item);
     };
     CodeLensCache.prototype.get = function (model) {

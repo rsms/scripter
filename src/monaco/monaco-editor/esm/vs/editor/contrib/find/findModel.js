@@ -226,11 +226,11 @@ var FindModelBoundToEditorModel = /** @class */ (function () {
         var lineNumber = before.lineNumber, column = before.column;
         var model = this._editor.getModel();
         var position = new Position(lineNumber, column);
-        var prevMatch = model.findPreviousMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null, false);
+        var prevMatch = model.findPreviousMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null, false);
         if (prevMatch && prevMatch.range.isEmpty() && prevMatch.range.getStartPosition().equals(position)) {
             // Looks like we're stuck at this position, unacceptable!
             position = this._prevSearchPosition(position);
-            prevMatch = model.findPreviousMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null, false);
+            prevMatch = model.findPreviousMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null, false);
         }
         if (!prevMatch) {
             // there is precisely one match and selection is on top of it
@@ -299,11 +299,11 @@ var FindModelBoundToEditorModel = /** @class */ (function () {
         var lineNumber = after.lineNumber, column = after.column;
         var model = this._editor.getModel();
         var position = new Position(lineNumber, column);
-        var nextMatch = model.findNextMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null, captureMatches);
+        var nextMatch = model.findNextMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null, captureMatches);
         if (forceMove && nextMatch && nextMatch.range.isEmpty() && nextMatch.range.getStartPosition().equals(position)) {
             // Looks like we're stuck at this position, unacceptable!
             position = this._nextSearchPosition(position);
-            nextMatch = model.findNextMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null, captureMatches);
+            nextMatch = model.findNextMatch(this._state.searchString, position, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null, captureMatches);
         }
         if (!nextMatch) {
             // there is precisely one match and selection is on top of it
@@ -347,7 +347,7 @@ var FindModelBoundToEditorModel = /** @class */ (function () {
     };
     FindModelBoundToEditorModel.prototype._findMatches = function (findScope, captureMatches, limitResultCount) {
         var searchRange = FindModelBoundToEditorModel._getSearchRange(this._editor.getModel(), findScope);
-        return this._editor.getModel().findMatches(this._state.searchString, searchRange, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null, captureMatches, limitResultCount);
+        return this._editor.getModel().findMatches(this._state.searchString, searchRange, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null, captureMatches, limitResultCount);
     };
     FindModelBoundToEditorModel.prototype.replaceAll = function () {
         if (!this._hasMatches()) {
@@ -364,14 +364,14 @@ var FindModelBoundToEditorModel = /** @class */ (function () {
         this.research(false);
     };
     FindModelBoundToEditorModel.prototype._largeReplaceAll = function () {
-        var searchParams = new SearchParams(this._state.searchString, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getConfiguration().wordSeparators : null);
+        var searchParams = new SearchParams(this._state.searchString, this._state.isRegex, this._state.matchCase, this._state.wholeWord ? this._editor.getOption(96 /* wordSeparators */) : null);
         var searchData = searchParams.parseSearchRequest();
         if (!searchData) {
             return;
         }
         var searchRegex = searchData.regex;
         if (!searchRegex.multiline) {
-            var mod = 'm';
+            var mod = 'mu';
             if (searchRegex.ignoreCase) {
                 mod += 'i';
             }

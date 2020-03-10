@@ -73,6 +73,11 @@ export function isUndefined(obj) {
 export function isUndefinedOrNull(obj) {
     return isUndefined(obj) || obj === null;
 }
+export function assertType(condition, type) {
+    if (!condition) {
+        throw new Error(type ? "Unexpected type, expected '" + type + "'" : 'Unexpected type');
+    }
+}
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 /**
  * @returns whether the provided parameter is an empty JavaScript Object or not.

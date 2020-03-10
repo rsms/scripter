@@ -24,6 +24,7 @@ import { nullTokenize2 } from '../modes/nullMode.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { StopWatch } from '../../../base/common/stopwatch.js';
 import { MultilineTokensBuilder, countEOL } from './tokensStore.js';
+import * as platform from '../../../base/common/platform.js';
 var TokenizationStateStore = /** @class */ (function () {
     function TokenizationStateStore() {
         this._beginState = [];
@@ -169,9 +170,9 @@ var TextModelTokenization = /** @class */ (function (_super) {
     __extends(TextModelTokenization, _super);
     function TextModelTokenization(textModel) {
         var _this = _super.call(this) || this;
+        _this._isDisposed = false;
         _this._textModel = textModel;
         _this._tokenizationStateStore = new TokenizationStateStore();
-        _this._revalidateTokensTimeout = -1;
         _this._tokenizationSupport = null;
         _this._register(TokenizationRegistry.onDidChange(function (e) {
             var languageIdentifier = _this._textModel.getLanguageIdentifier();
@@ -206,17 +207,10 @@ var TextModelTokenization = /** @class */ (function (_super) {
         return _this;
     }
     TextModelTokenization.prototype.dispose = function () {
-        this._clearTimers();
+        this._isDisposed = true;
         _super.prototype.dispose.call(this);
     };
-    TextModelTokenization.prototype._clearTimers = function () {
-        if (this._revalidateTokensTimeout !== -1) {
-            clearTimeout(this._revalidateTokensTimeout);
-            this._revalidateTokensTimeout = -1;
-        }
-    };
     TextModelTokenization.prototype._resetTokenizationState = function () {
-        this._clearTimers();
         var _a = initializeTokenization(this._textModel), tokenizationSupport = _a[0], initialState = _a[1];
         this._tokenizationSupport = tokenizationSupport;
         this._tokenizationStateStore.flush(initialState);
@@ -224,16 +218,19 @@ var TextModelTokenization = /** @class */ (function (_super) {
     };
     TextModelTokenization.prototype._beginBackgroundTokenization = function () {
         var _this = this;
-        if (this._textModel.isAttachedToEditor() && this._hasLinesToTokenize() && this._revalidateTokensTimeout === -1) {
-            this._revalidateTokensTimeout = setTimeout(function () {
-                _this._revalidateTokensTimeout = -1;
+        if (this._textModel.isAttachedToEditor() && this._hasLinesToTokenize()) {
+            platform.setImmediate(function () {
+                if (_this._isDisposed) {
+                    // disposed in the meantime
+                    return;
+                }
                 _this._revalidateTokensNow();
-            }, 0);
+            });
         }
     };
     TextModelTokenization.prototype._revalidateTokensNow = function (toLineNumber) {
         if (toLineNumber === void 0) { toLineNumber = this._textModel.getLineCount(); }
-        var MAX_ALLOWED_TIME = 20;
+        var MAX_ALLOWED_TIME = 1;
         var builder = new MultilineTokensBuilder();
         var sw = StopWatch.create(false);
         while (this._hasLinesToTokenize()) {

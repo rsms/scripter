@@ -24,6 +24,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import * as strings from '../../../base/common/strings.js';
 import * as dom from '../../../base/browser/dom.js';
 import { StandardKeyboardEvent } from '../../../base/browser/keyboardEvent.js';
@@ -38,7 +45,7 @@ import { isDiffEditorConfigurationKey, isEditorConfigurationKey } from '../../co
 import { EditOperation } from '../../common/core/editOperation.js';
 import { Position as Pos } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
-import { isResourceTextEdit } from '../../common/modes.js';
+import { WorkspaceTextEdit } from '../../common/modes.js';
 import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { Configuration, ConfigurationModel, DefaultConfigurationModel } from '../../../platform/configuration/common/configurationModels.js';
@@ -79,7 +86,8 @@ function withTypedEditor(widget, codeEditorCallback, diffEditorCallback) {
     }
 }
 var SimpleEditorModelResolverService = /** @class */ (function () {
-    function SimpleEditorModelResolverService() {
+    function SimpleEditorModelResolverService(modelService) {
+        this.modelService = modelService;
     }
     SimpleEditorModelResolverService.prototype.setEditor = function (editor) {
         this.editor = editor;
@@ -96,7 +104,7 @@ var SimpleEditorModelResolverService = /** @class */ (function () {
         return Promise.resolve(new ImmortalReference(new SimpleModel(model)));
     };
     SimpleEditorModelResolverService.prototype.findModel = function (editor, resource) {
-        var model = editor.getModel();
+        var model = this.modelService ? this.modelService.getModel(resource) : editor.getModel();
         if (model && model.uri.toString() !== resource.toString()) {
             return null;
         }
@@ -108,8 +116,16 @@ export { SimpleEditorModelResolverService };
 var SimpleEditorProgressService = /** @class */ (function () {
     function SimpleEditorProgressService() {
     }
+    SimpleEditorProgressService.prototype.show = function () {
+        return SimpleEditorProgressService.NULL_PROGRESS_RUNNER;
+    };
     SimpleEditorProgressService.prototype.showWhile = function (promise, delay) {
         return Promise.resolve(undefined);
+    };
+    SimpleEditorProgressService.NULL_PROGRESS_RUNNER = {
+        done: function () { },
+        total: function () { },
+        worked: function () { }
     };
     return SimpleEditorProgressService;
 }());
@@ -179,7 +195,7 @@ var StandaloneCommandService = /** @class */ (function () {
         }
         try {
             this._onWillExecuteCommand.fire({ commandId: id, args: args });
-            var result = this._instantiationService.invokeFunction.apply(this._instantiationService, [command.handler].concat(args));
+            var result = this._instantiationService.invokeFunction.apply(this._instantiationService, __spreadArrays([command.handler], args));
             this._onDidExecuteCommand.fire({ commandId: id, args: args });
             return Promise.resolve(result);
         }
@@ -201,6 +217,7 @@ var StandaloneKeybindingService = /** @class */ (function (_super) {
             var shouldPreventDefault = _this._dispatch(keyEvent, keyEvent.target);
             if (shouldPreventDefault) {
                 keyEvent.preventDefault();
+                keyEvent.stopPropagation();
             }
         }));
         return _this;
@@ -208,27 +225,26 @@ var StandaloneKeybindingService = /** @class */ (function (_super) {
     StandaloneKeybindingService.prototype.addDynamicKeybinding = function (commandId, _keybinding, handler, when) {
         var _this = this;
         var keybinding = createKeybinding(_keybinding, OS);
-        if (!keybinding) {
-            throw new Error("Invalid keybinding");
-        }
         var toDispose = new DisposableStore();
-        this._dynamicKeybindings.push({
-            keybinding: keybinding,
-            command: commandId,
-            when: when,
-            weight1: 1000,
-            weight2: 0
-        });
-        toDispose.add(toDisposable(function () {
-            for (var i = 0; i < _this._dynamicKeybindings.length; i++) {
-                var kb = _this._dynamicKeybindings[i];
-                if (kb.command === commandId) {
-                    _this._dynamicKeybindings.splice(i, 1);
-                    _this.updateResolver({ source: 1 /* Default */ });
-                    return;
+        if (keybinding) {
+            this._dynamicKeybindings.push({
+                keybinding: keybinding,
+                command: commandId,
+                when: when,
+                weight1: 1000,
+                weight2: 0
+            });
+            toDispose.add(toDisposable(function () {
+                for (var i = 0; i < _this._dynamicKeybindings.length; i++) {
+                    var kb = _this._dynamicKeybindings[i];
+                    if (kb.command === commandId) {
+                        _this._dynamicKeybindings.splice(i, 1);
+                        _this.updateResolver({ source: 1 /* Default */ });
+                        return;
+                    }
                 }
-            }
-        }));
+            }));
+        }
         var commandService = this._commandService;
         if (commandService instanceof StandaloneCommandService) {
             toDispose.add(commandService.addCommand({
@@ -324,7 +340,7 @@ var SimpleResourceConfigurationService = /** @class */ (function () {
         this.configurationService = configurationService;
         this._onDidChangeConfiguration = new Emitter();
         this.configurationService.onDidChangeConfiguration(function (e) {
-            _this._onDidChangeConfiguration.fire(e);
+            _this._onDidChangeConfiguration.fire({ affectedKeys: e.affectedKeys, affectsConfiguration: function (resource, configuration) { return e.affectsConfiguration(configuration); } });
         });
     }
     SimpleResourceConfigurationService.prototype.getValue = function (resource, arg2, arg3) {
@@ -342,12 +358,10 @@ var SimpleResourcePropertiesService = /** @class */ (function () {
     function SimpleResourcePropertiesService(configurationService) {
         this.configurationService = configurationService;
     }
-    SimpleResourcePropertiesService.prototype.getEOL = function (resource) {
-        var filesConfiguration = this.configurationService.getValue('files');
-        if (filesConfiguration && filesConfiguration.eol) {
-            if (filesConfiguration.eol !== 'auto') {
-                return filesConfiguration.eol;
-            }
+    SimpleResourcePropertiesService.prototype.getEOL = function (resource, language) {
+        var eol = this.configurationService.getValue('files.eol', { overrideIdentifier: language, resource: resource });
+        if (eol && eol !== 'auto') {
+            return eol;
         }
         return (isLinux || isMacintosh) ? '\n' : '\r\n';
     };
@@ -359,7 +373,6 @@ var SimpleResourcePropertiesService = /** @class */ (function () {
 export { SimpleResourcePropertiesService };
 var StandaloneTelemetryService = /** @class */ (function () {
     function StandaloneTelemetryService() {
-        this._serviceBrand = undefined;
     }
     StandaloneTelemetryService.prototype.publicLog = function (eventName, data) {
         return Promise.resolve(undefined);
@@ -406,12 +419,15 @@ var SimpleBulkEditService = /** @class */ (function () {
         this._modelService = _modelService;
         //
     }
+    SimpleBulkEditService.prototype.hasPreviewHandler = function () {
+        return false;
+    };
     SimpleBulkEditService.prototype.apply = function (workspaceEdit, options) {
         var edits = new Map();
         if (workspaceEdit.edits) {
             for (var _i = 0, _a = workspaceEdit.edits; _i < _a.length; _i++) {
                 var edit = _a[_i];
-                if (!isResourceTextEdit(edit)) {
+                if (!WorkspaceTextEdit.is(edit)) {
                     return Promise.reject(new Error('bad edit - only text edits are supported'));
                 }
                 var model = this._modelService.getModel(edit.resource);
@@ -421,14 +437,17 @@ var SimpleBulkEditService = /** @class */ (function () {
                 var array = edits.get(model);
                 if (!array) {
                     array = [];
+                    edits.set(model, array);
                 }
-                edits.set(model, array.concat(edit.edits));
+                array.push(edit.edit);
             }
         }
         var totalEdits = 0;
         var totalFiles = 0;
         edits.forEach(function (edits, model) {
-            model.applyEdits(edits.map(function (edit) { return EditOperation.replaceMove(Range.lift(edit.range), edit.text); }));
+            model.pushStackElement();
+            model.pushEditOperations([], edits.map(function (e) { return EditOperation.replaceMove(Range.lift(e.range), e.text); }), function () { return []; });
+            model.pushStackElement();
             totalFiles += 1;
             totalEdits += edits.length;
         });

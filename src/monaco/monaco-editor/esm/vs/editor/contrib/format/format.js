@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -44,7 +45,6 @@ import { illegalArgument, onUnexpectedExternalError } from '../../../base/common
 import { URI } from '../../../base/common/uri.js';
 import { EditorStateCancellationTokenSource, TextModelCancellationTokenSource } from '../../browser/core/editorState.js';
 import { isCodeEditor } from '../../browser/editorBrowser.js';
-import { registerLanguageCommand } from '../../browser/editorExtensions.js';
 import { Position } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
 import { Selection } from '../../common/core/selection.js';
@@ -56,6 +56,8 @@ import * as nls from '../../../nls.js';
 import { ExtensionIdentifier } from '../../../platform/extensions/common/extensions.js';
 import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
 import { LinkedList } from '../../../base/common/linkedList.js';
+import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
+import { assertType } from '../../../base/common/types.js';
 export function alertFormattingEdits(edits) {
     edits = edits.filter(function (edit) { return edit.range; });
     if (!edits.length) {
@@ -205,7 +207,6 @@ export function formatDocumentRangeWithProvider(accessor, provider, editorOrMode
                         FormattingEdit.execute(editorOrModel, edits);
                         alertFormattingEdits(edits);
                         editorOrModel.pushUndoStop();
-                        editorOrModel.focus();
                         editorOrModel.revealPositionInCenterIfOutsideViewport(editorOrModel.getPosition(), 1 /* Immediate */);
                     }
                     else {
@@ -295,7 +296,6 @@ export function formatDocumentWithProvider(accessor, provider, editorOrModel, mo
                         if (mode !== 2 /* Silent */) {
                             alertFormattingEdits(edits);
                             editorOrModel.pushUndoStop();
-                            editorOrModel.focus();
                             editorOrModel.revealPositionInCenterIfOutsideViewport(editorOrModel.getPosition(), 1 /* Immediate */);
                         }
                     }
@@ -387,33 +387,42 @@ export function getOnTypeFormattingEdits(workerService, model, position, ch, opt
         return workerService.computeMoreMinimalEdits(model.uri, edits);
     });
 }
-registerLanguageCommand('_executeFormatRangeProvider', function (accessor, args) {
-    var resource = args.resource, range = args.range, options = args.options;
-    if (!(resource instanceof URI) || !Range.isIRange(range)) {
-        throw illegalArgument();
+CommandsRegistry.registerCommand('_executeFormatRangeProvider', function (accessor) {
+    var args = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        args[_i - 1] = arguments[_i];
     }
+    var resource = args[0], range = args[1], options = args[2];
+    assertType(URI.isUri(resource));
+    assertType(Range.isIRange(range));
     var model = accessor.get(IModelService).getModel(resource);
     if (!model) {
         throw illegalArgument('resource');
     }
     return getDocumentRangeFormattingEditsUntilResult(accessor.get(IEditorWorkerService), model, Range.lift(range), options, CancellationToken.None);
 });
-registerLanguageCommand('_executeFormatDocumentProvider', function (accessor, args) {
-    var resource = args.resource, options = args.options;
-    if (!(resource instanceof URI)) {
-        throw illegalArgument('resource');
+CommandsRegistry.registerCommand('_executeFormatDocumentProvider', function (accessor) {
+    var args = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        args[_i - 1] = arguments[_i];
     }
+    var resource = args[0], options = args[1];
+    assertType(URI.isUri(resource));
     var model = accessor.get(IModelService).getModel(resource);
     if (!model) {
         throw illegalArgument('resource');
     }
     return getDocumentFormattingEditsUntilResult(accessor.get(IEditorWorkerService), model, options, CancellationToken.None);
 });
-registerLanguageCommand('_executeFormatOnTypeProvider', function (accessor, args) {
-    var resource = args.resource, position = args.position, ch = args.ch, options = args.options;
-    if (!(resource instanceof URI) || !Position.isIPosition(position) || typeof ch !== 'string') {
-        throw illegalArgument();
+CommandsRegistry.registerCommand('_executeFormatOnTypeProvider', function (accessor) {
+    var args = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        args[_i - 1] = arguments[_i];
     }
+    var resource = args[0], position = args[1], ch = args[2], options = args[3];
+    assertType(URI.isUri(resource));
+    assertType(Position.isIPosition(position));
+    assertType(typeof ch === 'string');
     var model = accessor.get(IModelService).getModel(resource);
     if (!model) {
         throw illegalArgument('resource');

@@ -29,10 +29,11 @@ var PreserveCaseCheckbox = /** @class */ (function (_super) {
     function PreserveCaseCheckbox(opts) {
         return _super.call(this, {
             // TODO: does this need its own icon?
-            actionClassName: 'monaco-case-sensitive',
+            actionClassName: 'codicon-preserve-case',
             title: NLS_PRESERVE_CASE_LABEL + opts.appendTitle,
             isChecked: opts.isChecked,
-            inputActiveOptionBorder: opts.inputActiveOptionBorder
+            inputActiveOptionBorder: opts.inputActiveOptionBorder,
+            inputActiveOptionBackground: opts.inputActiveOptionBackground
         }) || this;
     }
     return PreserveCaseCheckbox;
@@ -59,6 +60,7 @@ var ReplaceInput = /** @class */ (function (_super) {
         _this.validation = options.validation;
         _this.label = options.label || NLS_DEFAULT_LABEL;
         _this.inputActiveOptionBorder = options.inputActiveOptionBorder;
+        _this.inputActiveOptionBackground = options.inputActiveOptionBackground;
         _this.inputBackground = options.inputBackground;
         _this.inputForeground = options.inputForeground;
         _this.inputBorder = options.inputBorder;
@@ -71,10 +73,90 @@ var ReplaceInput = /** @class */ (function (_super) {
         _this.inputValidationErrorBorder = options.inputValidationErrorBorder;
         _this.inputValidationErrorBackground = options.inputValidationErrorBackground;
         _this.inputValidationErrorForeground = options.inputValidationErrorForeground;
+        var history = options.history || [];
         var flexibleHeight = !!options.flexibleHeight;
         var flexibleWidth = !!options.flexibleWidth;
         var flexibleMaxHeight = options.flexibleMaxHeight;
-        _this.buildDomNode(options.history || [], flexibleHeight, flexibleWidth, flexibleMaxHeight);
+        _this.domNode = document.createElement('div');
+        dom.addClass(_this.domNode, 'monaco-findInput');
+        _this.inputBox = _this._register(new HistoryInputBox(_this.domNode, _this.contextViewProvider, {
+            ariaLabel: _this.label || '',
+            placeholder: _this.placeholder || '',
+            validationOptions: {
+                validation: _this.validation
+            },
+            inputBackground: _this.inputBackground,
+            inputForeground: _this.inputForeground,
+            inputBorder: _this.inputBorder,
+            inputValidationInfoBackground: _this.inputValidationInfoBackground,
+            inputValidationInfoForeground: _this.inputValidationInfoForeground,
+            inputValidationInfoBorder: _this.inputValidationInfoBorder,
+            inputValidationWarningBackground: _this.inputValidationWarningBackground,
+            inputValidationWarningForeground: _this.inputValidationWarningForeground,
+            inputValidationWarningBorder: _this.inputValidationWarningBorder,
+            inputValidationErrorBackground: _this.inputValidationErrorBackground,
+            inputValidationErrorForeground: _this.inputValidationErrorForeground,
+            inputValidationErrorBorder: _this.inputValidationErrorBorder,
+            history: history,
+            flexibleHeight: flexibleHeight,
+            flexibleWidth: flexibleWidth,
+            flexibleMaxHeight: flexibleMaxHeight
+        }));
+        _this.preserveCase = _this._register(new PreserveCaseCheckbox({
+            appendTitle: '',
+            isChecked: false,
+            inputActiveOptionBorder: _this.inputActiveOptionBorder,
+            inputActiveOptionBackground: _this.inputActiveOptionBackground,
+        }));
+        _this._register(_this.preserveCase.onChange(function (viaKeyboard) {
+            _this._onDidOptionChange.fire(viaKeyboard);
+            if (!viaKeyboard && _this.fixFocusOnOptionClickEnabled) {
+                _this.inputBox.focus();
+            }
+            _this.validate();
+        }));
+        _this._register(_this.preserveCase.onKeyDown(function (e) {
+            _this._onPreserveCaseKeyDown.fire(e);
+        }));
+        if (_this._showOptionButtons) {
+            _this.cachedOptionsWidth = _this.preserveCase.width();
+        }
+        else {
+            _this.cachedOptionsWidth = 0;
+        }
+        // Arrow-Key support to navigate between options
+        var indexes = [_this.preserveCase.domNode];
+        _this.onkeydown(_this.domNode, function (event) {
+            if (event.equals(15 /* LeftArrow */) || event.equals(17 /* RightArrow */) || event.equals(9 /* Escape */)) {
+                var index = indexes.indexOf(document.activeElement);
+                if (index >= 0) {
+                    var newIndex = -1;
+                    if (event.equals(17 /* RightArrow */)) {
+                        newIndex = (index + 1) % indexes.length;
+                    }
+                    else if (event.equals(15 /* LeftArrow */)) {
+                        if (index === 0) {
+                            newIndex = indexes.length - 1;
+                        }
+                        else {
+                            newIndex = index - 1;
+                        }
+                    }
+                    if (event.equals(9 /* Escape */)) {
+                        indexes[index].blur();
+                    }
+                    else if (newIndex >= 0) {
+                        indexes[newIndex].focus();
+                    }
+                    dom.EventHelper.stop(event, true);
+                }
+            }
+        });
+        var controls = document.createElement('div');
+        controls.className = 'controls';
+        controls.style.display = _this._showOptionButtons ? 'block' : 'none';
+        controls.appendChild(_this.preserveCase.domNode);
+        _this.domNode.appendChild(controls);
         if (parent) {
             parent.appendChild(_this.domNode);
         }
@@ -104,6 +186,7 @@ var ReplaceInput = /** @class */ (function (_super) {
     };
     ReplaceInput.prototype.style = function (styles) {
         this.inputActiveOptionBorder = styles.inputActiveOptionBorder;
+        this.inputActiveOptionBackground = styles.inputActiveOptionBackground;
         this.inputBackground = styles.inputBackground;
         this.inputForeground = styles.inputForeground;
         this.inputBorder = styles.inputBorder;
@@ -122,6 +205,7 @@ var ReplaceInput = /** @class */ (function (_super) {
         if (this.domNode) {
             var checkBoxStyles = {
                 inputActiveOptionBorder: this.inputActiveOptionBorder,
+                inputActiveOptionBackground: this.inputActiveOptionBackground,
             };
             this.preserveCase.style(checkBoxStyles);
             var inputBoxStyles = {
@@ -155,88 +239,6 @@ var ReplaceInput = /** @class */ (function (_super) {
     };
     ReplaceInput.prototype.focusOnPreserve = function () {
         this.preserveCase.focus();
-    };
-    ReplaceInput.prototype.buildDomNode = function (history, flexibleHeight, flexibleWidth, flexibleMaxHeight) {
-        var _this = this;
-        this.domNode = document.createElement('div');
-        dom.addClass(this.domNode, 'monaco-findInput');
-        this.inputBox = this._register(new HistoryInputBox(this.domNode, this.contextViewProvider, {
-            ariaLabel: this.label || '',
-            placeholder: this.placeholder || '',
-            validationOptions: {
-                validation: this.validation
-            },
-            inputBackground: this.inputBackground,
-            inputForeground: this.inputForeground,
-            inputBorder: this.inputBorder,
-            inputValidationInfoBackground: this.inputValidationInfoBackground,
-            inputValidationInfoForeground: this.inputValidationInfoForeground,
-            inputValidationInfoBorder: this.inputValidationInfoBorder,
-            inputValidationWarningBackground: this.inputValidationWarningBackground,
-            inputValidationWarningForeground: this.inputValidationWarningForeground,
-            inputValidationWarningBorder: this.inputValidationWarningBorder,
-            inputValidationErrorBackground: this.inputValidationErrorBackground,
-            inputValidationErrorForeground: this.inputValidationErrorForeground,
-            inputValidationErrorBorder: this.inputValidationErrorBorder,
-            history: history,
-            flexibleHeight: flexibleHeight,
-            flexibleWidth: flexibleWidth,
-            flexibleMaxHeight: flexibleMaxHeight
-        }));
-        this.preserveCase = this._register(new PreserveCaseCheckbox({
-            appendTitle: '',
-            isChecked: false,
-            inputActiveOptionBorder: this.inputActiveOptionBorder
-        }));
-        this._register(this.preserveCase.onChange(function (viaKeyboard) {
-            _this._onDidOptionChange.fire(viaKeyboard);
-            if (!viaKeyboard && _this.fixFocusOnOptionClickEnabled) {
-                _this.inputBox.focus();
-            }
-            _this.validate();
-        }));
-        this._register(this.preserveCase.onKeyDown(function (e) {
-            _this._onPreserveCaseKeyDown.fire(e);
-        }));
-        if (this._showOptionButtons) {
-            this.cachedOptionsWidth = this.preserveCase.width();
-        }
-        else {
-            this.cachedOptionsWidth = 0;
-        }
-        // Arrow-Key support to navigate between options
-        var indexes = [this.preserveCase.domNode];
-        this.onkeydown(this.domNode, function (event) {
-            if (event.equals(15 /* LeftArrow */) || event.equals(17 /* RightArrow */) || event.equals(9 /* Escape */)) {
-                var index = indexes.indexOf(document.activeElement);
-                if (index >= 0) {
-                    var newIndex = -1;
-                    if (event.equals(17 /* RightArrow */)) {
-                        newIndex = (index + 1) % indexes.length;
-                    }
-                    else if (event.equals(15 /* LeftArrow */)) {
-                        if (index === 0) {
-                            newIndex = indexes.length - 1;
-                        }
-                        else {
-                            newIndex = index - 1;
-                        }
-                    }
-                    if (event.equals(9 /* Escape */)) {
-                        indexes[index].blur();
-                    }
-                    else if (newIndex >= 0) {
-                        indexes[newIndex].focus();
-                    }
-                    dom.EventHelper.stop(event, true);
-                }
-            }
-        });
-        var controls = document.createElement('div');
-        controls.className = 'controls';
-        controls.style.display = this._showOptionButtons ? 'block' : 'none';
-        controls.appendChild(this.preserveCase.domNode);
-        this.domNode.appendChild(controls);
     };
     ReplaceInput.prototype.validate = function () {
         if (this.inputBox) {

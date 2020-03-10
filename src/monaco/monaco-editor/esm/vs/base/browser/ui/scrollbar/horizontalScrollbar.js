@@ -22,10 +22,13 @@ import { ScrollbarState } from './scrollbarState.js';
 var HorizontalScrollbar = /** @class */ (function (_super) {
     __extends(HorizontalScrollbar, _super);
     function HorizontalScrollbar(scrollable, options, host) {
-        var _this = _super.call(this, {
+        var _this = this;
+        var scrollDimensions = scrollable.getScrollDimensions();
+        var scrollPosition = scrollable.getCurrentScrollPosition();
+        _this = _super.call(this, {
             lazyRender: options.lazyRender,
             host: host,
-            scrollbarState: new ScrollbarState((options.horizontalHasArrows ? options.arrowSize : 0), (options.horizontal === 2 /* Hidden */ ? 0 : options.horizontalScrollbarSize), (options.vertical === 2 /* Hidden */ ? 0 : options.verticalScrollbarSize)),
+            scrollbarState: new ScrollbarState((options.horizontalHasArrows ? options.arrowSize : 0), (options.horizontal === 2 /* Hidden */ ? 0 : options.horizontalScrollbarSize), (options.vertical === 2 /* Hidden */ ? 0 : options.verticalScrollbarSize), scrollDimensions.width, scrollDimensions.scrollWidth, scrollPosition.scrollLeft),
             visibility: options.horizontal,
             extraScrollbarClassName: 'horizontal',
             scrollable: scrollable

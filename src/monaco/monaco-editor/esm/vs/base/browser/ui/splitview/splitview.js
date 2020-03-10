@@ -15,6 +15,13 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import './splitview.css';
 import { toDisposable, Disposable, combinedDisposable } from '../../../common/lifecycle.js';
 import { Event, Emitter } from '../../../common/event.js';
@@ -108,8 +115,16 @@ var ViewItem = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
-    ViewItem.prototype.layout = function (orthogonalSize) {
-        this.view.layout(this.size, orthogonalSize);
+    Object.defineProperty(ViewItem.prototype, "enabled", {
+        set: function (enabled) {
+            this.container.style.pointerEvents = enabled ? null : 'none';
+        },
+        enumerable: true,
+        configurable: true
+    });
+    ViewItem.prototype.layout = function (offset, layoutContext) {
+        this.layoutContainer(offset);
+        this.view.layout(this.size, offset, layoutContext);
     };
     ViewItem.prototype.dispose = function () {
         this.disposable.dispose();
@@ -122,8 +137,8 @@ var VerticalViewItem = /** @class */ (function (_super) {
     function VerticalViewItem() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    VerticalViewItem.prototype.layout = function (orthogonalSize) {
-        _super.prototype.layout.call(this, orthogonalSize);
+    VerticalViewItem.prototype.layoutContainer = function (offset) {
+        this.container.style.top = offset + "px";
         this.container.style.height = this.size + "px";
     };
     return VerticalViewItem;
@@ -133,8 +148,8 @@ var HorizontalViewItem = /** @class */ (function (_super) {
     function HorizontalViewItem() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    HorizontalViewItem.prototype.layout = function (orthogonalSize) {
-        _super.prototype.layout.call(this, orthogonalSize);
+    HorizontalViewItem.prototype.layoutContainer = function (offset) {
+        this.container.style.left = offset + "px";
         this.container.style.width = this.size + "px";
     };
     return HorizontalViewItem;
@@ -166,6 +181,8 @@ var SplitView = /** @class */ (function (_super) {
         _this._onDidSashChange = _this._register(new Emitter());
         _this.onDidSashChange = _this._onDidSashChange.event;
         _this._onDidSashReset = _this._register(new Emitter());
+        _this._startSnappingEnabled = true;
+        _this._endSnappingEnabled = true;
         _this.orientation = types.isUndefined(options.orientation) ? 0 /* VERTICAL */ : options.orientation;
         _this.inverseAltBehavior = !!options.inverseAltBehavior;
         _this.proportionalLayout = types.isUndefined(options.proportionalLayout) ? true : !!options.proportionalLayout;
@@ -214,6 +231,30 @@ var SplitView = /** @class */ (function (_super) {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(SplitView.prototype, "startSnappingEnabled", {
+        get: function () { return this._startSnappingEnabled; },
+        set: function (startSnappingEnabled) {
+            if (this._startSnappingEnabled === startSnappingEnabled) {
+                return;
+            }
+            this._startSnappingEnabled = startSnappingEnabled;
+            this.updateSashEnablement();
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(SplitView.prototype, "endSnappingEnabled", {
+        get: function () { return this._endSnappingEnabled; },
+        set: function (endSnappingEnabled) {
+            if (this._endSnappingEnabled === endSnappingEnabled) {
+                return;
+            }
+            this._endSnappingEnabled = endSnappingEnabled;
+            this.updateSashEnablement();
+        },
+        enumerable: true,
+        configurable: true
+    });
     SplitView.prototype.style = function (styles) {
         if (styles.separatorBorder.isTransparent()) {
             dom.removeClass(this.el, 'separator-border');
@@ -228,11 +269,11 @@ var SplitView = /** @class */ (function (_super) {
         if (index === void 0) { index = this.viewItems.length; }
         this.doAddView(view, size, index, false);
     };
-    SplitView.prototype.layout = function (size, orthogonalSize) {
+    SplitView.prototype.layout = function (size, layoutContext) {
         var _this = this;
         var previousSize = Math.max(this.size, this.contentSize);
         this.size = size;
-        this.orthogonalSize = orthogonalSize;
+        this.layoutContext = layoutContext;
         if (!this.proportions) {
             var indexes = range(this.viewItems.length);
             var lowPriorityIndexes = indexes.filter(function (i) { return _this.viewItems[i].priority === 1 /* Low */; });
@@ -257,6 +298,10 @@ var SplitView = /** @class */ (function (_super) {
     SplitView.prototype.onSashStart = function (_a) {
         var _this = this;
         var sash = _a.sash, start = _a.start, alt = _a.alt;
+        for (var _i = 0, _b = this.viewItems; _i < _b.length; _i++) {
+            var item = _b[_i];
+            item.enabled = false;
+        }
         var index = firstIndex(this.sashItems, function (item) { return item.sash === sash; });
         // This way, we can press Alt while we resize a sash, macOS style!
         var disposable = combinedDisposable(domEvent(document.body, 'keydown')(function (e) { return resetSashDragState(_this.sashDragState.current, e.altKey); }), domEvent(document.body, 'keyup')(function () { return resetSashDragState(_this.sashDragState.current, false); }));
@@ -342,6 +387,10 @@ var SplitView = /** @class */ (function (_super) {
         this._onDidSashChange.fire(index);
         this.sashDragState.disposable.dispose();
         this.saveProportions();
+        for (var _i = 0, _a = this.viewItems; _i < _a.length; _i++) {
+            var item = _a[_i];
+            item.enabled = true;
+        }
     };
     SplitView.prototype.onViewChange = function (item, size) {
         var index = this.viewItems.indexOf(item);
@@ -372,7 +421,7 @@ var SplitView = /** @class */ (function (_super) {
             return;
         }
         var indexes = range(this.viewItems.length).filter(function (i) { return i !== index; });
-        var lowPriorityIndexes = indexes.filter(function (i) { return _this.viewItems[i].priority === 1 /* Low */; }).concat([index]);
+        var lowPriorityIndexes = __spreadArrays(indexes.filter(function (i) { return _this.viewItems[i].priority === 1 /* Low */; }), [index]);
         var highPriorityIndexes = indexes.filter(function (i) { return _this.viewItems[i].priority === 2 /* High */; });
         var item = this.viewItems[index];
         size = Math.round(size);
@@ -593,38 +642,47 @@ var SplitView = /** @class */ (function (_super) {
         }
     };
     SplitView.prototype.layoutViews = function () {
-        var _this = this;
         // Save new content size
         this.contentSize = this.viewItems.reduce(function (r, i) { return r + i.size; }, 0);
         // Layout views
-        this.viewItems.forEach(function (item) { return item.layout(_this.orthogonalSize); });
+        var offset = 0;
+        for (var _i = 0, _a = this.viewItems; _i < _a.length; _i++) {
+            var viewItem = _a[_i];
+            viewItem.layout(offset, this.layoutContext);
+            offset += viewItem.size;
+        }
         // Layout sashes
         this.sashItems.forEach(function (item) { return item.sash.layout(); });
-        // Update sashes enablement
+        this.updateSashEnablement();
+    };
+    SplitView.prototype.updateSashEnablement = function () {
         var previous = false;
         var collapsesDown = this.viewItems.map(function (i) { return previous = (i.size - i.minimumSize > 0) || previous; });
         previous = false;
         var expandsDown = this.viewItems.map(function (i) { return previous = (i.maximumSize - i.size > 0) || previous; });
-        var reverseViews = this.viewItems.slice().reverse();
+        var reverseViews = __spreadArrays(this.viewItems).reverse();
         previous = false;
         var collapsesUp = reverseViews.map(function (i) { return previous = (i.size - i.minimumSize > 0) || previous; }).reverse();
         previous = false;
         var expandsUp = reverseViews.map(function (i) { return previous = (i.maximumSize - i.size > 0) || previous; }).reverse();
-        this.sashItems.forEach(function (_a, index) {
-            var sash = _a.sash;
+        var position = 0;
+        for (var index = 0; index < this.sashItems.length; index++) {
+            var sash = this.sashItems[index].sash;
+            var viewItem = this.viewItems[index];
+            position += viewItem.size;
             var min = !(collapsesDown[index] && expandsUp[index + 1]);
             var max = !(expandsDown[index] && collapsesUp[index + 1]);
             if (min && max) {
                 var upIndexes = range(index, -1);
-                var downIndexes = range(index + 1, _this.viewItems.length);
-                var snapBeforeIndex = _this.findFirstSnapIndex(upIndexes);
-                var snapAfterIndex = _this.findFirstSnapIndex(downIndexes);
-                var snappedBefore = typeof snapBeforeIndex === 'number' && !_this.viewItems[snapBeforeIndex].visible;
-                var snappedAfter = typeof snapAfterIndex === 'number' && !_this.viewItems[snapAfterIndex].visible;
-                if (snappedBefore && collapsesUp[index]) {
+                var downIndexes = range(index + 1, this.viewItems.length);
+                var snapBeforeIndex = this.findFirstSnapIndex(upIndexes);
+                var snapAfterIndex = this.findFirstSnapIndex(downIndexes);
+                var snappedBefore = typeof snapBeforeIndex === 'number' && !this.viewItems[snapBeforeIndex].visible;
+                var snappedAfter = typeof snapAfterIndex === 'number' && !this.viewItems[snapAfterIndex].visible;
+                if (snappedBefore && collapsesUp[index] && (position > 0 || this.startSnappingEnabled)) {
                     sash.state = 1 /* Minimum */;
                 }
-                else if (snappedAfter && collapsesDown[index]) {
+                else if (snappedAfter && collapsesDown[index] && (position < this.contentSize || this.endSnappingEnabled)) {
                     sash.state = 2 /* Maximum */;
                 }
                 else {
@@ -640,15 +698,14 @@ var SplitView = /** @class */ (function (_super) {
             else {
                 sash.state = 3 /* Enabled */;
             }
-            // }
-        });
+        }
     };
     SplitView.prototype.getSashPosition = function (sash) {
         var position = 0;
         for (var i = 0; i < this.sashItems.length; i++) {
             position += this.viewItems[i].size;
             if (this.sashItems[i].sash === sash) {
-                return position;
+                return Math.min(position, this.contentSize - 2);
             }
         }
         return 0;

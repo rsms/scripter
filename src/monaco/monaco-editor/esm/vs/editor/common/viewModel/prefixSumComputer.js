@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { toUint32 } from '../core/uint.js';
+import { toUint32 } from '../../../base/common/uint.js';
 var PrefixSumIndexOfResult = /** @class */ (function () {
     function PrefixSumIndexOfResult(index, remainder) {
         this.index = index;
@@ -18,9 +18,6 @@ var PrefixSumComputer = /** @class */ (function () {
         this.prefixSumValidIndex = new Int32Array(1);
         this.prefixSumValidIndex[0] = -1;
     }
-    PrefixSumComputer.prototype.getCount = function () {
-        return this.values.length;
-    };
     PrefixSumComputer.prototype.insertValues = function (insertIndex, insertValues) {
         insertIndex = toUint32(insertIndex);
         var oldValues = this.values;
@@ -140,61 +137,3 @@ var PrefixSumComputer = /** @class */ (function () {
     return PrefixSumComputer;
 }());
 export { PrefixSumComputer };
-var PrefixSumComputerWithCache = /** @class */ (function () {
-    function PrefixSumComputerWithCache(values) {
-        this._cacheAccumulatedValueStart = 0;
-        this._cache = null;
-        this._actual = new PrefixSumComputer(values);
-        this._bustCache();
-    }
-    PrefixSumComputerWithCache.prototype._bustCache = function () {
-        this._cacheAccumulatedValueStart = 0;
-        this._cache = null;
-    };
-    PrefixSumComputerWithCache.prototype.insertValues = function (insertIndex, insertValues) {
-        if (this._actual.insertValues(insertIndex, insertValues)) {
-            this._bustCache();
-        }
-    };
-    PrefixSumComputerWithCache.prototype.changeValue = function (index, value) {
-        if (this._actual.changeValue(index, value)) {
-            this._bustCache();
-        }
-    };
-    PrefixSumComputerWithCache.prototype.removeValues = function (startIndex, cnt) {
-        if (this._actual.removeValues(startIndex, cnt)) {
-            this._bustCache();
-        }
-    };
-    PrefixSumComputerWithCache.prototype.getTotalValue = function () {
-        return this._actual.getTotalValue();
-    };
-    PrefixSumComputerWithCache.prototype.getAccumulatedValue = function (index) {
-        return this._actual.getAccumulatedValue(index);
-    };
-    PrefixSumComputerWithCache.prototype.getIndexOf = function (accumulatedValue) {
-        accumulatedValue = Math.floor(accumulatedValue); //@perf
-        if (this._cache !== null) {
-            var cacheIndex = accumulatedValue - this._cacheAccumulatedValueStart;
-            if (cacheIndex >= 0 && cacheIndex < this._cache.length) {
-                // Cache hit!
-                return this._cache[cacheIndex];
-            }
-        }
-        // Cache miss!
-        return this._actual.getIndexOf(accumulatedValue);
-    };
-    /**
-     * Gives a hint that a lot of requests are about to come in for these accumulated values.
-     */
-    PrefixSumComputerWithCache.prototype.warmUpCache = function (accumulatedValueStart, accumulatedValueEnd) {
-        var newCache = [];
-        for (var accumulatedValue = accumulatedValueStart; accumulatedValue <= accumulatedValueEnd; accumulatedValue++) {
-            newCache[accumulatedValue - accumulatedValueStart] = this.getIndexOf(accumulatedValue);
-        }
-        this._cache = newCache;
-        this._cacheAccumulatedValueStart = accumulatedValueStart;
-    };
-    return PrefixSumComputerWithCache;
-}());
-export { PrefixSumComputerWithCache };

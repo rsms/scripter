@@ -16,10 +16,11 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -63,7 +64,6 @@ var Action = /** @class */ (function (_super) {
         _this.onDidChange = _this._onDidChange.event;
         _this._enabled = true;
         _this._checked = false;
-        _this._radio = false;
         _this._id = id;
         _this._label = label;
         _this._cssClass = cssClass;
@@ -152,26 +152,10 @@ var Action = /** @class */ (function (_super) {
         enumerable: true,
         configurable: true
     });
-    Object.defineProperty(Action.prototype, "radio", {
-        get: function () {
-            return this._radio;
-        },
-        set: function (value) {
-            this._setRadio(value);
-        },
-        enumerable: true,
-        configurable: true
-    });
     Action.prototype._setChecked = function (value) {
         if (this._checked !== value) {
             this._checked = value;
             this._onDidChange.fire({ checked: value });
-        }
-    };
-    Action.prototype._setRadio = function (value) {
-        if (this._radio !== value) {
-            this._radio = value;
-            this._onDidChange.fire({ radio: value });
         }
     };
     Action.prototype.run = function (event, _data) {

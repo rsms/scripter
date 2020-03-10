@@ -97,7 +97,7 @@ const defaultOptions :EditorOptions = {
     // showIcons: false,
 
     // Max suggestions to show in suggestions. Defaults to 12.
-    maxVisibleSuggestions: 9 as unknown as boolean,  // bad monaco typedefs
+    maxVisibleSuggestions: 9,
 
     // Names of suggestion types to filter.
     // filteredTypes?: Record<string, boolean>;
@@ -976,8 +976,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let tsconfig = monaco.languages.typescript.typescriptDefaults
     tsconfig.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
     tsconfig.setCompilerOptions(typescriptCompilerOptions)
-    tsconfig.addExtraLib(await resources["figma.d.ts"], "scripter:figma.d.ts")
-    tsconfig.addExtraLib(await resources["scripter-env.d.ts"], "scripter:scripter-env.d.ts")
+    let [figmaDTS, scripterEnvDTS] = await Promise.all([
+      resources["figma.d.ts"], resources["scripter-env.d.ts"]
+    ])
+    tsconfig.addExtraLib(figmaDTS, "scripter:figma.d.ts")
+    tsconfig.addExtraLib(scripterEnvDTS, "scripter:scripter-env.d.ts")
     // tsconfig.setDiagnosticsOptions({noSemanticValidation:true})
   }
 

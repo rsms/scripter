@@ -2,11 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as arrays from '../../../base/common/arrays.js';
 import { Position } from '../core/position.js';
 import { Range } from '../core/range.js';
 import { ModelDecorationOptions } from '../model/textModel.js';
 import * as viewEvents from '../view/viewEvents.js';
-import { PrefixSumComputerWithCache } from './prefixSumComputer.js';
+import { PrefixSumIndexOfResult } from './prefixSumComputer.js';
 import { ViewLineData } from './viewModel.js';
 var OutputPosition = /** @class */ (function () {
     function OutputPosition(outputLineIndex, outputOffset) {
@@ -16,6 +17,44 @@ var OutputPosition = /** @class */ (function () {
     return OutputPosition;
 }());
 export { OutputPosition };
+var LineBreakData = /** @class */ (function () {
+    function LineBreakData(breakOffsets, breakOffsetsVisibleColumn, wrappedTextIndentLength) {
+        this.breakOffsets = breakOffsets;
+        this.breakOffsetsVisibleColumn = breakOffsetsVisibleColumn;
+        this.wrappedTextIndentLength = wrappedTextIndentLength;
+    }
+    LineBreakData.getInputOffsetOfOutputPosition = function (breakOffsets, outputLineIndex, outputOffset) {
+        if (outputLineIndex === 0) {
+            return outputOffset;
+        }
+        else {
+            return breakOffsets[outputLineIndex - 1] + outputOffset;
+        }
+    };
+    LineBreakData.getOutputPositionOfInputOffset = function (breakOffsets, inputOffset) {
+        var low = 0;
+        var high = breakOffsets.length - 1;
+        var mid = 0;
+        var midStart = 0;
+        while (low <= high) {
+            mid = low + ((high - low) / 2) | 0;
+            var midStop = breakOffsets[mid];
+            midStart = mid > 0 ? breakOffsets[mid - 1] : 0;
+            if (inputOffset < midStart) {
+                high = mid - 1;
+            }
+            else if (inputOffset >= midStop) {
+                low = mid + 1;
+            }
+            else {
+                break;
+            }
+        }
+        return new OutputPosition(mid, inputOffset - midStart);
+    };
+    return LineBreakData;
+}());
+export { LineBreakData };
 var CoordinatesConverter = /** @class */ (function () {
     function CoordinatesConverter(lines) {
         this._lines = lines;
@@ -25,26 +64,20 @@ var CoordinatesConverter = /** @class */ (function () {
         return this._lines.convertViewPositionToModelPosition(viewPosition.lineNumber, viewPosition.column);
     };
     CoordinatesConverter.prototype.convertViewRangeToModelRange = function (viewRange) {
-        var start = this._lines.convertViewPositionToModelPosition(viewRange.startLineNumber, viewRange.startColumn);
-        var end = this._lines.convertViewPositionToModelPosition(viewRange.endLineNumber, viewRange.endColumn);
-        return new Range(start.lineNumber, start.column, end.lineNumber, end.column);
+        return this._lines.convertViewRangeToModelRange(viewRange);
     };
     CoordinatesConverter.prototype.validateViewPosition = function (viewPosition, expectedModelPosition) {
         return this._lines.validateViewPosition(viewPosition.lineNumber, viewPosition.column, expectedModelPosition);
     };
     CoordinatesConverter.prototype.validateViewRange = function (viewRange, expectedModelRange) {
-        var validViewStart = this._lines.validateViewPosition(viewRange.startLineNumber, viewRange.startColumn, expectedModelRange.getStartPosition());
-        var validViewEnd = this._lines.validateViewPosition(viewRange.endLineNumber, viewRange.endColumn, expectedModelRange.getEndPosition());
-        return new Range(validViewStart.lineNumber, validViewStart.column, validViewEnd.lineNumber, validViewEnd.column);
+        return this._lines.validateViewRange(viewRange, expectedModelRange);
     };
     // Model -> View conversion and related methods
     CoordinatesConverter.prototype.convertModelPositionToViewPosition = function (modelPosition) {
         return this._lines.convertModelPositionToViewPosition(modelPosition.lineNumber, modelPosition.column);
     };
     CoordinatesConverter.prototype.convertModelRangeToViewRange = function (modelRange) {
-        var start = this._lines.convertModelPositionToViewPosition(modelRange.startLineNumber, modelRange.startColumn);
-        var end = this._lines.convertModelPositionToViewPosition(modelRange.endLineNumber, modelRange.endColumn);
-        return new Range(start.lineNumber, start.column, end.lineNumber, end.column);
+        return this._lines.convertModelRangeToViewRange(modelRange);
     };
     CoordinatesConverter.prototype.modelPositionIsVisible = function (modelPosition) {
         return this._lines.modelPositionIsVisible(modelPosition.lineNumber, modelPosition.column);
@@ -52,16 +85,81 @@ var CoordinatesConverter = /** @class */ (function () {
     return CoordinatesConverter;
 }());
 export { CoordinatesConverter };
+var LineNumberMapper = /** @class */ (function () {
+    function LineNumberMapper(viewLineCounts) {
+        this._counts = viewLineCounts;
+        this._isValid = false;
+        this._validEndIndex = -1;
+        this._modelToView = [];
+        this._viewToModel = [];
+    }
+    LineNumberMapper.prototype._invalidate = function (index) {
+        this._isValid = false;
+        this._validEndIndex = Math.min(this._validEndIndex, index - 1);
+    };
+    LineNumberMapper.prototype._ensureValid = function () {
+        if (this._isValid) {
+            return;
+        }
+        for (var i = this._validEndIndex + 1, len = this._counts.length; i < len; i++) {
+            var viewLineCount = this._counts[i];
+            var viewLinesAbove = (i > 0 ? this._modelToView[i - 1] : 0);
+            this._modelToView[i] = viewLinesAbove + viewLineCount;
+            for (var j = 0; j < viewLineCount; j++) {
+                this._viewToModel[viewLinesAbove + j] = i;
+            }
+        }
+        // trim things
+        this._modelToView.length = this._counts.length;
+        this._viewToModel.length = this._modelToView[this._modelToView.length - 1];
+        // mark as valid
+        this._isValid = true;
+        this._validEndIndex = this._counts.length - 1;
+    };
+    LineNumberMapper.prototype.changeValue = function (index, value) {
+        if (this._counts[index] === value) {
+            // no change
+            return;
+        }
+        this._counts[index] = value;
+        this._invalidate(index);
+    };
+    LineNumberMapper.prototype.removeValues = function (start, deleteCount) {
+        this._counts.splice(start, deleteCount);
+        this._invalidate(start);
+    };
+    LineNumberMapper.prototype.insertValues = function (insertIndex, insertArr) {
+        this._counts = arrays.arrayInsert(this._counts, insertIndex, insertArr);
+        this._invalidate(insertIndex);
+    };
+    LineNumberMapper.prototype.getTotalValue = function () {
+        this._ensureValid();
+        return this._viewToModel.length;
+    };
+    LineNumberMapper.prototype.getAccumulatedValue = function (index) {
+        this._ensureValid();
+        return this._modelToView[index];
+    };
+    LineNumberMapper.prototype.getIndexOf = function (accumulatedValue) {
+        this._ensureValid();
+        var modelLineIndex = this._viewToModel[accumulatedValue];
+        var viewLinesAbove = (modelLineIndex > 0 ? this._modelToView[modelLineIndex - 1] : 0);
+        return new PrefixSumIndexOfResult(modelLineIndex, accumulatedValue - viewLinesAbove);
+    };
+    return LineNumberMapper;
+}());
 var SplitLinesCollection = /** @class */ (function () {
-    function SplitLinesCollection(model, linePositionMapperFactory, tabSize, wrappingColumn, columnsForFullWidthChar, wrappingIndent) {
+    function SplitLinesCollection(model, domLineBreaksComputerFactory, monospaceLineBreaksComputerFactory, fontInfo, tabSize, wrappingStrategy, wrappingColumn, wrappingIndent) {
         this.model = model;
         this._validModelVersionId = -1;
+        this._domLineBreaksComputerFactory = domLineBreaksComputerFactory;
+        this._monospaceLineBreaksComputerFactory = monospaceLineBreaksComputerFactory;
+        this.fontInfo = fontInfo;
         this.tabSize = tabSize;
+        this.wrappingStrategy = wrappingStrategy;
         this.wrappingColumn = wrappingColumn;
-        this.columnsForFullWidthChar = columnsForFullWidthChar;
         this.wrappingIndent = wrappingIndent;
-        this.linePositionMapperFactory = linePositionMapperFactory;
-        this._constructLines(true);
+        this._constructLines(/*resetHiddenAreas*/ true, null);
     }
     SplitLinesCollection.prototype.dispose = function () {
         this.hiddenAreasIds = this.model.deltaDecorations(this.hiddenAreasIds, []);
@@ -69,18 +167,7 @@ var SplitLinesCollection = /** @class */ (function () {
     SplitLinesCollection.prototype.createCoordinatesConverter = function () {
         return new CoordinatesConverter(this);
     };
-    SplitLinesCollection.prototype._ensureValidState = function () {
-        var modelVersion = this.model.getVersionId();
-        if (modelVersion !== this._validModelVersionId) {
-            // This is pretty bad, it means we lost track of the model...
-            throw new Error("ViewModel is out of sync with Model!");
-        }
-        if (this.lines.length !== this.model.getLineCount()) {
-            // This is pretty bad, it means we lost track of the model...
-            this._constructLines(false);
-        }
-    };
-    SplitLinesCollection.prototype._constructLines = function (resetHiddenAreas) {
+    SplitLinesCollection.prototype._constructLines = function (resetHiddenAreas, previousLineBreaks) {
         var _this = this;
         this.lines = [];
         if (resetHiddenAreas) {
@@ -88,7 +175,12 @@ var SplitLinesCollection = /** @class */ (function () {
         }
         var linesContent = this.model.getLinesContent();
         var lineCount = linesContent.length;
-        var values = new Uint32Array(lineCount);
+        var lineBreaksComputer = this.createLineBreaksComputer();
+        for (var i = 0; i < lineCount; i++) {
+            lineBreaksComputer.addRequest(linesContent[i], previousLineBreaks ? previousLineBreaks[i] : null);
+        }
+        var linesBreaks = lineBreaksComputer.finalize();
+        var values = [];
         var hiddenAreas = this.hiddenAreasIds.map(function (areaId) { return _this.model.getDecorationRange(areaId); }).sort(Range.compareRangesUsingStarts);
         var hiddenAreaStart = 1, hiddenAreaEnd = 0;
         var hiddenAreaIdx = -1;
@@ -102,12 +194,12 @@ var SplitLinesCollection = /** @class */ (function () {
                 nextLineNumberToUpdateHiddenArea = (hiddenAreaIdx + 1 < hiddenAreas.length) ? hiddenAreaEnd + 1 : lineCount + 2;
             }
             var isInHiddenArea = (lineNumber >= hiddenAreaStart && lineNumber <= hiddenAreaEnd);
-            var line = createSplitLine(this.linePositionMapperFactory, linesContent[i], this.tabSize, this.wrappingColumn, this.columnsForFullWidthChar, this.wrappingIndent, !isInHiddenArea);
+            var line = createSplitLine(linesBreaks[i], !isInHiddenArea);
             values[i] = line.getViewLineCount();
             this.lines[i] = line;
         }
         this._validModelVersionId = this.model.getVersionId();
-        this.prefixSumComputer = new PrefixSumComputerWithCache(values);
+        this.prefixSumComputer = new LineNumberMapper(values);
     };
     SplitLinesCollection.prototype.getHiddenAreas = function () {
         var _this = this;
@@ -217,21 +309,40 @@ var SplitLinesCollection = /** @class */ (function () {
             return false;
         }
         this.tabSize = newTabSize;
-        this._constructLines(false);
+        this._constructLines(/*resetHiddenAreas*/ false, null);
         return true;
     };
-    SplitLinesCollection.prototype.setWrappingSettings = function (wrappingIndent, wrappingColumn, columnsForFullWidthChar) {
-        if (this.wrappingIndent === wrappingIndent && this.wrappingColumn === wrappingColumn && this.columnsForFullWidthChar === columnsForFullWidthChar) {
+    SplitLinesCollection.prototype.setWrappingSettings = function (fontInfo, wrappingStrategy, wrappingColumn, wrappingIndent) {
+        var equalFontInfo = this.fontInfo.equals(fontInfo);
+        var equalWrappingStrategy = (this.wrappingStrategy === wrappingStrategy);
+        var equalWrappingColumn = (this.wrappingColumn === wrappingColumn);
+        var equalWrappingIndent = (this.wrappingIndent === wrappingIndent);
+        if (equalFontInfo && equalWrappingStrategy && equalWrappingColumn && equalWrappingIndent) {
             return false;
         }
-        this.wrappingIndent = wrappingIndent;
+        var onlyWrappingColumnChanged = (equalFontInfo && equalWrappingStrategy && !equalWrappingColumn && equalWrappingIndent);
+        this.fontInfo = fontInfo;
+        this.wrappingStrategy = wrappingStrategy;
         this.wrappingColumn = wrappingColumn;
-        this.columnsForFullWidthChar = columnsForFullWidthChar;
-        this._constructLines(false);
+        this.wrappingIndent = wrappingIndent;
+        var previousLineBreaks = null;
+        if (onlyWrappingColumnChanged) {
+            previousLineBreaks = [];
+            for (var i = 0, len = this.lines.length; i < len; i++) {
+                previousLineBreaks[i] = this.lines[i].getLineBreakData();
+            }
+        }
+        this._constructLines(/*resetHiddenAreas*/ false, previousLineBreaks);
         return true;
     };
+    SplitLinesCollection.prototype.createLineBreaksComputer = function () {
+        var lineBreaksComputerFactory = (this.wrappingStrategy === 'advanced'
+            ? this._domLineBreaksComputerFactory
+            : this._monospaceLineBreaksComputerFactory);
+        return lineBreaksComputerFactory.createLineBreaksComputer(this.fontInfo, this.tabSize, this.wrappingColumn, this.wrappingIndent);
+    };
     SplitLinesCollection.prototype.onModelFlushed = function () {
-        this._constructLines(true);
+        this._constructLines(/*resetHiddenAreas*/ true, null);
     };
     SplitLinesCollection.prototype.onModelLinesDeleted = function (versionId, fromLineNumber, toLineNumber) {
         if (versionId <= this._validModelVersionId) {
@@ -245,7 +356,7 @@ var SplitLinesCollection = /** @class */ (function () {
         this.prefixSumComputer.removeValues(fromLineNumber - 1, toLineNumber - fromLineNumber + 1);
         return new viewEvents.ViewLinesDeletedEvent(outputFromLineNumber, outputToLineNumber);
     };
-    SplitLinesCollection.prototype.onModelLinesInserted = function (versionId, fromLineNumber, _toLineNumber, text) {
+    SplitLinesCollection.prototype.onModelLinesInserted = function (versionId, fromLineNumber, _toLineNumber, lineBreaks) {
         if (versionId <= this._validModelVersionId) {
             // Here we check for versionId in case the lines were reconstructed in the meantime.
             // We don't want to apply stale change events on top of a newer read model state.
@@ -264,9 +375,9 @@ var SplitLinesCollection = /** @class */ (function () {
         var outputFromLineNumber = (fromLineNumber === 1 ? 1 : this.prefixSumComputer.getAccumulatedValue(fromLineNumber - 2) + 1);
         var totalOutputLineCount = 0;
         var insertLines = [];
-        var insertPrefixSumValues = new Uint32Array(text.length);
-        for (var i = 0, len = text.length; i < len; i++) {
-            var line = createSplitLine(this.linePositionMapperFactory, text[i], this.tabSize, this.wrappingColumn, this.columnsForFullWidthChar, this.wrappingIndent, !isInHiddenArea);
+        var insertPrefixSumValues = [];
+        for (var i = 0, len = lineBreaks.length; i < len; i++) {
+            var line = createSplitLine(lineBreaks[i], !isInHiddenArea);
             insertLines.push(line);
             var outputLineCount = line.getViewLineCount();
             totalOutputLineCount += outputLineCount;
@@ -277,7 +388,7 @@ var SplitLinesCollection = /** @class */ (function () {
         this.prefixSumComputer.insertValues(fromLineNumber - 1, insertPrefixSumValues);
         return new viewEvents.ViewLinesInsertedEvent(outputFromLineNumber, outputFromLineNumber + totalOutputLineCount - 1);
     };
-    SplitLinesCollection.prototype.onModelLineChanged = function (versionId, lineNumber, newText) {
+    SplitLinesCollection.prototype.onModelLineChanged = function (versionId, lineNumber, lineBreakData) {
         if (versionId <= this._validModelVersionId) {
             // Here we check for versionId in case the lines were reconstructed in the meantime.
             // We don't want to apply stale change events on top of a newer read model state.
@@ -286,7 +397,7 @@ var SplitLinesCollection = /** @class */ (function () {
         var lineIndex = lineNumber - 1;
         var oldOutputLineCount = this.lines[lineIndex].getViewLineCount();
         var isVisible = this.lines[lineIndex].isVisible();
-        var line = createSplitLine(this.linePositionMapperFactory, newText, this.tabSize, this.wrappingColumn, this.columnsForFullWidthChar, this.wrappingIndent, isVisible);
+        var line = createSplitLine(lineBreakData, isVisible);
         this.lines[lineIndex] = line;
         var newOutputLineCount = this.lines[lineIndex].getViewLineCount();
         var lineMappingChanged = false;
@@ -328,7 +439,6 @@ var SplitLinesCollection = /** @class */ (function () {
         }
     };
     SplitLinesCollection.prototype.getViewLineCount = function () {
-        this._ensureValidState();
         return this.prefixSumComputer.getTotalValue();
     };
     SplitLinesCollection.prototype._toValidViewLineNumber = function (viewLineNumber) {
@@ -339,16 +449,9 @@ var SplitLinesCollection = /** @class */ (function () {
         if (viewLineNumber > viewLineCount) {
             return viewLineCount;
         }
-        return viewLineNumber;
-    };
-    /**
-     * Gives a hint that a lot of requests are about to come in for these line numbers.
-     */
-    SplitLinesCollection.prototype.warmUpLookupCache = function (viewStartLineNumber, viewEndLineNumber) {
-        this.prefixSumComputer.warmUpCache(viewStartLineNumber - 1, viewEndLineNumber - 1);
+        return viewLineNumber | 0;
     };
     SplitLinesCollection.prototype.getActiveIndentGuide = function (viewLineNumber, minLineNumber, maxLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         minLineNumber = this._toValidViewLineNumber(minLineNumber);
         maxLineNumber = this._toValidViewLineNumber(maxLineNumber);
@@ -365,7 +468,6 @@ var SplitLinesCollection = /** @class */ (function () {
         };
     };
     SplitLinesCollection.prototype.getViewLinesIndentGuides = function (viewStartLineNumber, viewEndLineNumber) {
-        this._ensureValidState();
         viewStartLineNumber = this._toValidViewLineNumber(viewStartLineNumber);
         viewEndLineNumber = this._toValidViewLineNumber(viewEndLineNumber);
         var modelStart = this.convertViewPositionToModelPosition(viewStartLineNumber, this.getViewLineMinColumn(viewStartLineNumber));
@@ -433,7 +535,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return viewIndents;
     };
     SplitLinesCollection.prototype.getViewLineContent = function (viewLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -441,7 +542,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return this.lines[lineIndex].getViewLineContent(this.model, lineIndex + 1, remainder);
     };
     SplitLinesCollection.prototype.getViewLineLength = function (viewLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -449,7 +549,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return this.lines[lineIndex].getViewLineLength(this.model, lineIndex + 1, remainder);
     };
     SplitLinesCollection.prototype.getViewLineMinColumn = function (viewLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -457,7 +556,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return this.lines[lineIndex].getViewLineMinColumn(this.model, lineIndex + 1, remainder);
     };
     SplitLinesCollection.prototype.getViewLineMaxColumn = function (viewLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -465,7 +563,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return this.lines[lineIndex].getViewLineMaxColumn(this.model, lineIndex + 1, remainder);
     };
     SplitLinesCollection.prototype.getViewLineData = function (viewLineNumber) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -473,7 +570,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return this.lines[lineIndex].getViewLineData(this.model, lineIndex + 1, remainder);
     };
     SplitLinesCollection.prototype.getViewLinesData = function (viewStartLineNumber, viewEndLineNumber, needed) {
-        this._ensureValidState();
         viewStartLineNumber = this._toValidViewLineNumber(viewStartLineNumber);
         viewEndLineNumber = this._toValidViewLineNumber(viewEndLineNumber);
         var start = this.prefixSumComputer.getIndexOf(viewStartLineNumber - 1);
@@ -503,7 +599,6 @@ var SplitLinesCollection = /** @class */ (function () {
         return result;
     };
     SplitLinesCollection.prototype.validateViewPosition = function (viewLineNumber, viewColumn, expectedModelPosition) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -524,8 +619,12 @@ var SplitLinesCollection = /** @class */ (function () {
         }
         return this.convertModelPositionToViewPosition(expectedModelPosition.lineNumber, expectedModelPosition.column);
     };
+    SplitLinesCollection.prototype.validateViewRange = function (viewRange, expectedModelRange) {
+        var validViewStart = this.validateViewPosition(viewRange.startLineNumber, viewRange.startColumn, expectedModelRange.getStartPosition());
+        var validViewEnd = this.validateViewPosition(viewRange.endLineNumber, viewRange.endColumn, expectedModelRange.getEndPosition());
+        return new Range(validViewStart.lineNumber, validViewStart.column, validViewEnd.lineNumber, validViewEnd.column);
+    };
     SplitLinesCollection.prototype.convertViewPositionToModelPosition = function (viewLineNumber, viewColumn) {
-        this._ensureValidState();
         viewLineNumber = this._toValidViewLineNumber(viewLineNumber);
         var r = this.prefixSumComputer.getIndexOf(viewLineNumber - 1);
         var lineIndex = r.index;
@@ -534,8 +633,12 @@ var SplitLinesCollection = /** @class */ (function () {
         // console.log('out -> in ' + viewLineNumber + ',' + viewColumn + ' ===> ' + (lineIndex+1) + ',' + inputColumn);
         return this.model.validatePosition(new Position(lineIndex + 1, inputColumn));
     };
+    SplitLinesCollection.prototype.convertViewRangeToModelRange = function (viewRange) {
+        var start = this.convertViewPositionToModelPosition(viewRange.startLineNumber, viewRange.startColumn);
+        var end = this.convertViewPositionToModelPosition(viewRange.endLineNumber, viewRange.endColumn);
+        return new Range(start.lineNumber, start.column, end.lineNumber, end.column);
+    };
     SplitLinesCollection.prototype.convertModelPositionToViewPosition = function (_modelLineNumber, _modelColumn) {
-        this._ensureValidState();
         var validPosition = this.model.validatePosition(new Position(_modelLineNumber, _modelColumn));
         var inputLineNumber = validPosition.lineNumber;
         var inputColumn = validPosition.column;
@@ -559,6 +662,18 @@ var SplitLinesCollection = /** @class */ (function () {
         }
         // console.log('in -> out ' + inputLineNumber + ',' + inputColumn + ' ===> ' + r.lineNumber + ',' + r);
         return r;
+    };
+    SplitLinesCollection.prototype.convertModelRangeToViewRange = function (modelRange) {
+        var start = this.convertModelPositionToViewPosition(modelRange.startLineNumber, modelRange.startColumn);
+        var end = this.convertModelPositionToViewPosition(modelRange.endLineNumber, modelRange.endColumn);
+        if (modelRange.startLineNumber === modelRange.endLineNumber && start.lineNumber !== end.lineNumber) {
+            // This is a single line range that ends up taking more lines due to wrapping
+            if (end.column === this.getViewLineMinColumn(end.lineNumber)) {
+                // the end column lands on the first column of the next line
+                return new Range(start.lineNumber, start.column, end.lineNumber - 1, this.getViewLineMaxColumn(end.lineNumber - 1));
+            }
+        }
+        return new Range(start.lineNumber, start.column, end.lineNumber, end.column);
     };
     SplitLinesCollection.prototype._getViewLineNumberForModelPosition = function (inputLineNumber, inputColumn) {
         var lineIndex = inputLineNumber - 1;
@@ -671,6 +786,9 @@ var VisibleIdentitySplitLine = /** @class */ (function () {
         }
         return InvisibleIdentitySplitLine.INSTANCE;
     };
+    VisibleIdentitySplitLine.prototype.getLineBreakData = function () {
+        return null;
+    };
     VisibleIdentitySplitLine.prototype.getViewLineCount = function () {
         return 1;
     };
@@ -689,7 +807,7 @@ var VisibleIdentitySplitLine = /** @class */ (function () {
     VisibleIdentitySplitLine.prototype.getViewLineData = function (model, modelLineNumber, _outputLineIndex) {
         var lineTokens = model.getLineTokens(modelLineNumber);
         var lineContent = lineTokens.getLineContent();
-        return new ViewLineData(lineContent, false, 1, lineContent.length + 1, lineTokens.inflate());
+        return new ViewLineData(lineContent, false, 1, lineContent.length + 1, 0, lineTokens.inflate());
     };
     VisibleIdentitySplitLine.prototype.getViewLinesData = function (model, modelLineNumber, _fromOuputLineIndex, _toOutputLineIndex, globalStartIndex, needed, result) {
         if (!needed[globalStartIndex]) {
@@ -721,6 +839,9 @@ var InvisibleIdentitySplitLine = /** @class */ (function () {
             return this;
         }
         return VisibleIdentitySplitLine.INSTANCE;
+    };
+    InvisibleIdentitySplitLine.prototype.getLineBreakData = function () {
+        return null;
     };
     InvisibleIdentitySplitLine.prototype.getViewLineCount = function () {
         return 0;
@@ -756,11 +877,8 @@ var InvisibleIdentitySplitLine = /** @class */ (function () {
     return InvisibleIdentitySplitLine;
 }());
 var SplitLine = /** @class */ (function () {
-    function SplitLine(positionMapper, isVisible) {
-        this.positionMapper = positionMapper;
-        this.wrappedIndent = this.positionMapper.getWrappedLinesIndent();
-        this.wrappedIndentLength = this.wrappedIndent.length;
-        this.outputLineCount = this.positionMapper.getOutputLineCount();
+    function SplitLine(lineBreakData, isVisible) {
+        this._lineBreakData = lineBreakData;
         this._isVisible = isVisible;
     }
     SplitLine.prototype.isVisible = function () {
@@ -770,20 +888,23 @@ var SplitLine = /** @class */ (function () {
         this._isVisible = isVisible;
         return this;
     };
+    SplitLine.prototype.getLineBreakData = function () {
+        return this._lineBreakData;
+    };
     SplitLine.prototype.getViewLineCount = function () {
         if (!this._isVisible) {
             return 0;
         }
-        return this.outputLineCount;
+        return this._lineBreakData.breakOffsets.length;
     };
     SplitLine.prototype.getInputStartOffsetOfOutputLineIndex = function (outputLineIndex) {
-        return this.positionMapper.getInputOffsetOfOutputPosition(outputLineIndex, 0);
+        return LineBreakData.getInputOffsetOfOutputPosition(this._lineBreakData.breakOffsets, outputLineIndex, 0);
     };
     SplitLine.prototype.getInputEndOffsetOfOutputLineIndex = function (model, modelLineNumber, outputLineIndex) {
-        if (outputLineIndex + 1 === this.outputLineCount) {
+        if (outputLineIndex + 1 === this._lineBreakData.breakOffsets.length) {
             return model.getLineMaxColumn(modelLineNumber) - 1;
         }
-        return this.positionMapper.getInputOffsetOfOutputPosition(outputLineIndex + 1, 0);
+        return LineBreakData.getInputOffsetOfOutputPosition(this._lineBreakData.breakOffsets, outputLineIndex + 1, 0);
     };
     SplitLine.prototype.getViewLineContent = function (model, modelLineNumber, outputLineIndex) {
         if (!this._isVisible) {
@@ -798,7 +919,7 @@ var SplitLine = /** @class */ (function () {
             endColumn: endOffset + 1
         });
         if (outputLineIndex > 0) {
-            r = this.wrappedIndent + r;
+            r = spaces(this._lineBreakData.wrappedTextIndentLength) + r;
         }
         return r;
     };
@@ -810,7 +931,7 @@ var SplitLine = /** @class */ (function () {
         var endOffset = this.getInputEndOffsetOfOutputLineIndex(model, modelLineNumber, outputLineIndex);
         var r = endOffset - startOffset;
         if (outputLineIndex > 0) {
-            r = this.wrappedIndent.length + r;
+            r = this._lineBreakData.wrappedTextIndentLength + r;
         }
         return r;
     };
@@ -819,7 +940,7 @@ var SplitLine = /** @class */ (function () {
             throw new Error('Not supported');
         }
         if (outputLineIndex > 0) {
-            return this.wrappedIndentLength + 1;
+            return this._lineBreakData.wrappedTextIndentLength + 1;
         }
         return 1;
     };
@@ -842,17 +963,18 @@ var SplitLine = /** @class */ (function () {
             endColumn: endOffset + 1
         });
         if (outputLineIndex > 0) {
-            lineContent = this.wrappedIndent + lineContent;
+            lineContent = spaces(this._lineBreakData.wrappedTextIndentLength) + lineContent;
         }
-        var minColumn = (outputLineIndex > 0 ? this.wrappedIndentLength + 1 : 1);
+        var minColumn = (outputLineIndex > 0 ? this._lineBreakData.wrappedTextIndentLength + 1 : 1);
         var maxColumn = lineContent.length + 1;
         var continuesWithWrappedLine = (outputLineIndex + 1 < this.getViewLineCount());
         var deltaStartIndex = 0;
         if (outputLineIndex > 0) {
-            deltaStartIndex = this.wrappedIndentLength;
+            deltaStartIndex = this._lineBreakData.wrappedTextIndentLength;
         }
         var lineTokens = model.getLineTokens(modelLineNumber);
-        return new ViewLineData(lineContent, continuesWithWrappedLine, minColumn, maxColumn, lineTokens.sliceAndInflate(startOffset, endOffset, deltaStartIndex));
+        var startVisibleColumn = (outputLineIndex === 0 ? 0 : this._lineBreakData.breakOffsetsVisibleColumn[outputLineIndex - 1]);
+        return new ViewLineData(lineContent, continuesWithWrappedLine, minColumn, maxColumn, startVisibleColumn, lineTokens.sliceAndInflate(startOffset, endOffset, deltaStartIndex));
     };
     SplitLine.prototype.getViewLinesData = function (model, modelLineNumber, fromOuputLineIndex, toOutputLineIndex, globalStartIndex, needed, result) {
         if (!this._isVisible) {
@@ -873,24 +995,24 @@ var SplitLine = /** @class */ (function () {
         }
         var adjustedColumn = outputColumn - 1;
         if (outputLineIndex > 0) {
-            if (adjustedColumn < this.wrappedIndentLength) {
+            if (adjustedColumn < this._lineBreakData.wrappedTextIndentLength) {
                 adjustedColumn = 0;
             }
             else {
-                adjustedColumn -= this.wrappedIndentLength;
+                adjustedColumn -= this._lineBreakData.wrappedTextIndentLength;
             }
         }
-        return this.positionMapper.getInputOffsetOfOutputPosition(outputLineIndex, adjustedColumn) + 1;
+        return LineBreakData.getInputOffsetOfOutputPosition(this._lineBreakData.breakOffsets, outputLineIndex, adjustedColumn) + 1;
     };
     SplitLine.prototype.getViewPositionOfModelPosition = function (deltaLineNumber, inputColumn) {
         if (!this._isVisible) {
             throw new Error('Not supported');
         }
-        var r = this.positionMapper.getOutputPositionOfInputOffset(inputColumn - 1);
+        var r = LineBreakData.getOutputPositionOfInputOffset(this._lineBreakData.breakOffsets, inputColumn - 1);
         var outputLineIndex = r.outputLineIndex;
         var outputColumn = r.outputOffset + 1;
         if (outputLineIndex > 0) {
-            outputColumn += this.wrappedIndentLength;
+            outputColumn += this._lineBreakData.wrappedTextIndentLength;
         }
         //		console.log('in -> out ' + deltaLineNumber + ',' + inputColumn + ' ===> ' + (deltaLineNumber+outputLineIndex) + ',' + outputColumn);
         return new Position(deltaLineNumber + outputLineIndex, outputColumn);
@@ -899,15 +1021,26 @@ var SplitLine = /** @class */ (function () {
         if (!this._isVisible) {
             throw new Error('Not supported');
         }
-        var r = this.positionMapper.getOutputPositionOfInputOffset(inputColumn - 1);
+        var r = LineBreakData.getOutputPositionOfInputOffset(this._lineBreakData.breakOffsets, inputColumn - 1);
         return (deltaLineNumber + r.outputLineIndex);
     };
     return SplitLine;
 }());
 export { SplitLine };
-function createSplitLine(linePositionMapperFactory, text, tabSize, wrappingColumn, columnsForFullWidthChar, wrappingIndent, isVisible) {
-    var positionMapper = linePositionMapperFactory.createLineMapping(text, tabSize, wrappingColumn, columnsForFullWidthChar, wrappingIndent);
-    if (positionMapper === null) {
+var _spaces = [''];
+function spaces(count) {
+    if (count >= _spaces.length) {
+        for (var i = 1; i <= count; i++) {
+            _spaces[i] = _makeSpaces(i);
+        }
+    }
+    return _spaces[count];
+}
+function _makeSpaces(count) {
+    return new Array(count + 1).join(' ');
+}
+function createSplitLine(lineBreakData, isVisible) {
+    if (lineBreakData === null) {
         // No mapping needed
         if (isVisible) {
             return VisibleIdentitySplitLine.INSTANCE;
@@ -915,7 +1048,7 @@ function createSplitLine(linePositionMapperFactory, text, tabSize, wrappingColum
         return InvisibleIdentitySplitLine.INSTANCE;
     }
     else {
-        return new SplitLine(positionMapper, isVisible);
+        return new SplitLine(lineBreakData, isVisible);
     }
 }
 var IdentityCoordinatesConverter = /** @class */ (function () {
@@ -977,26 +1110,35 @@ var IdentityLinesCollection = /** @class */ (function () {
     IdentityLinesCollection.prototype.setTabSize = function (_newTabSize) {
         return false;
     };
-    IdentityLinesCollection.prototype.setWrappingSettings = function (_wrappingIndent, _wrappingColumn, _columnsForFullWidthChar) {
+    IdentityLinesCollection.prototype.setWrappingSettings = function (_fontInfo, _wrappingStrategy, _wrappingColumn, _wrappingIndent) {
         return false;
+    };
+    IdentityLinesCollection.prototype.createLineBreaksComputer = function () {
+        var result = [];
+        return {
+            addRequest: function (lineText, previousLineBreakData) {
+                result.push(null);
+            },
+            finalize: function () {
+                return result;
+            }
+        };
     };
     IdentityLinesCollection.prototype.onModelFlushed = function () {
     };
     IdentityLinesCollection.prototype.onModelLinesDeleted = function (_versionId, fromLineNumber, toLineNumber) {
         return new viewEvents.ViewLinesDeletedEvent(fromLineNumber, toLineNumber);
     };
-    IdentityLinesCollection.prototype.onModelLinesInserted = function (_versionId, fromLineNumber, toLineNumber, _text) {
+    IdentityLinesCollection.prototype.onModelLinesInserted = function (_versionId, fromLineNumber, toLineNumber, lineBreaks) {
         return new viewEvents.ViewLinesInsertedEvent(fromLineNumber, toLineNumber);
     };
-    IdentityLinesCollection.prototype.onModelLineChanged = function (_versionId, lineNumber, _newText) {
+    IdentityLinesCollection.prototype.onModelLineChanged = function (_versionId, lineNumber, lineBreakData) {
         return [false, new viewEvents.ViewLinesChangedEvent(lineNumber, lineNumber), null, null];
     };
     IdentityLinesCollection.prototype.acceptVersionId = function (_versionId) {
     };
     IdentityLinesCollection.prototype.getViewLineCount = function () {
         return this.model.getLineCount();
-    };
-    IdentityLinesCollection.prototype.warmUpLookupCache = function (_viewStartLineNumber, _viewEndLineNumber) {
     };
     IdentityLinesCollection.prototype.getActiveIndentGuide = function (viewLineNumber, _minLineNumber, _maxLineNumber) {
         return {
@@ -1028,7 +1170,7 @@ var IdentityLinesCollection = /** @class */ (function () {
     IdentityLinesCollection.prototype.getViewLineData = function (viewLineNumber) {
         var lineTokens = this.model.getLineTokens(viewLineNumber);
         var lineContent = lineTokens.getLineContent();
-        return new ViewLineData(lineContent, false, 1, lineContent.length + 1, lineTokens.inflate());
+        return new ViewLineData(lineContent, false, 1, lineContent.length + 1, 0, lineTokens.inflate());
     };
     IdentityLinesCollection.prototype.getViewLinesData = function (viewStartLineNumber, viewEndLineNumber, needed) {
         var lineCount = this.model.getLineCount();

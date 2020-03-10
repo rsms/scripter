@@ -5,75 +5,214 @@
 import * as strings from '../../../../base/common/strings.js';
 import { Range } from '../../core/range.js';
 var RichEditBracket = /** @class */ (function () {
-    function RichEditBracket(languageIdentifier, open, close, forwardRegex, reversedRegex) {
+    function RichEditBracket(languageIdentifier, index, open, close, forwardRegex, reversedRegex) {
         this.languageIdentifier = languageIdentifier;
+        this.index = index;
         this.open = open;
         this.close = close;
         this.forwardRegex = forwardRegex;
         this.reversedRegex = reversedRegex;
+        this._openSet = RichEditBracket._toSet(this.open);
+        this._closeSet = RichEditBracket._toSet(this.close);
     }
+    RichEditBracket.prototype.isOpen = function (text) {
+        return this._openSet.has(text);
+    };
+    RichEditBracket.prototype.isClose = function (text) {
+        return this._closeSet.has(text);
+    };
+    RichEditBracket._toSet = function (arr) {
+        var result = new Set();
+        for (var _i = 0, arr_1 = arr; _i < arr_1.length; _i++) {
+            var element = arr_1[_i];
+            result.add(element);
+        }
+        return result;
+    };
     return RichEditBracket;
 }());
 export { RichEditBracket };
+function groupFuzzyBrackets(brackets) {
+    var N = brackets.length;
+    brackets = brackets.map(function (b) { return [b[0].toLowerCase(), b[1].toLowerCase()]; });
+    var group = [];
+    for (var i = 0; i < N; i++) {
+        group[i] = i;
+    }
+    var areOverlapping = function (a, b) {
+        var aOpen = a[0], aClose = a[1];
+        var bOpen = b[0], bClose = b[1];
+        return (aOpen === bOpen || aOpen === bClose || aClose === bOpen || aClose === bClose);
+    };
+    var mergeGroups = function (g1, g2) {
+        var newG = Math.min(g1, g2);
+        var oldG = Math.max(g1, g2);
+        for (var i = 0; i < N; i++) {
+            if (group[i] === oldG) {
+                group[i] = newG;
+            }
+        }
+    };
+    // group together brackets that have the same open or the same close sequence
+    for (var i = 0; i < N; i++) {
+        var a = brackets[i];
+        for (var j = i + 1; j < N; j++) {
+            var b = brackets[j];
+            if (areOverlapping(a, b)) {
+                mergeGroups(group[i], group[j]);
+            }
+        }
+    }
+    var result = [];
+    for (var g = 0; g < N; g++) {
+        var currentOpen = [];
+        var currentClose = [];
+        for (var i = 0; i < N; i++) {
+            if (group[i] === g) {
+                var _a = brackets[i], open_1 = _a[0], close_1 = _a[1];
+                currentOpen.push(open_1);
+                currentClose.push(close_1);
+            }
+        }
+        if (currentOpen.length > 0) {
+            result.push({
+                open: currentOpen,
+                close: currentClose
+            });
+        }
+    }
+    return result;
+}
 var RichEditBrackets = /** @class */ (function () {
-    function RichEditBrackets(languageIdentifier, brackets) {
-        var _this = this;
-        this.brackets = brackets.map(function (b) {
-            return new RichEditBracket(languageIdentifier, b[0], b[1], getRegexForBracketPair({ open: b[0], close: b[1] }), getReversedRegexForBracketPair({ open: b[0], close: b[1] }));
+    function RichEditBrackets(languageIdentifier, _brackets) {
+        var brackets = groupFuzzyBrackets(_brackets);
+        this.brackets = brackets.map(function (b, index) {
+            return new RichEditBracket(languageIdentifier, index, b.open, b.close, getRegexForBracketPair(b.open, b.close, brackets, index), getReversedRegexForBracketPair(b.open, b.close, brackets, index));
         });
         this.forwardRegex = getRegexForBrackets(this.brackets);
         this.reversedRegex = getReversedRegexForBrackets(this.brackets);
         this.textIsBracket = {};
         this.textIsOpenBracket = {};
-        var maxBracketLength = 0;
-        this.brackets.forEach(function (b) {
-            _this.textIsBracket[b.open.toLowerCase()] = b;
-            _this.textIsBracket[b.close.toLowerCase()] = b;
-            _this.textIsOpenBracket[b.open.toLowerCase()] = true;
-            _this.textIsOpenBracket[b.close.toLowerCase()] = false;
-            maxBracketLength = Math.max(maxBracketLength, b.open.length);
-            maxBracketLength = Math.max(maxBracketLength, b.close.length);
-        });
-        this.maxBracketLength = maxBracketLength;
+        this.maxBracketLength = 0;
+        for (var _i = 0, _a = this.brackets; _i < _a.length; _i++) {
+            var bracket = _a[_i];
+            for (var _b = 0, _c = bracket.open; _b < _c.length; _b++) {
+                var open_2 = _c[_b];
+                this.textIsBracket[open_2] = bracket;
+                this.textIsOpenBracket[open_2] = true;
+                this.maxBracketLength = Math.max(this.maxBracketLength, open_2.length);
+            }
+            for (var _d = 0, _e = bracket.close; _d < _e.length; _d++) {
+                var close_2 = _e[_d];
+                this.textIsBracket[close_2] = bracket;
+                this.textIsOpenBracket[close_2] = false;
+                this.maxBracketLength = Math.max(this.maxBracketLength, close_2.length);
+            }
+        }
     }
     return RichEditBrackets;
 }());
 export { RichEditBrackets };
-function once(keyFn, computeFn) {
-    var cache = {};
-    return function (input) {
-        var key = keyFn(input);
-        if (!cache.hasOwnProperty(key)) {
-            cache[key] = computeFn(input);
+function collectSuperstrings(str, brackets, currentIndex, dest) {
+    for (var i = 0, len = brackets.length; i < len; i++) {
+        if (i === currentIndex) {
+            continue;
         }
-        return cache[key];
-    };
+        var bracket = brackets[i];
+        for (var _i = 0, _a = bracket.open; _i < _a.length; _i++) {
+            var open_3 = _a[_i];
+            if (open_3.indexOf(str) >= 0) {
+                dest.push(open_3);
+            }
+        }
+        for (var _b = 0, _c = bracket.close; _b < _c.length; _b++) {
+            var close_3 = _c[_b];
+            if (close_3.indexOf(str) >= 0) {
+                dest.push(close_3);
+            }
+        }
+    }
 }
-var getRegexForBracketPair = once(function (input) { return input.open + ";" + input.close; }, function (input) {
-    return createBracketOrRegExp([input.open, input.close]);
-});
-var getReversedRegexForBracketPair = once(function (input) { return input.open + ";" + input.close; }, function (input) {
-    return createBracketOrRegExp([toReversedString(input.open), toReversedString(input.close)]);
-});
-var getRegexForBrackets = once(function (input) { return input.map(function (b) { return b.open + ";" + b.close; }).join(';'); }, function (input) {
+function lengthcmp(a, b) {
+    return a.length - b.length;
+}
+function unique(arr) {
+    if (arr.length <= 1) {
+        return arr;
+    }
+    var result = [];
+    var seen = new Set();
+    for (var _i = 0, arr_2 = arr; _i < arr_2.length; _i++) {
+        var element = arr_2[_i];
+        if (seen.has(element)) {
+            continue;
+        }
+        result.push(element);
+        seen.add(element);
+    }
+    return result;
+}
+function getRegexForBracketPair(open, close, brackets, currentIndex) {
+    // search in all brackets for other brackets that are a superstring of these brackets
     var pieces = [];
-    input.forEach(function (b) {
-        pieces.push(b.open);
-        pieces.push(b.close);
-    });
+    pieces = pieces.concat(open);
+    pieces = pieces.concat(close);
+    for (var i = 0, len = pieces.length; i < len; i++) {
+        collectSuperstrings(pieces[i], brackets, currentIndex, pieces);
+    }
+    pieces = unique(pieces);
+    pieces.sort(lengthcmp);
+    pieces.reverse();
     return createBracketOrRegExp(pieces);
-});
-var getReversedRegexForBrackets = once(function (input) { return input.map(function (b) { return b.open + ";" + b.close; }).join(';'); }, function (input) {
+}
+function getReversedRegexForBracketPair(open, close, brackets, currentIndex) {
+    // search in all brackets for other brackets that are a superstring of these brackets
     var pieces = [];
-    input.forEach(function (b) {
-        pieces.push(toReversedString(b.open));
-        pieces.push(toReversedString(b.close));
-    });
+    pieces = pieces.concat(open);
+    pieces = pieces.concat(close);
+    for (var i = 0, len = pieces.length; i < len; i++) {
+        collectSuperstrings(pieces[i], brackets, currentIndex, pieces);
+    }
+    pieces = unique(pieces);
+    pieces.sort(lengthcmp);
+    pieces.reverse();
+    return createBracketOrRegExp(pieces.map(toReversedString));
+}
+function getRegexForBrackets(brackets) {
+    var pieces = [];
+    for (var _i = 0, brackets_1 = brackets; _i < brackets_1.length; _i++) {
+        var bracket = brackets_1[_i];
+        for (var _a = 0, _b = bracket.open; _a < _b.length; _a++) {
+            var open_4 = _b[_a];
+            pieces.push(open_4);
+        }
+        for (var _c = 0, _d = bracket.close; _c < _d.length; _c++) {
+            var close_4 = _d[_c];
+            pieces.push(close_4);
+        }
+    }
+    pieces = unique(pieces);
     return createBracketOrRegExp(pieces);
-});
+}
+function getReversedRegexForBrackets(brackets) {
+    var pieces = [];
+    for (var _i = 0, brackets_2 = brackets; _i < brackets_2.length; _i++) {
+        var bracket = brackets_2[_i];
+        for (var _a = 0, _b = bracket.open; _a < _b.length; _a++) {
+            var open_5 = _b[_a];
+            pieces.push(open_5);
+        }
+        for (var _c = 0, _d = bracket.close; _c < _d.length; _c++) {
+            var close_5 = _d[_c];
+            pieces.push(close_5);
+        }
+    }
+    pieces = unique(pieces);
+    return createBracketOrRegExp(pieces.map(toReversedString));
+}
 function prepareBracketForRegExp(str) {
     // This bracket pair uses letters like e.g. "begin" - "end"
-    var insertWordBoundaries = (/^[\w]+$/.test(str));
+    var insertWordBoundaries = (/^[\w ]+$/.test(str));
     str = strings.escapeRegExpCharacters(str);
     return (insertWordBoundaries ? "\\b" + str + "\\b" : str);
 }
@@ -112,11 +251,11 @@ var BracketsUtils = /** @class */ (function () {
         var absoluteMatchOffset = offset + matchOffset;
         return new Range(lineNumber, absoluteMatchOffset - matchLength + 1, lineNumber, absoluteMatchOffset + 1);
     };
-    BracketsUtils.findPrevBracketInToken = function (reversedBracketRegex, lineNumber, lineText, currentTokenStart, currentTokenEnd) {
+    BracketsUtils.findPrevBracketInRange = function (reversedBracketRegex, lineNumber, lineText, startOffset, endOffset) {
         // Because JS does not support backwards regex search, we search forwards in a reversed string with a reversed regex ;)
         var reversedLineText = toReversedString(lineText);
-        var reversedTokenText = reversedLineText.substring(lineText.length - currentTokenEnd, lineText.length - currentTokenStart);
-        return this._findPrevBracketInText(reversedBracketRegex, lineNumber, reversedTokenText, currentTokenStart);
+        var reversedSubstr = reversedLineText.substring(lineText.length - endOffset, lineText.length - startOffset);
+        return this._findPrevBracketInText(reversedBracketRegex, lineNumber, reversedSubstr, startOffset);
     };
     BracketsUtils.findNextBracketInText = function (bracketRegex, lineNumber, text, offset) {
         var m = text.match(bracketRegex);
@@ -131,9 +270,9 @@ var BracketsUtils = /** @class */ (function () {
         var absoluteMatchOffset = offset + matchOffset;
         return new Range(lineNumber, absoluteMatchOffset + 1, lineNumber, absoluteMatchOffset + 1 + matchLength);
     };
-    BracketsUtils.findNextBracketInToken = function (bracketRegex, lineNumber, lineText, currentTokenStart, currentTokenEnd) {
-        var currentTokenText = lineText.substring(currentTokenStart, currentTokenEnd);
-        return this.findNextBracketInText(bracketRegex, lineNumber, currentTokenText, currentTokenStart);
+    BracketsUtils.findNextBracketInRange = function (bracketRegex, lineNumber, lineText, startOffset, endOffset) {
+        var substr = lineText.substring(startOffset, endOffset);
+        return this.findNextBracketInText(bracketRegex, lineNumber, substr, startOffset);
     };
     return BracketsUtils;
 }());

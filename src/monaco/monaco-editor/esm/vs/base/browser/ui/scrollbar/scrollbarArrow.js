@@ -76,7 +76,7 @@ var ScrollbarArrow = /** @class */ (function (_super) {
         this._onActivate();
         this._mousedownRepeatTimer.cancel();
         this._mousedownScheduleRepeatTimer.cancelAndSet(scheduleRepeater, 200);
-        this._mouseMoveMonitor.startMonitoring(standardMouseMoveMerger, function (mouseMoveData) {
+        this._mouseMoveMonitor.startMonitoring(e.target, e.buttons, standardMouseMoveMerger, function (mouseMoveData) {
             /* Intentional empty */
         }, function () {
             _this._mousedownRepeatTimer.cancel();

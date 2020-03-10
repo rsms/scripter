@@ -38,7 +38,7 @@ var KeybindingsRegistryImpl = /** @class */ (function () {
         if (actualKb && actualKb.primary) {
             var kk = createKeybinding(actualKb.primary, OS);
             if (kk) {
-                this._registerDefaultKeybinding(kk, rule.id, undefined, rule.weight, 0, rule.when);
+                this._registerDefaultKeybinding(kk, rule.id, rule.args, rule.weight, 0, rule.when);
             }
         }
         if (actualKb && Array.isArray(actualKb.secondary)) {
@@ -46,7 +46,7 @@ var KeybindingsRegistryImpl = /** @class */ (function () {
                 var k = actualKb.secondary[i];
                 var kk = createKeybinding(k, OS);
                 if (kk) {
-                    this._registerDefaultKeybinding(kk, rule.id, undefined, rule.weight, -i - 1, rule.when);
+                    this._registerDefaultKeybinding(kk, rule.id, rule.args, rule.weight, -i - 1, rule.when);
                 }
             }
         }

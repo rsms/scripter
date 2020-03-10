@@ -39,7 +39,8 @@ var HistoryNavigator = /** @class */ (function () {
     };
     HistoryNavigator.prototype._onChange = function () {
         this._reduceToLimit();
-        this._navigator = new ArrayNavigator(this._elements, 0, this._elements.length, this._elements.length);
+        var elements = this._elements;
+        this._navigator = new ArrayNavigator(elements, 0, elements.length, elements.length);
     };
     HistoryNavigator.prototype._reduceToLimit = function () {
         var data = this._elements;

@@ -25,10 +25,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -59,7 +60,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var _this = this;
 import { isNonEmptyArray } from '../../../base/common/arrays.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { KeyChord } from '../../../base/common/keyCodes.js';
@@ -90,9 +90,6 @@ var FormatOnType = /** @class */ (function () {
         this._callOnDispose.add(editor.onDidChangeModelLanguage(function () { return _this._update(); }));
         this._callOnDispose.add(OnTypeFormattingEditProviderRegistry.onDidChange(this._update, this));
     }
-    FormatOnType.prototype.getId = function () {
-        return FormatOnType.ID;
-    };
     FormatOnType.prototype.dispose = function () {
         this._callOnDispose.dispose();
         this._callOnModel.dispose();
@@ -102,7 +99,7 @@ var FormatOnType = /** @class */ (function () {
         // clean up
         this._callOnModel.clear();
         // we are disabled
-        if (!this._editor.getConfiguration().contribInfo.formatOnType) {
+        if (!this._editor.getOption(39 /* formatOnType */)) {
             return;
         }
         // no model
@@ -192,9 +189,6 @@ var FormatOnPaste = /** @class */ (function () {
         this._callOnDispose.add(editor.onDidChangeModelLanguage(function () { return _this._update(); }));
         this._callOnDispose.add(DocumentRangeFormattingEditProviderRegistry.onDidChange(this._update, this));
     }
-    FormatOnPaste.prototype.getId = function () {
-        return FormatOnPaste.ID;
-    };
     FormatOnPaste.prototype.dispose = function () {
         this._callOnDispose.dispose();
         this._callOnModel.dispose();
@@ -204,7 +198,7 @@ var FormatOnPaste = /** @class */ (function () {
         // clean up
         this._callOnModel.clear();
         // we are disabled
-        if (!this.editor.getConfiguration().contribInfo.formatOnPaste) {
+        if (!this.editor.getOption(38 /* formatOnPaste */)) {
             return;
         }
         // no model
@@ -215,7 +209,10 @@ var FormatOnPaste = /** @class */ (function () {
         if (!DocumentRangeFormattingEditProviderRegistry.has(this.editor.getModel())) {
             return;
         }
-        this._callOnModel.add(this.editor.onDidPaste(function (range) { return _this._trigger(range); }));
+        this._callOnModel.add(this.editor.onDidPaste(function (_a) {
+            var range = _a.range;
+            return _this._trigger(range);
+        }));
     };
     FormatOnPaste.prototype._trigger = function (range) {
         if (!this.editor.hasModel()) {
@@ -246,7 +243,7 @@ var FormatDocumentAction = /** @class */ (function (_super) {
                 linux: { primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 39 /* KEY_I */ },
                 weight: 100 /* EditorContrib */
             },
-            menuOpts: {
+            contextMenuOpts: {
                 when: EditorContextKeys.hasDocumentFormattingProvider,
                 group: '1_modification',
                 order: 1.3
@@ -285,7 +282,7 @@ var FormatSelectionAction = /** @class */ (function (_super) {
                 primary: KeyChord(2048 /* CtrlCmd */ | 41 /* KEY_K */, 2048 /* CtrlCmd */ | 36 /* KEY_F */),
                 weight: 100 /* EditorContrib */
             },
-            menuOpts: {
+            contextMenuOpts: {
                 when: ContextKeyExpr.and(EditorContextKeys.hasDocumentSelectionFormattingProvider, EditorContextKeys.hasNonEmptySelection),
                 group: '1_modification',
                 order: 1.31
@@ -317,13 +314,13 @@ var FormatSelectionAction = /** @class */ (function (_super) {
     };
     return FormatSelectionAction;
 }(EditorAction));
-registerEditorContribution(FormatOnType);
-registerEditorContribution(FormatOnPaste);
+registerEditorContribution(FormatOnType.ID, FormatOnType);
+registerEditorContribution(FormatOnPaste.ID, FormatOnPaste);
 registerEditorAction(FormatDocumentAction);
 registerEditorAction(FormatSelectionAction);
 // this is the old format action that does both (format document OR format selection)
 // and we keep it here such that existing keybinding configurations etc will still work
-CommandsRegistry.registerCommand('editor.action.format', function (accessor) { return __awaiter(_this, void 0, void 0, function () {
+CommandsRegistry.registerCommand('editor.action.format', function (accessor) { return __awaiter(void 0, void 0, void 0, function () {
     var editor, commandService;
     return __generator(this, function (_a) {
         switch (_a.label) {

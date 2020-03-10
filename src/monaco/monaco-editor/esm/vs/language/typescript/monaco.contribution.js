@@ -11,7 +11,7 @@ var LanguageServiceDefaultsImpl = /** @class */ (function () {
         this._onDidChange = new Emitter();
         this._onDidExtraLibsChange = new Emitter();
         this._extraLibs = Object.create(null);
-        this._workerMaxIdleTime = 2 * 60 * 1000;
+        this._eagerModelSync = false;
         this.setCompilerOptions(compilerOptions);
         this.setDiagnosticsOptions(diagnosticsOptions);
         this._onDidExtraLibsChangeTimeout = -1;
@@ -33,10 +33,14 @@ var LanguageServiceDefaultsImpl = /** @class */ (function () {
     LanguageServiceDefaultsImpl.prototype.getExtraLibs = function () {
         return this._extraLibs;
     };
-    LanguageServiceDefaultsImpl.prototype.addExtraLib = function (content, filePath) {
+    LanguageServiceDefaultsImpl.prototype.addExtraLib = function (content, _filePath) {
         var _this = this;
-        if (typeof filePath === 'undefined') {
+        var filePath;
+        if (typeof _filePath === 'undefined') {
             filePath = "ts:extralib-" + Math.random().toString(36).substring(2, 15);
+        }
+        else {
+            filePath = _filePath;
         }
         if (this._extraLibs[filePath] && this._extraLibs[filePath].content === content) {
             // no-op, there already exists an extra lib with this content
@@ -67,6 +71,22 @@ var LanguageServiceDefaultsImpl = /** @class */ (function () {
             }
         };
     };
+    LanguageServiceDefaultsImpl.prototype.setExtraLibs = function (libs) {
+        // clear out everything
+        this._extraLibs = Object.create(null);
+        if (libs && libs.length > 0) {
+            for (var _i = 0, libs_1 = libs; _i < libs_1.length; _i++) {
+                var lib = libs_1[_i];
+                var filePath = lib.filePath || "ts:extralib-" + Math.random().toString(36).substring(2, 15);
+                var content = lib.content;
+                this._extraLibs[filePath] = {
+                    content: content,
+                    version: 1
+                };
+            }
+        }
+        this._fireOnDidExtraLibsChangeSoon();
+    };
     LanguageServiceDefaultsImpl.prototype._fireOnDidExtraLibsChangeSoon = function () {
         var _this = this;
         if (this._onDidExtraLibsChangeTimeout !== -1) {
@@ -93,12 +113,6 @@ var LanguageServiceDefaultsImpl = /** @class */ (function () {
         this._onDidChange.fire(undefined);
     };
     LanguageServiceDefaultsImpl.prototype.setMaximumWorkerIdleTime = function (value) {
-        // doesn't fire an event since no
-        // worker restart is required here
-        this._workerMaxIdleTime = value;
-    };
-    LanguageServiceDefaultsImpl.prototype.getWorkerMaxIdleTime = function () {
-        return this._workerMaxIdleTime;
     };
     LanguageServiceDefaultsImpl.prototype.setEagerModelSync = function (value) {
         // doesn't fire an event since no

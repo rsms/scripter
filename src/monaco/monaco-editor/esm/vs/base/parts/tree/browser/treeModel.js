@@ -17,7 +17,7 @@ var __extends = (this && this.__extends) || (function () {
 })();
 import * as Assert from '../../../common/assert.js';
 import { onUnexpectedError } from '../../../common/errors.js';
-import { combinedDisposable } from '../../../common/lifecycle.js';
+import { combinedDisposable, Disposable } from '../../../common/lifecycle.js';
 import { Event, Emitter, EventMultiplexer, Relay } from '../../../common/event.js';
 var LockData = /** @class */ (function () {
     function LockData(item) {
@@ -131,7 +131,7 @@ var ItemRegistry = /** @class */ (function () {
         return result ? result.item : null;
     };
     ItemRegistry.prototype.dispose = function () {
-        this.items = null; // StrictNullOverride: nulling out ok in dispose
+        this.items = {};
         this._onDidRevealItem.dispose();
         this._onExpandItem.dispose();
         this._onDidExpandItem.dispose();
@@ -670,6 +670,8 @@ var TreeNavigator = /** @class */ (function () {
 export { TreeNavigator };
 var TreeModel = /** @class */ (function () {
     function TreeModel(context) {
+        this.registry = new ItemRegistry();
+        this.registryDisposable = Disposable.None;
         this._onSetInput = new Emitter();
         this.onSetInput = this._onSetInput.event;
         this._onDidSetInput = new Emitter();
@@ -1022,10 +1024,7 @@ var TreeModel = /** @class */ (function () {
         return elements;
     };
     TreeModel.prototype.dispose = function () {
-        if (this.registry) {
-            this.registry.dispose();
-            this.registry = null; // StrictNullOverride: nulling out ok in dispose
-        }
+        this.registry.dispose();
         this._onSetInput.dispose();
         this._onDidSetInput.dispose();
         this._onRefresh.dispose();

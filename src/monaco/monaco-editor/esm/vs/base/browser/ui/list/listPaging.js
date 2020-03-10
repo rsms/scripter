@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import './list.css';
+import { Disposable } from '../../../common/lifecycle.js';
 import { range } from '../../../common/arrays.js';
 import { List } from './listWidget.js';
 import { CancellationTokenSource } from '../../../common/cancellation.js';
@@ -18,7 +19,7 @@ var PagedRenderer = /** @class */ (function () {
     });
     PagedRenderer.prototype.renderTemplate = function (container) {
         var data = this.renderer.renderTemplate(container);
-        return { data: data, disposable: { dispose: function () { } } };
+        return { data: data, disposable: Disposable.None };
     };
     PagedRenderer.prototype.renderElement = function (index, _, data, height) {
         var _this = this;
@@ -51,11 +52,11 @@ var PagedRenderer = /** @class */ (function () {
     return PagedRenderer;
 }());
 var PagedList = /** @class */ (function () {
-    function PagedList(container, virtualDelegate, renderers, options) {
+    function PagedList(user, container, virtualDelegate, renderers, options) {
         var _this = this;
         if (options === void 0) { options = {}; }
         var pagedRenderers = renderers.map(function (r) { return new PagedRenderer(r, function () { return _this.model; }); });
-        this.list = new List(container, virtualDelegate, pagedRenderers, options);
+        this.list = new List(user, container, virtualDelegate, pagedRenderers, options);
     }
     PagedList.prototype.getHTMLElement = function () {
         return this.list.getHTMLElement();

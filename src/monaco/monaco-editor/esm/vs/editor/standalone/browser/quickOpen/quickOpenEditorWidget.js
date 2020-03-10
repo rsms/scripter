@@ -10,9 +10,7 @@ var QuickOpenEditorWidget = /** @class */ (function () {
     function QuickOpenEditorWidget(codeEditor, onOk, onCancel, onType, configuration, themeService) {
         this.codeEditor = codeEditor;
         this.themeService = themeService;
-        this.create(onOk, onCancel, onType, configuration);
-    }
-    QuickOpenEditorWidget.prototype.create = function (onOk, onCancel, onType, configuration) {
+        this.visible = false;
         this.domNode = document.createElement('div');
         this.quickOpenWidget = new QuickOpenWidget(this.domNode, {
             onOk: onOk,
@@ -28,7 +26,7 @@ var QuickOpenEditorWidget = /** @class */ (function () {
         });
         this.quickOpenWidget.create();
         this.codeEditor.addOverlayWidget(this);
-    };
+    }
     QuickOpenEditorWidget.prototype.setInput = function (model, focus) {
         this.quickOpenWidget.setInput(model, focus);
     };

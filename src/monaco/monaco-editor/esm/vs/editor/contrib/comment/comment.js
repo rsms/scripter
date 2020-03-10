@@ -35,10 +35,11 @@ var CommentLineAction = /** @class */ (function (_super) {
         var model = editor.getModel();
         var commands = [];
         var selections = editor.getSelections();
-        var opts = model.getOptions();
+        var modelOptions = model.getOptions();
+        var commentsOptions = editor.getOption(13 /* comments */);
         for (var _i = 0, selections_1 = selections; _i < selections_1.length; _i++) {
             var selection = selections_1[_i];
-            commands.push(new LineCommentCommand(selection, opts.tabSize, this._type));
+            commands.push(new LineCommentCommand(selection, modelOptions.tabSize, this._type, commentsOptions.insertSpace));
         }
         editor.pushUndoStop();
         editor.executeCommands(this.id, commands);
@@ -59,8 +60,8 @@ var ToggleCommentLineAction = /** @class */ (function (_super) {
                 primary: 2048 /* CtrlCmd */ | 85 /* US_SLASH */,
                 weight: 100 /* EditorContrib */
             },
-            menubarOpts: {
-                menuId: 14 /* MenubarEditMenu */,
+            menuOpts: {
+                menuId: 17 /* MenubarEditMenu */,
                 group: '5_insert',
                 title: nls.localize({ key: 'miToggleLineComment', comment: ['&& denotes a mnemonic'] }, "&&Toggle Line Comment"),
                 order: 1
@@ -117,8 +118,8 @@ var BlockCommentAction = /** @class */ (function (_super) {
                 linux: { primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 31 /* KEY_A */ },
                 weight: 100 /* EditorContrib */
             },
-            menubarOpts: {
-                menuId: 14 /* MenubarEditMenu */,
+            menuOpts: {
+                menuId: 17 /* MenubarEditMenu */,
                 group: '5_insert',
                 title: nls.localize({ key: 'miToggleBlockComment', comment: ['&& denotes a mnemonic'] }, "Toggle &&Block Comment"),
                 order: 2
@@ -129,11 +130,12 @@ var BlockCommentAction = /** @class */ (function (_super) {
         if (!editor.hasModel()) {
             return;
         }
+        var commentsOptions = editor.getOption(13 /* comments */);
         var commands = [];
         var selections = editor.getSelections();
         for (var _i = 0, selections_2 = selections; _i < selections_2.length; _i++) {
             var selection = selections_2[_i];
-            commands.push(new BlockCommentCommand(selection));
+            commands.push(new BlockCommentCommand(selection, commentsOptions.insertSpace));
         }
         editor.pushUndoStop();
         editor.executeCommands(this.id, commands);

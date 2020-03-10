@@ -39,6 +39,9 @@ var ViewEventHandler = /** @class */ (function (_super) {
     ViewEventHandler.prototype.onConfigurationChanged = function (e) {
         return false;
     };
+    ViewEventHandler.prototype.onContentSizeChanged = function (e) {
+        return false;
+    };
     ViewEventHandler.prototype.onCursorStateChanged = function (e) {
         return false;
     };
@@ -72,6 +75,9 @@ var ViewEventHandler = /** @class */ (function (_super) {
     ViewEventHandler.prototype.onScrollChanged = function (e) {
         return false;
     };
+    ViewEventHandler.prototype.onThemeChanged = function (e) {
+        return false;
+    };
     ViewEventHandler.prototype.onTokensChanged = function (e) {
         return false;
     };
@@ -79,9 +85,6 @@ var ViewEventHandler = /** @class */ (function (_super) {
         return false;
     };
     ViewEventHandler.prototype.onZonesChanged = function (e) {
-        return false;
-    };
-    ViewEventHandler.prototype.onThemeChanged = function (e) {
         return false;
     };
     // --- end event handlers
@@ -95,78 +98,83 @@ var ViewEventHandler = /** @class */ (function (_super) {
                         shouldRender = true;
                     }
                     break;
-                case 2 /* ViewCursorStateChanged */:
+                case 2 /* ViewContentSizeChanged */:
+                    if (this.onContentSizeChanged(e)) {
+                        shouldRender = true;
+                    }
+                    break;
+                case 3 /* ViewCursorStateChanged */:
                     if (this.onCursorStateChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 3 /* ViewDecorationsChanged */:
+                case 4 /* ViewDecorationsChanged */:
                     if (this.onDecorationsChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 4 /* ViewFlushed */:
+                case 5 /* ViewFlushed */:
                     if (this.onFlushed(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 5 /* ViewFocusChanged */:
+                case 6 /* ViewFocusChanged */:
                     if (this.onFocusChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 16 /* ViewLanguageConfigurationChanged */:
+                case 7 /* ViewLanguageConfigurationChanged */:
                     if (this.onLanguageConfigurationChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 6 /* ViewLineMappingChanged */:
+                case 8 /* ViewLineMappingChanged */:
                     if (this.onLineMappingChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 7 /* ViewLinesChanged */:
+                case 9 /* ViewLinesChanged */:
                     if (this.onLinesChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 8 /* ViewLinesDeleted */:
+                case 10 /* ViewLinesDeleted */:
                     if (this.onLinesDeleted(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 9 /* ViewLinesInserted */:
+                case 11 /* ViewLinesInserted */:
                     if (this.onLinesInserted(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 10 /* ViewRevealRangeRequest */:
+                case 12 /* ViewRevealRangeRequest */:
                     if (this.onRevealRangeRequest(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 11 /* ViewScrollChanged */:
+                case 13 /* ViewScrollChanged */:
                     if (this.onScrollChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 12 /* ViewTokensChanged */:
+                case 15 /* ViewTokensChanged */:
                     if (this.onTokensChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 13 /* ViewTokensColorsChanged */:
+                case 14 /* ViewThemeChanged */:
+                    if (this.onThemeChanged(e)) {
+                        shouldRender = true;
+                    }
+                    break;
+                case 16 /* ViewTokensColorsChanged */:
                     if (this.onTokensColorsChanged(e)) {
                         shouldRender = true;
                     }
                     break;
-                case 14 /* ViewZonesChanged */:
+                case 17 /* ViewZonesChanged */:
                     if (this.onZonesChanged(e)) {
-                        shouldRender = true;
-                    }
-                    break;
-                case 15 /* ViewThemeChanged */:
-                    if (this.onThemeChanged(e)) {
                         shouldRender = true;
                     }
                     break;

@@ -24,25 +24,49 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+import { Disposable } from '../../../base/common/lifecycle.js';
+import { CONTEXT_ACCESSIBILITY_MODE_ENABLED } from './accessibility.js';
+import { Emitter } from '../../../base/common/event.js';
 import { IContextKeyService } from '../../contextkey/common/contextkey.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
-import { AbstractAccessibilityService } from './abstractAccessibilityService.js';
-var BrowserAccessibilityService = /** @class */ (function (_super) {
-    __extends(BrowserAccessibilityService, _super);
-    function BrowserAccessibilityService(contextKeyService, configurationService) {
-        var _this = _super.call(this, contextKeyService, configurationService) || this;
-        _this.contextKeyService = contextKeyService;
-        _this.configurationService = configurationService;
+var AccessibilityService = /** @class */ (function (_super) {
+    __extends(AccessibilityService, _super);
+    function AccessibilityService(_contextKeyService, _configurationService) {
+        var _this = _super.call(this) || this;
+        _this._contextKeyService = _contextKeyService;
+        _this._configurationService = _configurationService;
         _this._accessibilitySupport = 0 /* Unknown */;
+        _this._onDidChangeScreenReaderOptimized = new Emitter();
+        _this._accessibilityModeEnabledContext = CONTEXT_ACCESSIBILITY_MODE_ENABLED.bindTo(_this._contextKeyService);
+        var updateContextKey = function () { return _this._accessibilityModeEnabledContext.set(_this.isScreenReaderOptimized()); };
+        _this._register(_this._configurationService.onDidChangeConfiguration(function (e) {
+            if (e.affectsConfiguration('editor.accessibilitySupport')) {
+                updateContextKey();
+                _this._onDidChangeScreenReaderOptimized.fire();
+            }
+        }));
+        updateContextKey();
+        _this.onDidChangeScreenReaderOptimized(function () { return updateContextKey(); });
         return _this;
     }
-    BrowserAccessibilityService.prototype.getAccessibilitySupport = function () {
+    Object.defineProperty(AccessibilityService.prototype, "onDidChangeScreenReaderOptimized", {
+        get: function () {
+            return this._onDidChangeScreenReaderOptimized.event;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    AccessibilityService.prototype.isScreenReaderOptimized = function () {
+        var config = this._configurationService.getValue('editor.accessibilitySupport');
+        return config === 'on' || (config === 'auto' && this._accessibilitySupport === 2 /* Enabled */);
+    };
+    AccessibilityService.prototype.getAccessibilitySupport = function () {
         return this._accessibilitySupport;
     };
-    BrowserAccessibilityService = __decorate([
+    AccessibilityService = __decorate([
         __param(0, IContextKeyService),
         __param(1, IConfigurationService)
-    ], BrowserAccessibilityService);
-    return BrowserAccessibilityService;
-}(AbstractAccessibilityService));
-export { BrowserAccessibilityService };
+    ], AccessibilityService);
+    return AccessibilityService;
+}(Disposable));
+export { AccessibilityService };

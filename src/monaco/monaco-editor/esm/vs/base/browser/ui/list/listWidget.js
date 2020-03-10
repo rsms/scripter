@@ -32,6 +32,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import './list.css';
 import { localize } from '../../../../nls.js';
 import { dispose, DisposableStore } from '../../../common/lifecycle.js';
@@ -44,7 +51,7 @@ import { Gesture } from '../../touch.js';
 import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { Event, Emitter, EventBufferer } from '../../../common/event.js';
 import { domEvent } from '../../event.js';
-import { ListAriaRootRole } from './list.js';
+import { ListAriaRootRole, ListError } from './list.js';
 import { ListView } from './listView.js';
 import { Color } from '../../../common/color.js';
 import { mixin } from '../../../common/objects.js';
@@ -135,7 +142,7 @@ var Trait = /** @class */ (function () {
     Trait.prototype.splice = function (start, deleteCount, elements) {
         var diff = elements.length - deleteCount;
         var end = start + deleteCount;
-        var indexes = this.sortedIndexes.filter(function (i) { return i < start; }).concat(elements.map(function (hasTrait, i) { return hasTrait ? i + start : -1; }).filter(function (i) { return i !== -1; }), this.sortedIndexes.filter(function (i) { return i >= end; }).map(function (i) { return i + diff; }));
+        var indexes = __spreadArrays(this.sortedIndexes.filter(function (i) { return i < start; }), elements.map(function (hasTrait, i) { return hasTrait ? i + start : -1; }).filter(function (i) { return i !== -1; }), this.sortedIndexes.filter(function (i) { return i >= end; }).map(function (i) { return i + diff; }));
         this.renderer.splice(start, deleteCount, elements.length);
         this._set(indexes, indexes);
     };
@@ -152,7 +159,7 @@ var Trait = /** @class */ (function () {
      * @return The old indexes which had this trait.
      */
     Trait.prototype.set = function (indexes, browserEvent) {
-        return this._set(indexes, indexes.slice().sort(numericSort), browserEvent);
+        return this._set(indexes, __spreadArrays(indexes).sort(numericSort), browserEvent);
     };
     Trait.prototype._set = function (indexes, sortedIndexes, browserEvent) {
         var result = this.indexes;
@@ -171,7 +178,7 @@ var Trait = /** @class */ (function () {
         return binarySearch(this.sortedIndexes, index, numericSort) >= 0;
     };
     Trait.prototype.dispose = function () {
-        this._onChange = dispose(this._onChange);
+        dispose(this._onChange);
     };
     __decorate([
         memoize
@@ -297,20 +304,26 @@ var TypeLabelControllerState;
     TypeLabelControllerState[TypeLabelControllerState["Idle"] = 0] = "Idle";
     TypeLabelControllerState[TypeLabelControllerState["Typing"] = 1] = "Typing";
 })(TypeLabelControllerState || (TypeLabelControllerState = {}));
-export function mightProducePrintableCharacter(event) {
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-        return false;
+export var DefaultKeyboardNavigationDelegate = new /** @class */ (function () {
+    function class_1() {
     }
-    return (event.keyCode >= 31 /* KEY_A */ && event.keyCode <= 56 /* KEY_Z */)
-        || (event.keyCode >= 21 /* KEY_0 */ && event.keyCode <= 30 /* KEY_9 */)
-        || (event.keyCode >= 93 /* NUMPAD_0 */ && event.keyCode <= 102 /* NUMPAD_9 */)
-        || (event.keyCode >= 80 /* US_SEMICOLON */ && event.keyCode <= 90 /* US_QUOTE */);
-}
+    class_1.prototype.mightProducePrintableCharacter = function (event) {
+        if (event.ctrlKey || event.metaKey || event.altKey) {
+            return false;
+        }
+        return (event.keyCode >= 31 /* KEY_A */ && event.keyCode <= 56 /* KEY_Z */)
+            || (event.keyCode >= 21 /* KEY_0 */ && event.keyCode <= 30 /* KEY_9 */)
+            || (event.keyCode >= 93 /* NUMPAD_0 */ && event.keyCode <= 102 /* NUMPAD_9 */)
+            || (event.keyCode >= 80 /* US_SEMICOLON */ && event.keyCode <= 90 /* US_QUOTE */);
+    };
+    return class_1;
+}());
 var TypeLabelController = /** @class */ (function () {
-    function TypeLabelController(list, view, keyboardNavigationLabelProvider) {
+    function TypeLabelController(list, view, keyboardNavigationLabelProvider, delegate) {
         this.list = list;
         this.view = view;
         this.keyboardNavigationLabelProvider = keyboardNavigationLabelProvider;
+        this.delegate = delegate;
         this.enabled = false;
         this.state = TypeLabelControllerState.Idle;
         this.automaticKeyboardNavigation = true;
@@ -340,7 +353,7 @@ var TypeLabelController = /** @class */ (function () {
             .filter(function (e) { return !isInputElement(e.target); })
             .filter(function () { return _this.automaticKeyboardNavigation || _this.triggered; })
             .map(function (event) { return new StandardKeyboardEvent(event); })
-            .filter(this.keyboardNavigationLabelProvider.mightProducePrintableCharacter ? function (e) { return _this.keyboardNavigationLabelProvider.mightProducePrintableCharacter(e); } : function (e) { return mightProducePrintableCharacter(e); })
+            .filter(function (e) { return _this.delegate.mightProducePrintableCharacter(e); })
             .forEach(function (e) { e.stopPropagation(); e.preventDefault(); })
             .map(function (event) { return event.browserEvent.key; })
             .event;
@@ -462,7 +475,7 @@ var MouseController = /** @class */ (function () {
             list.onContextMenu(this.onContextMenu, this, this.disposables);
             list.onMouseDblClick(this.onDoubleClick, this, this.disposables);
             list.onTouchStart(this.onMouseDown, this, this.disposables);
-            Gesture.addTarget(list.getHTMLElement());
+            this.disposables.add(Gesture.addTarget(list.getHTMLElement()));
         }
         list.onMouseClick(this.onPointer, this, this.disposables);
         list.onMouseMiddleClick(this.onPointer, this, this.disposables);
@@ -552,7 +565,7 @@ var MouseController = /** @class */ (function () {
             var newSelection = selection.filter(function (i) { return i !== focus; });
             this.list.setFocus([focus]);
             if (selection.length === newSelection.length) {
-                this.list.setSelection(newSelection.concat([focus]), e.browserEvent);
+                this.list.setSelection(__spreadArrays(newSelection, [focus]), e.browserEvent);
             }
             else {
                 this.list.setSelection(newSelection, e.browserEvent);
@@ -571,8 +584,16 @@ var DefaultStyleController = /** @class */ (function () {
         this.selectorSuffix = selectorSuffix;
     }
     DefaultStyleController.prototype.style = function (styles) {
-        var suffix = this.selectorSuffix ? "." + this.selectorSuffix : '';
+        var suffix = this.selectorSuffix && "." + this.selectorSuffix;
         var content = [];
+        if (styles.listBackground) {
+            if (styles.listBackground.isOpaque()) {
+                content.push(".monaco-list" + suffix + " .monaco-list-rows { background: " + styles.listBackground + "; }");
+            }
+            else if (!platform.isMacintosh) { // subpixel AA doesn't exist in macOS
+                console.warn("List with id '" + this.selectorSuffix + "' was styled with a non-opaque background color. This will break sub-pixel antialiasing.");
+            }
+        }
         if (styles.listFocusBackground) {
             content.push(".monaco-list" + suffix + ":focus .monaco-list-row.focused { background-color: " + styles.listFocusBackground + "; }");
             content.push(".monaco-list" + suffix + ":focus .monaco-list-row.focused:hover { background-color: " + styles.listFocusBackground + "; }"); // overwrite :hover style in this case!
@@ -623,7 +644,7 @@ var DefaultStyleController = /** @class */ (function () {
             content.push(".monaco-list" + suffix + " .monaco-list-row:hover { outline: 1px dashed " + styles.listHoverOutline + "; outline-offset: -1px; }");
         }
         if (styles.listDropBackground) {
-            content.push("\n\t\t\t\t.monaco-list" + suffix + ".drop-target,\n\t\t\t\t.monaco-list" + suffix + " .monaco-list-row.drop-target { background-color: " + styles.listDropBackground + " !important; color: inherit !important; }\n\t\t\t");
+            content.push("\n\t\t\t\t.monaco-list" + suffix + ".drop-target,\n\t\t\t\t.monaco-list" + suffix + " .monaco-list-rows.drop-target,\n\t\t\t\t.monaco-list" + suffix + " .monaco-list-row.drop-target { background-color: " + styles.listDropBackground + " !important; color: inherit !important; }\n\t\t\t");
         }
         if (styles.listFilterWidgetBackground) {
             content.push(".monaco-list-type-filter { background-color: " + styles.listFilterWidgetBackground + " }");
@@ -646,7 +667,7 @@ var DefaultStyleController = /** @class */ (function () {
 }());
 export { DefaultStyleController };
 var defaultStyles = {
-    listFocusBackground: Color.fromHex('#073655'),
+    listFocusBackground: Color.fromHex('#7FB0D0'),
     listActiveSelectionBackground: Color.fromHex('#0E639C'),
     listActiveSelectionForeground: Color.fromHex('#FFFFFF'),
     listFocusAndSelectionBackground: Color.fromHex('#094771'),
@@ -827,9 +848,9 @@ var ListViewDragAndDrop = /** @class */ (function () {
     ListViewDragAndDrop.prototype.getDragURI = function (element) {
         return this.dnd.getDragURI(element);
     };
-    ListViewDragAndDrop.prototype.getDragLabel = function (elements) {
+    ListViewDragAndDrop.prototype.getDragLabel = function (elements, originalEvent) {
         if (this.dnd.getDragLabel) {
-            return this.dnd.getDragLabel(elements);
+            return this.dnd.getDragLabel(elements, originalEvent);
         }
         return undefined;
     };
@@ -841,20 +862,26 @@ var ListViewDragAndDrop = /** @class */ (function () {
     ListViewDragAndDrop.prototype.onDragOver = function (data, targetElement, targetIndex, originalEvent) {
         return this.dnd.onDragOver(data, targetElement, targetIndex, originalEvent);
     };
+    ListViewDragAndDrop.prototype.onDragEnd = function (originalEvent) {
+        if (this.dnd.onDragEnd) {
+            this.dnd.onDragEnd(originalEvent);
+        }
+    };
     ListViewDragAndDrop.prototype.drop = function (data, targetElement, targetIndex, originalEvent) {
         this.dnd.drop(data, targetElement, targetIndex, originalEvent);
     };
     return ListViewDragAndDrop;
 }());
 var List = /** @class */ (function () {
-    function List(container, virtualDelegate, renderers, _options) {
+    function List(user, container, virtualDelegate, renderers, _options) {
         if (_options === void 0) { _options = DefaultOptions; }
+        this.user = user;
         this._options = _options;
         this.eventBufferer = new EventBufferer();
         this.disposables = new DisposableStore();
         this._onDidOpen = new Emitter();
         this.onDidOpen = this._onDidOpen.event;
-        this._onPin = new Emitter();
+        this._onDidPin = new Emitter();
         this.didJustPressContextMenuKey = false;
         this._onDidDispose = new Emitter();
         this.onDidDispose = this._onDidDispose.event;
@@ -862,11 +889,15 @@ var List = /** @class */ (function () {
         this.selection = new Trait('selected');
         mixin(_options, defaultStyles, false);
         var baseRenderers = [this.focus.renderer, this.selection.renderer];
-        if (_options.accessibilityProvider) {
-            baseRenderers.push(new AccessibiltyRenderer(_options.accessibilityProvider));
+        this.accessibilityProvider = _options.accessibilityProvider;
+        if (this.accessibilityProvider) {
+            baseRenderers.push(new AccessibiltyRenderer(this.accessibilityProvider));
+            if (this.accessibilityProvider.onDidChangeActiveDescendant) {
+                this.accessibilityProvider.onDidChangeActiveDescendant(this.onDidChangeActiveDescendant, this, this.disposables);
+            }
         }
-        renderers = renderers.map(function (r) { return new PipelineRenderer(r.templateId, baseRenderers.concat([r])); });
-        var viewOptions = __assign({}, _options, { dnd: _options.dnd && new ListViewDragAndDrop(this, _options.dnd) });
+        renderers = renderers.map(function (r) { return new PipelineRenderer(r.templateId, __spreadArrays(baseRenderers, [r])); });
+        var viewOptions = __assign(__assign({}, _options), { dnd: _options.dnd && new ListViewDragAndDrop(this, _options.dnd) });
         this.view = new ListView(container, virtualDelegate, renderers, viewOptions);
         if (typeof _options.ariaRole !== 'string') {
             this.view.domNode.setAttribute('role', ListAriaRootRole.TREE);
@@ -874,8 +905,13 @@ var List = /** @class */ (function () {
         else {
             this.view.domNode.setAttribute('role', _options.ariaRole);
         }
-        this.styleElement = DOM.createStyleSheet(this.view.domNode);
-        this.styleController = _options.styleController || new DefaultStyleController(this.styleElement, this.view.domId);
+        if (_options.styleController) {
+            this.styleController = _options.styleController(this.view.domId);
+        }
+        else {
+            var styleElement = DOM.createStyleSheet(this.view.domNode);
+            this.styleController = new DefaultStyleController(styleElement, this.view.domId);
+        }
         this.spliceable = new CombinedSpliceable([
             new TraitSpliceable(this.focus, this.view, _options.identityProvider),
             new TraitSpliceable(this.selection, this.view, _options.identityProvider),
@@ -893,7 +929,8 @@ var List = /** @class */ (function () {
             this.disposables.add(controller);
         }
         if (_options.keyboardNavigationLabelProvider) {
-            this.typeLabelController = new TypeLabelController(this, this.view, _options.keyboardNavigationLabelProvider);
+            var delegate = _options.keyboardNavigationDelegate || DefaultKeyboardNavigationDelegate;
+            this.typeLabelController = new TypeLabelController(this, this.view, _options.keyboardNavigationLabelProvider, delegate);
             this.disposables.add(this.typeLabelController);
         }
         this.disposables.add(this.createMouseController(_options));
@@ -902,7 +939,6 @@ var List = /** @class */ (function () {
         if (_options.ariaLabel) {
             this.view.domNode.setAttribute('aria-label', localize('aria list', "{0}. Use the navigation keys to navigate.", _options.ariaLabel));
         }
-        this.style(_options);
     }
     Object.defineProperty(List.prototype, "onFocusChange", {
         get: function () {
@@ -999,7 +1035,7 @@ var List = /** @class */ (function () {
     };
     List.prototype.updateOptions = function (optionsUpdate) {
         if (optionsUpdate === void 0) { optionsUpdate = {}; }
-        this._options = __assign({}, this._options, optionsUpdate);
+        this._options = __assign(__assign({}, this._options), optionsUpdate);
         if (this.typeLabelController) {
             this.typeLabelController.updateOptions(this._options);
         }
@@ -1015,10 +1051,10 @@ var List = /** @class */ (function () {
         var _this = this;
         if (elements === void 0) { elements = []; }
         if (start < 0 || start > this.view.length) {
-            throw new Error("Invalid start index: " + start);
+            throw new ListError(this.user, "Invalid start index: " + start);
         }
         if (deleteCount < 0) {
-            throw new Error("Invalid delete count: " + deleteCount);
+            throw new ListError(this.user, "Invalid delete count: " + deleteCount);
         }
         if (deleteCount === 0 && elements.length === 0) {
             return;
@@ -1065,7 +1101,7 @@ var List = /** @class */ (function () {
         for (var _i = 0, indexes_1 = indexes; _i < indexes_1.length; _i++) {
             var index = indexes_1[_i];
             if (index < 0 || index >= this.length) {
-                throw new Error("Invalid index " + index);
+                throw new ListError(this.user, "Invalid index " + index);
             }
         }
         this.selection.set(indexes, browserEvent);
@@ -1081,7 +1117,7 @@ var List = /** @class */ (function () {
         for (var _i = 0, indexes_2 = indexes; _i < indexes_2.length; _i++) {
             var index = indexes_2[_i];
             if (index < 0 || index >= this.length) {
-                throw new Error("Invalid index " + index);
+                throw new ListError(this.user, "Invalid index " + index);
             }
         }
         this.focus.set(indexes, browserEvent);
@@ -1219,7 +1255,7 @@ var List = /** @class */ (function () {
     };
     List.prototype.reveal = function (index, relativeTop) {
         if (index < 0 || index >= this.length) {
-            throw new Error("Invalid index " + index);
+            throw new ListError(this.user, "Invalid index " + index);
         }
         var scrollTop = this.view.getScrollTop();
         var elementTop = this.view.elementTop(index);
@@ -1232,7 +1268,10 @@ var List = /** @class */ (function () {
         else {
             var viewItemBottom = elementTop + elementHeight;
             var wrapperBottom = scrollTop + this.view.renderHeight;
-            if (elementTop < scrollTop) {
+            if (elementTop < scrollTop && viewItemBottom >= wrapperBottom) {
+                // The element is already overflowing the viewport, no-op
+            }
+            else if (elementTop < scrollTop) {
                 this.view.setScrollTop(elementTop);
             }
             else if (viewItemBottom >= wrapperBottom) {
@@ -1246,7 +1285,7 @@ var List = /** @class */ (function () {
      */
     List.prototype.getRelativeTop = function (index) {
         if (index < 0 || index >= this.length) {
-            throw new Error("Invalid index " + index);
+            throw new ListError(this.user, "Invalid index " + index);
         }
         var scrollTop = this.view.getScrollTop();
         var elementTop = this.view.elementTop(index);
@@ -1266,19 +1305,20 @@ var List = /** @class */ (function () {
         for (var _i = 0, indexes_3 = indexes; _i < indexes_3.length; _i++) {
             var index = indexes_3[_i];
             if (index < 0 || index >= this.length) {
-                throw new Error("Invalid index " + index);
+                throw new ListError(this.user, "Invalid index " + index);
             }
         }
         this._onDidOpen.fire({ indexes: indexes, elements: indexes.map(function (i) { return _this.view.element(i); }), browserEvent: browserEvent });
     };
-    List.prototype.pin = function (indexes) {
+    List.prototype.pin = function (indexes, browserEvent) {
+        var _this = this;
         for (var _i = 0, indexes_4 = indexes; _i < indexes_4.length; _i++) {
             var index = indexes_4[_i];
             if (index < 0 || index >= this.length) {
-                throw new Error("Invalid index " + index);
+                throw new ListError(this.user, "Invalid index " + index);
             }
         }
-        this._onPin.fire(indexes);
+        this._onDidPin.fire({ indexes: indexes, elements: indexes.map(function (i) { return _this.view.element(i); }), browserEvent: browserEvent });
     };
     List.prototype.style = function (styles) {
         this.styleController.style(styles);
@@ -1290,14 +1330,22 @@ var List = /** @class */ (function () {
     };
     List.prototype._onFocusChange = function () {
         var focus = this.focus.get();
+        DOM.toggleClass(this.view.domNode, 'element-focused', focus.length > 0);
+        this.onDidChangeActiveDescendant();
+    };
+    List.prototype.onDidChangeActiveDescendant = function () {
+        var _a;
+        var focus = this.focus.get();
         if (focus.length > 0) {
-            this.view.domNode.setAttribute('aria-activedescendant', this.view.getElementDomId(focus[0]));
+            var id = void 0;
+            if ((_a = this.accessibilityProvider) === null || _a === void 0 ? void 0 : _a.getActiveDescendantId) {
+                id = this.accessibilityProvider.getActiveDescendantId(this.view.element(focus[0]));
+            }
+            this.view.domNode.setAttribute('aria-activedescendant', id || this.view.getElementDomId(focus[0]));
         }
         else {
             this.view.domNode.removeAttribute('aria-activedescendant');
         }
-        this.view.domNode.setAttribute('role', 'tree');
-        DOM.toggleClass(this.view.domNode, 'element-focused', focus.length > 0);
     };
     List.prototype._onSelectionChange = function () {
         var selection = this.selection.get();
@@ -1309,7 +1357,7 @@ var List = /** @class */ (function () {
         this._onDidDispose.fire();
         this.disposables.dispose();
         this._onDidOpen.dispose();
-        this._onPin.dispose();
+        this._onDidPin.dispose();
         this._onDidDispose.dispose();
     };
     __decorate([

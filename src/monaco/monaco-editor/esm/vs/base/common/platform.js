@@ -8,6 +8,7 @@ var _isMacintosh = false;
 var _isLinux = false;
 var _isNative = false;
 var _isWeb = false;
+var _isIOS = false;
 var _locale = undefined;
 var _language = LANGUAGE_DEFAULT;
 var _translationsConfigFile = undefined;
@@ -18,6 +19,7 @@ if (typeof navigator === 'object' && !isElectronRenderer) {
     _userAgent = navigator.userAgent;
     _isWindows = _userAgent.indexOf('Windows') >= 0;
     _isMacintosh = _userAgent.indexOf('Macintosh') >= 0;
+    _isIOS = _userAgent.indexOf('Macintosh') >= 0 && !!navigator.maxTouchPoints && navigator.maxTouchPoints > 0;
     _isLinux = _userAgent.indexOf('Linux') >= 0;
     _isWeb = true;
     _locale = navigator.language;
@@ -59,21 +61,41 @@ export var isMacintosh = _isMacintosh;
 export var isLinux = _isLinux;
 export var isNative = _isNative;
 export var isWeb = _isWeb;
+export var isIOS = _isIOS;
 var _globals = (typeof self === 'object' ? self : typeof global === 'object' ? global : {});
 export var globals = _globals;
-var _setImmediate = null;
-export function setImmediate(callback) {
-    if (_setImmediate === null) {
-        if (globals.setImmediate) {
-            _setImmediate = globals.setImmediate.bind(globals);
-        }
-        else if (typeof process !== 'undefined' && typeof process.nextTick === 'function') {
-            _setImmediate = process.nextTick.bind(process);
-        }
-        else {
-            _setImmediate = globals.setTimeout.bind(globals);
-        }
+export var setImmediate = (function defineSetImmediate() {
+    if (globals.setImmediate) {
+        return globals.setImmediate.bind(globals);
     }
-    return _setImmediate(callback);
-}
+    if (typeof globals.postMessage === 'function' && !globals.importScripts) {
+        var pending_1 = [];
+        globals.addEventListener('message', function (e) {
+            if (e.data && e.data.vscodeSetImmediateId) {
+                for (var i = 0, len = pending_1.length; i < len; i++) {
+                    var candidate = pending_1[i];
+                    if (candidate.id === e.data.vscodeSetImmediateId) {
+                        pending_1.splice(i, 1);
+                        candidate.callback();
+                        return;
+                    }
+                }
+            }
+        });
+        var lastId_1 = 0;
+        return function (callback) {
+            var myId = ++lastId_1;
+            pending_1.push({
+                id: myId,
+                callback: callback
+            });
+            globals.postMessage({ vscodeSetImmediateId: myId }, '*');
+        };
+    }
+    if (typeof process !== 'undefined' && typeof process.nextTick === 'function') {
+        return process.nextTick.bind(process);
+    }
+    var _promise = Promise.resolve();
+    return function (callback) { return _promise.then(callback); };
+})();
 export var OS = (_isMacintosh ? 2 /* Macintosh */ : (_isWindows ? 1 /* Windows */ : 3 /* Linux */));

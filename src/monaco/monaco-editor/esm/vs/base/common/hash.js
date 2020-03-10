@@ -34,7 +34,7 @@ function numberHash(val, initialHashVal) {
 function booleanHash(b, initialHashVal) {
     return numberHash(b ? 433 : 863, initialHashVal);
 }
-function stringHash(s, hashVal) {
+export function stringHash(s, hashVal) {
     hashVal = numberHash(149417, hashVal);
     for (var i = 0, length_1 = s.length; i < length_1; i++) {
         hashVal = numberHash(s.charCodeAt(i), hashVal);

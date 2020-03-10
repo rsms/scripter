@@ -60,7 +60,12 @@ export var IMarkerData;
             result.push(emptyString);
         }
         if (markerData.code) {
-            result.push(markerData.code.replace('¦', '\¦'));
+            if (typeof markerData.code === 'string') {
+                result.push(markerData.code.replace('¦', '\¦'));
+            }
+            else {
+                result.push(markerData.code.value.replace('¦', '\¦'));
+            }
         }
         else {
             result.push(emptyString);

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { fuzzyScore, fuzzyScoreGracefulAggressive, FuzzyScore, anyScore } from '../../../base/common/filters.js';
-import { EDITOR_DEFAULTS } from '../../common/config/editorOptions.js';
 import { compareIgnoreCase } from '../../../base/common/strings.js';
 var LineContext = /** @class */ (function () {
     function LineContext(leadingLineContent, characterCountDelta) {
@@ -14,8 +13,7 @@ var LineContext = /** @class */ (function () {
 }());
 export { LineContext };
 var CompletionModel = /** @class */ (function () {
-    function CompletionModel(items, column, lineContext, wordDistance, options) {
-        if (options === void 0) { options = EDITOR_DEFAULTS.contribInfo.suggest; }
+    function CompletionModel(items, column, lineContext, wordDistance, options, snippetSuggestions) {
         this._snippetCompareFn = CompletionModel._compareCompletionItems;
         this._items = items;
         this._column = column;
@@ -23,10 +21,10 @@ var CompletionModel = /** @class */ (function () {
         this._options = options;
         this._refilterKind = 1 /* All */;
         this._lineContext = lineContext;
-        if (options.snippets === 'top') {
+        if (snippetSuggestions === 'top') {
             this._snippetCompareFn = CompletionModel._compareCompletionItemsSnippetsUp;
         }
-        else if (options.snippets === 'bottom') {
+        else if (snippetSuggestions === 'bottom') {
             this._snippetCompareFn = CompletionModel._compareCompletionItemsSnippetsDown;
         }
     }
@@ -113,7 +111,7 @@ var CompletionModel = /** @class */ (function () {
             // 'word' is that remainder of the current line that we
             // filter and score against. In theory each suggestion uses a
             // different word, but in practice not - that's why we cache
-            var overwriteBefore = item.position.column - item.completion.range.startColumn;
+            var overwriteBefore = item.position.column - item.editStart.column;
             var wordLen = overwriteBefore + characterCountDelta - (item.position.column - this._column);
             if (word.length !== wordLen) {
                 word = wordLen === 0 ? '' : leadingLineContent.slice(-wordLen);
@@ -143,6 +141,7 @@ var CompletionModel = /** @class */ (function () {
                         break;
                     }
                 }
+                var textLabel = typeof item.completion.label === 'string' ? item.completion.label : item.completion.label.name;
                 if (wordPos >= wordLen) {
                     // the wordPos at which scoring starts is the whole word
                     // and therefore the same rules as not having a word apply
@@ -157,20 +156,20 @@ var CompletionModel = /** @class */ (function () {
                     if (!match) {
                         continue; // NO match
                     }
-                    if (compareIgnoreCase(item.completion.filterText, item.completion.label) === 0) {
+                    if (compareIgnoreCase(item.completion.filterText, textLabel) === 0) {
                         // filterText and label are actually the same -> use good highlights
                         item.score = match;
                     }
                     else {
                         // re-run the scorer on the label in the hope of a result BUT use the rank
                         // of the filterText-match
-                        item.score = anyScore(word, wordLow, wordPos, item.completion.label, item.labelLow, 0);
+                        item.score = anyScore(word, wordLow, wordPos, textLabel, item.labelLow, 0);
                         item.score[0] = match[0]; // use score from filterText
                     }
                 }
                 else {
                     // by default match `word` against the `label`
-                    var match = scoreFn(word, wordLow, wordPos, item.completion.label, item.labelLow, 0, false);
+                    var match = scoreFn(word, wordLow, wordPos, textLabel, item.labelLow, 0, false);
                     if (!match) {
                         continue; // NO match
                     }

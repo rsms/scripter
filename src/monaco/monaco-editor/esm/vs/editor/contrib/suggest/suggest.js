@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -37,12 +38,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var _this = this;
 import { first } from '../../../base/common/async.js';
 import { assign } from '../../../base/common/objects.js';
 import { onUnexpectedExternalError, canceled, isPromiseCanceledError } from '../../../base/common/errors.js';
 import { registerDefaultLanguageCommand } from '../../browser/editorExtensions.js';
 import * as modes from '../../common/modes.js';
+import { Position } from '../../common/core/position.js';
 import { RawContextKey } from '../../../platform/contextkey/common/contextkey.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { Range } from '../../common/core/range.js';
@@ -56,30 +57,46 @@ export var Context = {
 };
 var CompletionItem = /** @class */ (function () {
     function CompletionItem(position, completion, container, provider, model) {
+        var _this = this;
         this.position = position;
         this.completion = completion;
         this.container = container;
         this.provider = provider;
+        this.isResolved = false;
         // sorting, filtering
         this.score = FuzzyScore.Default;
         this.distance = 0;
+        this.textLabel = typeof completion.label === 'string'
+            ? completion.label
+            : completion.label.name;
         // ensure lower-variants (perf)
-        this.labelLow = completion.label.toLowerCase();
+        this.labelLow = this.textLabel.toLowerCase();
         this.sortTextLow = completion.sortText && completion.sortText.toLowerCase();
         this.filterTextLow = completion.filterText && completion.filterText.toLowerCase();
+        // normalize ranges
+        if (Range.isIRange(completion.range)) {
+            this.editStart = new Position(completion.range.startLineNumber, completion.range.startColumn);
+            this.editInsertEnd = new Position(completion.range.endLineNumber, completion.range.endColumn);
+            this.editReplaceEnd = new Position(completion.range.endLineNumber, completion.range.endColumn);
+        }
+        else {
+            this.editStart = new Position(completion.range.insert.startLineNumber, completion.range.insert.startColumn);
+            this.editInsertEnd = new Position(completion.range.insert.endLineNumber, completion.range.insert.endColumn);
+            this.editReplaceEnd = new Position(completion.range.replace.endLineNumber, completion.range.replace.endColumn);
+        }
         // create the suggestion resolver
         var resolveCompletionItem = provider.resolveCompletionItem;
         if (typeof resolveCompletionItem !== 'function') {
             this.resolve = function () { return Promise.resolve(); };
+            this.isResolved = true;
         }
         else {
             var cached_1;
             this.resolve = function (token) {
                 if (!cached_1) {
-                    var isDone_1 = false;
                     cached_1 = Promise.resolve(resolveCompletionItem.call(provider, model, position, completion, token)).then(function (value) {
                         assign(completion, value);
-                        isDone_1 = true;
+                        _this.isResolved = true;
                     }, function (err) {
                         if (isPromiseCanceledError(err)) {
                             // the IPC queue will reject the request with the
@@ -88,7 +105,7 @@ var CompletionItem = /** @class */ (function () {
                         }
                     });
                     token.onCancellationRequested(function () {
-                        if (!isDone_1) {
+                        if (!_this.isResolved) {
                             // cancellation after the request has been
                             // dispatched -> reset cache
                             cached_1 = undefined;
@@ -123,8 +140,11 @@ export function provideSuggestionItems(model, position, options, context, token)
     if (options === void 0) { options = CompletionOptions.default; }
     if (context === void 0) { context = { triggerKind: 0 /* Invoke */ }; }
     if (token === void 0) { token = CancellationToken.None; }
-    var wordUntil = model.getWordUntilPosition(position);
-    var defaultRange = new Range(position.lineNumber, wordUntil.startColumn, position.lineNumber, wordUntil.endColumn);
+    var word = model.getWordAtPosition(position);
+    var defaultReplaceRange = word ? new Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn) : Range.fromPositions(position);
+    var defaultInsertRange = defaultReplaceRange.setEndPosition(position.lineNumber, position.column);
+    // const wordUntil = model.getWordUntilPosition(position);
+    // const defaultRange = new Range(position.lineNumber, wordUntil.startColumn, position.lineNumber, wordUntil.endColumn);
     position = position.clone();
     // get provider groups, always add snippet suggestion provider
     var supports = modes.CompletionProviderRegistry.orderedGroups(model);
@@ -151,7 +171,11 @@ export function provideSuggestionItems(model, position, options, context, token)
                         if (!options.kindFilter.has(suggestion.kind)) {
                             // fill in default range when missing
                             if (!suggestion.range) {
-                                suggestion.range = defaultRange;
+                                suggestion.range = { insert: defaultInsertRange, replace: defaultReplaceRange };
+                            }
+                            // fill in default sortText when missing
+                            if (!suggestion.sortText) {
+                                suggestion.sortText = typeof suggestion.label === 'string' ? suggestion.label : suggestion.label.name;
                             }
                             allSuggestions.push(new CompletionItem(position, suggestion, container, provider, model));
                         }
@@ -233,7 +257,7 @@ _snippetComparators.set(1 /* Inline */, defaultComparator);
 export function getSuggestionComparator(snippetConfig) {
     return _snippetComparators.get(snippetConfig);
 }
-registerDefaultLanguageCommand('_executeCompletionItemProvider', function (model, position, args) { return __awaiter(_this, void 0, void 0, function () {
+registerDefaultLanguageCommand('_executeCompletionItemProvider', function (model, position, args) { return __awaiter(void 0, void 0, void 0, function () {
     var result, disposables, resolving, maxItemsToResolve, items, _i, items_1, item;
     return __generator(this, function (_a) {
         switch (_a.label) {

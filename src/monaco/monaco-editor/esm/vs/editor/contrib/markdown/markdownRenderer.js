@@ -27,7 +27,6 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 import { renderMarkdown } from '../../../base/browser/markdownRenderer.js';
 import { IOpenerService, NullOpenerService } from '../../../platform/opener/common/opener.js';
 import { IModeService } from '../../common/services/modeService.js';
-import { URI } from '../../../base/common/uri.js';
 import { onUnexpectedError } from '../../../base/common/errors.js';
 import { tokenizeToString } from '../../common/modes/textToHtmlTokenizer.js';
 import { optional } from '../../../platform/instantiation/common/instantiation.js';
@@ -71,22 +70,13 @@ var MarkdownRenderer = /** @class */ (function (_super) {
                     }
                     return tokenizeToString(value, undefined);
                 }).then(function (code) {
-                    return "<span style=\"font-family: " + _this._editor.getConfiguration().fontInfo.fontFamily + "\">" + code + "</span>";
+                    return "<span style=\"font-family: " + _this._editor.getOption(34 /* fontInfo */).fontFamily + "\">" + code + "</span>";
                 });
             },
             codeBlockRenderCallback: function () { return _this._onDidRenderCodeBlock.fire(); },
             actionHandler: {
                 callback: function (content) {
-                    var uri;
-                    try {
-                        uri = URI.parse(content);
-                    }
-                    catch (_a) {
-                        // ignore
-                    }
-                    if (uri && _this._openerService) {
-                        _this._openerService.open(uri).catch(onUnexpectedError);
-                    }
+                    _this._openerService.open(content, { fromUserGesture: true }).catch(onUnexpectedError);
                 },
                 disposeables: disposeables
             }

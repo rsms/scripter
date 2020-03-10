@@ -27,27 +27,22 @@ import { ContextKeyExpr, IContextKeyService } from '../../platform/contextkey/co
 import { KeybindingsRegistry } from '../../platform/keybinding/common/keybindingsRegistry.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ITelemetryService } from '../../platform/telemetry/common/telemetry.js';
-import { withNullAsUndefined } from '../../base/common/types.js';
+import { withNullAsUndefined, assertType } from '../../base/common/types.js';
 var Command = /** @class */ (function () {
     function Command(opts) {
         this.id = opts.id;
         this.precondition = opts.precondition;
         this._kbOpts = opts.kbOpts;
-        this._menubarOpts = opts.menubarOpts;
+        this._menuOpts = opts.menuOpts;
         this._description = opts.description;
     }
     Command.prototype.register = function () {
         var _this = this;
-        if (this._menubarOpts) {
-            MenuRegistry.appendMenuItem(this._menubarOpts.menuId, {
-                group: this._menubarOpts.group,
-                command: {
-                    id: this.id,
-                    title: this._menubarOpts.title,
-                },
-                when: this._menubarOpts.when,
-                order: this._menubarOpts.order
-            });
+        if (Array.isArray(this._menuOpts)) {
+            this._menuOpts.forEach(this._registerMenuItem, this);
+        }
+        else if (this._menuOpts) {
+            this._registerMenuItem(this._menuOpts);
         }
         if (this._kbOpts) {
             var kbWhen = this._kbOpts.kbExpr;
@@ -79,6 +74,17 @@ var Command = /** @class */ (function () {
                 description: this._description
             });
         }
+    };
+    Command.prototype._registerMenuItem = function (item) {
+        MenuRegistry.appendMenuItem(item.menuId, {
+            group: item.group,
+            command: {
+                id: this.id,
+                title: item.title,
+            },
+            when: item.when,
+            order: item.order
+        });
     };
     return Command;
 }());
@@ -132,25 +138,40 @@ export { EditorCommand };
 var EditorAction = /** @class */ (function (_super) {
     __extends(EditorAction, _super);
     function EditorAction(opts) {
-        var _this = _super.call(this, opts) || this;
+        var _this = _super.call(this, EditorAction.convertOptions(opts)) || this;
         _this.label = opts.label;
         _this.alias = opts.alias;
-        _this.menuOpts = opts.menuOpts;
         return _this;
     }
-    EditorAction.prototype.register = function () {
-        if (this.menuOpts) {
-            MenuRegistry.appendMenuItem(7 /* EditorContext */, {
-                command: {
-                    id: this.id,
-                    title: this.label
-                },
-                when: ContextKeyExpr.and(this.precondition, this.menuOpts.when),
-                group: this.menuOpts.group,
-                order: this.menuOpts.order
-            });
+    EditorAction.convertOptions = function (opts) {
+        var menuOpts;
+        if (Array.isArray(opts.menuOpts)) {
+            menuOpts = opts.menuOpts;
         }
-        _super.prototype.register.call(this);
+        else if (opts.menuOpts) {
+            menuOpts = [opts.menuOpts];
+        }
+        else {
+            menuOpts = [];
+        }
+        function withDefaults(item) {
+            if (!item.menuId) {
+                item.menuId = 7 /* EditorContext */;
+            }
+            if (!item.title) {
+                item.title = opts.label;
+            }
+            item.when = ContextKeyExpr.and(opts.precondition, item.when);
+            return item;
+        }
+        if (Array.isArray(opts.contextMenuOpts)) {
+            menuOpts.push.apply(menuOpts, opts.contextMenuOpts.map(withDefaults));
+        }
+        else if (opts.contextMenuOpts) {
+            menuOpts.push(withDefaults(opts.contextMenuOpts));
+        }
+        opts.menuOpts = menuOpts;
+        return opts;
     };
     EditorAction.prototype.runEditorCommand = function (accessor, editor, args) {
         this.reportTelemetry(accessor, editor);
@@ -196,6 +217,62 @@ export function registerDefaultLanguageCommand(id, handler) {
         });
     });
 }
+export function registerModelAndPositionCommand(id, handler) {
+    CommandsRegistry.registerCommand(id, function (accessor) {
+        var args = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            args[_i - 1] = arguments[_i];
+        }
+        var resource = args[0], position = args[1];
+        assertType(URI.isUri(resource));
+        assertType(Position.isIPosition(position));
+        var model = accessor.get(IModelService).getModel(resource);
+        if (model) {
+            var editorPosition = Position.lift(position);
+            return handler(model, editorPosition, args.slice(2));
+        }
+        return accessor.get(ITextModelService).createModelReference(resource).then(function (reference) {
+            return new Promise(function (resolve, reject) {
+                try {
+                    var result = handler(reference.object.textEditorModel, Position.lift(position), args.slice(2));
+                    resolve(result);
+                }
+                catch (err) {
+                    reject(err);
+                }
+            }).finally(function () {
+                reference.dispose();
+            });
+        });
+    });
+}
+export function registerModelCommand(id, handler) {
+    CommandsRegistry.registerCommand(id, function (accessor) {
+        var args = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            args[_i - 1] = arguments[_i];
+        }
+        var resource = args[0];
+        assertType(URI.isUri(resource));
+        var model = accessor.get(IModelService).getModel(resource);
+        if (model) {
+            return handler(model, args.slice(1));
+        }
+        return accessor.get(ITextModelService).createModelReference(resource).then(function (reference) {
+            return new Promise(function (resolve, reject) {
+                try {
+                    var result = handler(reference.object.textEditorModel, args.slice(1));
+                    resolve(result);
+                }
+                catch (err) {
+                    reject(err);
+                }
+            }).finally(function () {
+                reference.dispose();
+            });
+        });
+    });
+}
 export function registerEditorCommand(editorCommand) {
     EditorContributionRegistry.INSTANCE.registerEditorCommand(editorCommand);
     return editorCommand;
@@ -206,8 +283,8 @@ export function registerEditorAction(ctor) {
 export function registerInstantiatedEditorAction(editorAction) {
     EditorContributionRegistry.INSTANCE.registerEditorAction(editorAction);
 }
-export function registerEditorContribution(ctor) {
-    EditorContributionRegistry.INSTANCE.registerEditorContribution(ctor);
+export function registerEditorContribution(id, ctor) {
+    EditorContributionRegistry.INSTANCE.registerEditorContribution(id, ctor);
 }
 export var EditorExtensionsRegistry;
 (function (EditorExtensionsRegistry) {
@@ -223,6 +300,14 @@ export var EditorExtensionsRegistry;
         return EditorContributionRegistry.INSTANCE.getEditorContributions();
     }
     EditorExtensionsRegistry.getEditorContributions = getEditorContributions;
+    function getSomeEditorContributions(ids) {
+        return EditorContributionRegistry.INSTANCE.getEditorContributions().filter(function (c) { return ids.indexOf(c.id) >= 0; });
+    }
+    EditorExtensionsRegistry.getSomeEditorContributions = getSomeEditorContributions;
+    function getDiffEditorContributions() {
+        return EditorContributionRegistry.INSTANCE.getDiffEditorContributions();
+    }
+    EditorExtensionsRegistry.getDiffEditorContributions = getDiffEditorContributions;
 })(EditorExtensionsRegistry || (EditorExtensionsRegistry = {}));
 // Editor extension points
 var Extensions = {
@@ -231,18 +316,22 @@ var Extensions = {
 var EditorContributionRegistry = /** @class */ (function () {
     function EditorContributionRegistry() {
         this.editorContributions = [];
+        this.diffEditorContributions = [];
         this.editorActions = [];
         this.editorCommands = Object.create(null);
     }
-    EditorContributionRegistry.prototype.registerEditorContribution = function (ctor) {
-        this.editorContributions.push(ctor);
+    EditorContributionRegistry.prototype.registerEditorContribution = function (id, ctor) {
+        this.editorContributions.push({ id: id, ctor: ctor });
+    };
+    EditorContributionRegistry.prototype.getEditorContributions = function () {
+        return this.editorContributions.slice(0);
+    };
+    EditorContributionRegistry.prototype.getDiffEditorContributions = function () {
+        return this.diffEditorContributions.slice(0);
     };
     EditorContributionRegistry.prototype.registerEditorAction = function (action) {
         action.register();
         this.editorActions.push(action);
-    };
-    EditorContributionRegistry.prototype.getEditorContributions = function () {
-        return this.editorContributions.slice(0);
     };
     EditorContributionRegistry.prototype.getEditorActions = function () {
         return this.editorActions.slice(0);

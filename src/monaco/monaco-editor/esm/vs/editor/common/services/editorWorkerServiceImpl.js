@@ -24,15 +24,52 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
 import { IntervalTimer } from '../../../base/common/async.js';
 import { Disposable, dispose, toDisposable, DisposableStore } from '../../../base/common/lifecycle.js';
 import { SimpleWorkerClient, logOnceWebWorkerWarning } from '../../../base/common/worker/simpleWorker.js';
 import { DefaultWorkerFactory } from '../../../base/worker/defaultWorkerFactory.js';
+import { Range } from '../core/range.js';
 import * as modes from '../modes.js';
 import { LanguageConfigurationRegistry } from '../modes/languageConfigurationRegistry.js';
 import { EditorSimpleWorker } from './editorSimpleWorker.js';
 import { IModelService } from './modelService.js';
-import { ITextResourceConfigurationService } from './resourceConfiguration.js';
+import { ITextResourceConfigurationService } from './textResourceConfigurationService.js';
 import { regExpFlags } from '../../../base/common/strings.js';
 import { isNonEmptyArray } from '../../../base/common/arrays.js';
 import { ILogService } from '../../../platform/log/common/log.js';
@@ -82,8 +119,8 @@ var EditorWorkerServiceImpl = /** @class */ (function (_super) {
     EditorWorkerServiceImpl.prototype.canComputeDiff = function (original, modified) {
         return (canSyncModel(this._modelService, original) && canSyncModel(this._modelService, modified));
     };
-    EditorWorkerServiceImpl.prototype.computeDiff = function (original, modified, ignoreTrimWhitespace) {
-        return this._workerManager.withWorker().then(function (client) { return client.computeDiff(original, modified, ignoreTrimWhitespace); });
+    EditorWorkerServiceImpl.prototype.computeDiff = function (original, modified, ignoreTrimWhitespace, maxComputationTime) {
+        return this._workerManager.withWorker().then(function (client) { return client.computeDiff(original, modified, ignoreTrimWhitespace, maxComputationTime); });
     };
     EditorWorkerServiceImpl.prototype.computeMoreMinimalEdits = function (resource, edits) {
         var _this = this;
@@ -128,14 +165,43 @@ var WordBasedCompletionItemProvider = /** @class */ (function () {
         this._modelService = modelService;
     }
     WordBasedCompletionItemProvider.prototype.provideCompletionItems = function (model, position) {
-        var wordBasedSuggestions = this._configurationService.getValue(model.uri, position, 'editor').wordBasedSuggestions;
-        if (!wordBasedSuggestions) {
-            return undefined;
-        }
-        if (!canSyncModel(this._modelService, model.uri)) {
-            return undefined; // File too large
-        }
-        return this._workerManager.withWorker().then(function (client) { return client.textualSuggest(model.uri, position); });
+        return __awaiter(this, void 0, void 0, function () {
+            var wordBasedSuggestions, word, replace, insert, client, words;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        wordBasedSuggestions = this._configurationService.getValue(model.uri, position, 'editor').wordBasedSuggestions;
+                        if (!wordBasedSuggestions) {
+                            return [2 /*return*/, undefined];
+                        }
+                        if (!canSyncModel(this._modelService, model.uri)) {
+                            return [2 /*return*/, undefined]; // File too large
+                        }
+                        word = model.getWordAtPosition(position);
+                        replace = !word ? Range.fromPositions(position) : new Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+                        insert = replace.setEndPosition(position.lineNumber, position.column);
+                        return [4 /*yield*/, this._workerManager.withWorker()];
+                    case 1:
+                        client = _a.sent();
+                        return [4 /*yield*/, client.textualSuggest(model.uri, position)];
+                    case 2:
+                        words = _a.sent();
+                        if (!words) {
+                            return [2 /*return*/, undefined];
+                        }
+                        return [2 /*return*/, {
+                                suggestions: words.map(function (word) {
+                                    return {
+                                        kind: 18 /* Text */,
+                                        label: word,
+                                        insertText: word,
+                                        range: { insert: insert, replace: replace }
+                                    };
+                                })
+                            }];
+                }
+            });
+        });
     };
     return WordBasedCompletionItemProvider;
 }());
@@ -188,7 +254,7 @@ var WorkerManager = /** @class */ (function (_super) {
     WorkerManager.prototype.withWorker = function () {
         this._lastWorkerUsedTime = (new Date()).getTime();
         if (!this._editorWorkerClient) {
-            this._editorWorkerClient = new EditorWorkerClient(this._modelService, 'editorWorkerService');
+            this._editorWorkerClient = new EditorWorkerClient(this._modelService, false, 'editorWorkerService');
         }
         return Promise.resolve(this._editorWorkerClient);
     };
@@ -305,9 +371,10 @@ var EditorWorkerHost = /** @class */ (function () {
 export { EditorWorkerHost };
 var EditorWorkerClient = /** @class */ (function (_super) {
     __extends(EditorWorkerClient, _super);
-    function EditorWorkerClient(modelService, label) {
+    function EditorWorkerClient(modelService, keepIdleModels, label) {
         var _this = _super.call(this) || this;
         _this._modelService = modelService;
+        _this._keepIdleModels = keepIdleModels;
         _this._workerFactory = new DefaultWorkerFactory(label);
         _this._worker = null;
         _this._modelManager = null;
@@ -339,7 +406,7 @@ var EditorWorkerClient = /** @class */ (function (_super) {
     };
     EditorWorkerClient.prototype._getOrCreateModelManager = function (proxy) {
         if (!this._modelManager) {
-            this._modelManager = this._register(new EditorModelManager(proxy, this._modelService, false));
+            this._modelManager = this._register(new EditorModelManager(proxy, this._modelService, this._keepIdleModels));
         }
         return this._modelManager;
     };
@@ -350,9 +417,9 @@ var EditorWorkerClient = /** @class */ (function (_super) {
             return proxy;
         });
     };
-    EditorWorkerClient.prototype.computeDiff = function (original, modified, ignoreTrimWhitespace) {
+    EditorWorkerClient.prototype.computeDiff = function (original, modified, ignoreTrimWhitespace, maxComputationTime) {
         return this._withSyncedResources([original, modified]).then(function (proxy) {
-            return proxy.computeDiff(original.toString(), modified.toString(), ignoreTrimWhitespace);
+            return proxy.computeDiff(original.toString(), modified.toString(), ignoreTrimWhitespace, maxComputationTime);
         });
     };
     EditorWorkerClient.prototype.computeMoreMinimalEdits = function (resource, edits) {

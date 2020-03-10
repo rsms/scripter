@@ -51,7 +51,7 @@ var SnippetController2 = /** @class */ (function () {
         this._hasPrevTabstop = SnippetController2.HasPrevTabstop.bindTo(contextKeyService);
     }
     SnippetController2.get = function (editor) {
-        return editor.getContribution('snippetController2');
+        return editor.getContribution(SnippetController2.ID);
     };
     SnippetController2.prototype.dispose = function () {
         this._inSnippet.reset();
@@ -60,15 +60,12 @@ var SnippetController2 = /** @class */ (function () {
         dispose(this._session);
         this._snippetListener.dispose();
     };
-    SnippetController2.prototype.getId = function () {
-        return 'snippetController2';
-    };
     SnippetController2.prototype.insert = function (template, opts) {
         // this is here to find out more about the yet-not-understood
         // error that sometimes happens when we fail to inserted a nested
         // snippet
         try {
-            this._doInsert(template, typeof opts === 'undefined' ? _defaultOptions : __assign({}, _defaultOptions, opts));
+            this._doInsert(template, typeof opts === 'undefined' ? _defaultOptions : __assign(__assign({}, _defaultOptions), opts));
         }
         catch (e) {
             this.cancel();
@@ -195,6 +192,7 @@ var SnippetController2 = /** @class */ (function () {
     SnippetController2.prototype.isInSnippet = function () {
         return Boolean(this._inSnippet.get());
     };
+    SnippetController2.ID = 'snippetController2';
     SnippetController2.InSnippetMode = new RawContextKey('inSnippetMode', false);
     SnippetController2.HasNextTabstop = new RawContextKey('hasNextTabstop', false);
     SnippetController2.HasPrevTabstop = new RawContextKey('hasPrevTabstop', false);
@@ -205,7 +203,7 @@ var SnippetController2 = /** @class */ (function () {
     return SnippetController2;
 }());
 export { SnippetController2 };
-registerEditorContribution(SnippetController2);
+registerEditorContribution(SnippetController2.ID, SnippetController2);
 var CommandCtor = EditorCommand.bindToContribution(SnippetController2.get);
 registerEditorCommand(new CommandCtor({
     id: 'jumpToNextSnippetPlaceholder',

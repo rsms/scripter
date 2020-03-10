@@ -44,19 +44,31 @@ var RemoteAuthoritiesImpl = /** @class */ (function () {
         this._ports = Object.create(null);
         this._connectionTokens = Object.create(null);
         this._preferredWebSchema = 'http';
+        this._delegate = null;
     }
     RemoteAuthoritiesImpl.prototype.setPreferredWebSchema = function (schema) {
         this._preferredWebSchema = schema;
     };
-    RemoteAuthoritiesImpl.prototype.rewrite = function (authority, path) {
+    RemoteAuthoritiesImpl.prototype.rewrite = function (uri) {
+        if (this._delegate) {
+            return this._delegate(uri);
+        }
+        var authority = uri.authority;
         var host = this._hosts[authority];
+        if (host && host.indexOf(':') !== -1) {
+            host = "[" + host + "]";
+        }
         var port = this._ports[authority];
         var connectionToken = this._connectionTokens[authority];
+        var query = "path=" + encodeURIComponent(uri.path);
+        if (typeof connectionToken === 'string') {
+            query += "&tkn=" + encodeURIComponent(connectionToken);
+        }
         return URI.from({
             scheme: platform.isWeb ? this._preferredWebSchema : Schemas.vscodeRemoteResource,
             authority: host + ":" + port,
             path: "/vscode-remote-resource",
-            query: "path=" + encodeURIComponent(path) + "&tkn=" + encodeURIComponent(connectionToken)
+            query: query
         });
     };
     return RemoteAuthoritiesImpl;

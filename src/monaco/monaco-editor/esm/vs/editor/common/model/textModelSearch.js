@@ -33,7 +33,8 @@ var SearchParams = /** @class */ (function () {
                 matchCase: this.matchCase,
                 wholeWord: false,
                 multiline: multiline,
-                global: true
+                global: true,
+                unicode: true
             });
         }
         catch (err) {
@@ -66,7 +67,7 @@ export function isMultilineRegexSource(searchString) {
                 break;
             }
             var nextChCode = searchString.charCodeAt(i);
-            if (nextChCode === 110 /* n */ || nextChCode === 114 /* r */ || nextChCode === 87 /* W */) {
+            if (nextChCode === 110 /* n */ || nextChCode === 114 /* r */ || nextChCode === 87 /* W */ || nextChCode === 119 /* w */) {
                 return true;
             }
         }

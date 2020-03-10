@@ -2,6 +2,19 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 import * as dom from '../../../base/browser/dom.js';
 import { Color } from '../../../base/common/color.js';
 import { Emitter } from '../../../base/common/event.js';
@@ -11,6 +24,7 @@ import { hc_black, vs, vs_dark } from '../common/themes.js';
 import { Registry } from '../../../platform/registry/common/platform.js';
 import { Extensions } from '../../../platform/theme/common/colorRegistry.js';
 import { Extensions as ThemingExtensions } from '../../../platform/theme/common/themeService.js';
+import { Disposable } from '../../../base/common/lifecycle.js';
 var VS_THEME_NAME = 'vs';
 var VS_DARK_THEME_NAME = 'vs-dark';
 var HC_BLACK_THEME_NAME = 'hc-black';
@@ -119,6 +133,9 @@ var StandaloneTheme = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
+    StandaloneTheme.prototype.getTokenStyleMetadata = function (type, modifiers) {
+        return undefined;
+    };
     return StandaloneTheme;
 }());
 function isBuiltinTheme(themeName) {
@@ -140,26 +157,55 @@ function newBuiltInTheme(builtinTheme) {
     var themeData = getBuiltinRules(builtinTheme);
     return new StandaloneTheme(builtinTheme, themeData);
 }
-var StandaloneThemeServiceImpl = /** @class */ (function () {
+var StandaloneThemeServiceImpl = /** @class */ (function (_super) {
+    __extends(StandaloneThemeServiceImpl, _super);
     function StandaloneThemeServiceImpl() {
-        this.environment = Object.create(null);
-        this._onThemeChange = new Emitter();
-        this._onIconThemeChange = new Emitter();
-        this._knownThemes = new Map();
-        this._knownThemes.set(VS_THEME_NAME, newBuiltInTheme(VS_THEME_NAME));
-        this._knownThemes.set(VS_DARK_THEME_NAME, newBuiltInTheme(VS_DARK_THEME_NAME));
-        this._knownThemes.set(HC_BLACK_THEME_NAME, newBuiltInTheme(HC_BLACK_THEME_NAME));
-        this._styleElement = dom.createStyleSheet();
-        this._styleElement.className = 'monaco-colors';
-        this.setTheme(VS_THEME_NAME);
+        var _this = _super.call(this) || this;
+        _this._onThemeChange = _this._register(new Emitter());
+        _this.onThemeChange = _this._onThemeChange.event;
+        _this._environment = Object.create(null);
+        _this._knownThemes = new Map();
+        _this._knownThemes.set(VS_THEME_NAME, newBuiltInTheme(VS_THEME_NAME));
+        _this._knownThemes.set(VS_DARK_THEME_NAME, newBuiltInTheme(VS_DARK_THEME_NAME));
+        _this._knownThemes.set(HC_BLACK_THEME_NAME, newBuiltInTheme(HC_BLACK_THEME_NAME));
+        _this._css = '';
+        _this._globalStyleElement = null;
+        _this._styleElements = [];
+        _this.setTheme(VS_THEME_NAME);
+        return _this;
     }
-    Object.defineProperty(StandaloneThemeServiceImpl.prototype, "onThemeChange", {
-        get: function () {
-            return this._onThemeChange.event;
-        },
-        enumerable: true,
-        configurable: true
-    });
+    StandaloneThemeServiceImpl.prototype.registerEditorContainer = function (domNode) {
+        if (dom.isInShadowDOM(domNode)) {
+            return this._registerShadowDomContainer(domNode);
+        }
+        return this._registerRegularEditorContainer();
+    };
+    StandaloneThemeServiceImpl.prototype._registerRegularEditorContainer = function () {
+        if (!this._globalStyleElement) {
+            this._globalStyleElement = dom.createStyleSheet();
+            this._globalStyleElement.className = 'monaco-colors';
+            this._globalStyleElement.innerHTML = this._css;
+            this._styleElements.push(this._globalStyleElement);
+        }
+        return Disposable.None;
+    };
+    StandaloneThemeServiceImpl.prototype._registerShadowDomContainer = function (domNode) {
+        var _this = this;
+        var styleElement = dom.createStyleSheet(domNode);
+        styleElement.className = 'monaco-colors';
+        styleElement.innerHTML = this._css;
+        this._styleElements.push(styleElement);
+        return {
+            dispose: function () {
+                for (var i = 0; i < _this._styleElements.length; i++) {
+                    if (_this._styleElements[i] === styleElement) {
+                        _this._styleElements.splice(i, 1);
+                        return;
+                    }
+                }
+            }
+        };
+    };
     StandaloneThemeServiceImpl.prototype.defineTheme = function (themeName, themeData) {
         if (!/^[a-z0-9\-]+$/i.test(themeName)) {
             throw new Error('Illegal theme name!');
@@ -207,11 +253,12 @@ var StandaloneThemeServiceImpl = /** @class */ (function () {
                 }
             }
         };
-        themingRegistry.getThemingParticipants().forEach(function (p) { return p(theme, ruleCollector, _this.environment); });
+        themingRegistry.getThemingParticipants().forEach(function (p) { return p(theme, ruleCollector, _this._environment); });
         var tokenTheme = theme.tokenTheme;
         var colorMap = tokenTheme.getColorMap();
         ruleCollector.addRule(generateTokensCSSForColorMap(colorMap));
-        this._styleElement.innerHTML = cssRules.join('\n');
+        this._css = cssRules.join('\n');
+        this._styleElements.forEach(function (styleElement) { return styleElement.innerHTML = _this._css; });
         TokenizationRegistry.setColorMap(colorMap);
         this._onThemeChange.fire(theme);
         return theme.id;
@@ -224,5 +271,5 @@ var StandaloneThemeServiceImpl = /** @class */ (function () {
         };
     };
     return StandaloneThemeServiceImpl;
-}());
+}(Disposable));
 export { StandaloneThemeServiceImpl };

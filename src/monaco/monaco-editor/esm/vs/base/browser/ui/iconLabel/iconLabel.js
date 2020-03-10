@@ -19,6 +19,8 @@ import './iconlabel.css';
 import * as dom from '../../dom.js';
 import { HighlightedLabel } from '../highlightedlabel/highlightedLabel.js';
 import { Disposable } from '../../../common/lifecycle.js';
+import { Range } from '../../../common/range.js';
+import { equals } from '../../../common/objects.js';
 var FastLabelNode = /** @class */ (function () {
     function FastLabelNode(_element) {
         this._element = _element;
@@ -74,7 +76,7 @@ var FastLabelNode = /** @class */ (function () {
                 return;
             }
             this._empty = empty;
-            this._element.style.marginLeft = empty ? '0' : null;
+            this._element.style.marginLeft = empty ? '0' : '';
         },
         enumerable: true,
         configurable: true
@@ -89,18 +91,20 @@ var IconLabel = /** @class */ (function (_super) {
     function IconLabel(container, options) {
         var _this = _super.call(this) || this;
         _this.domNode = _this._register(new FastLabelNode(dom.append(container, dom.$('.monaco-icon-label'))));
-        _this.labelDescriptionContainer = _this._register(new FastLabelNode(dom.append(_this.domNode.element, dom.$('.monaco-icon-label-description-container'))));
-        if (options && options.supportHighlights) {
-            _this.labelNode = new HighlightedLabel(dom.append(_this.labelDescriptionContainer.element, dom.$('a.label-name')), !!options.supportOcticons);
+        var labelContainer = dom.append(_this.domNode.element, dom.$('.monaco-icon-label-container'));
+        var nameContainer = dom.append(labelContainer, dom.$('span.monaco-icon-name-container'));
+        _this.descriptionContainer = _this._register(new FastLabelNode(dom.append(labelContainer, dom.$('span.monaco-icon-description-container'))));
+        if (options === null || options === void 0 ? void 0 : options.supportHighlights) {
+            _this.nameNode = new LabelWithHighlights(nameContainer, !!options.supportCodicons);
         }
         else {
-            _this.labelNode = _this._register(new FastLabelNode(dom.append(_this.labelDescriptionContainer.element, dom.$('a.label-name'))));
+            _this.nameNode = new Label(nameContainer);
         }
-        if (options && options.supportDescriptionHighlights) {
-            _this.descriptionNodeFactory = function () { return new HighlightedLabel(dom.append(_this.labelDescriptionContainer.element, dom.$('span.label-description')), !!options.supportOcticons); };
+        if (options === null || options === void 0 ? void 0 : options.supportDescriptionHighlights) {
+            _this.descriptionNodeFactory = function () { return new HighlightedLabel(dom.append(_this.descriptionContainer.element, dom.$('span.label-description')), !!options.supportCodicons); };
         }
         else {
-            _this.descriptionNodeFactory = function () { return _this._register(new FastLabelNode(dom.append(_this.labelDescriptionContainer.element, dom.$('span.label-description')))); };
+            _this.descriptionNodeFactory = function () { return _this._register(new FastLabelNode(dom.append(_this.descriptionContainer.element, dom.$('span.label-description')))); };
         }
         return _this;
     }
@@ -115,20 +119,15 @@ var IconLabel = /** @class */ (function (_super) {
             }
         }
         this.domNode.className = classes.join(' ');
-        this.domNode.title = options && options.title ? options.title : '';
-        if (this.labelNode instanceof HighlightedLabel) {
-            this.labelNode.set(label || '', options ? options.matches : undefined, options && options.title ? options.title : undefined, options && options.labelEscapeNewLines);
-        }
-        else {
-            this.labelNode.textContent = label || '';
-        }
+        this.domNode.title = (options === null || options === void 0 ? void 0 : options.title) || '';
+        this.nameNode.setLabel(label, options);
         if (description || this.descriptionNode) {
             if (!this.descriptionNode) {
                 this.descriptionNode = this.descriptionNodeFactory(); // description node is created lazily on demand
             }
             if (this.descriptionNode instanceof HighlightedLabel) {
                 this.descriptionNode.set(description || '', options ? options.descriptionMatches : undefined);
-                if (options && options.descriptionTitle) {
+                if (options === null || options === void 0 ? void 0 : options.descriptionTitle) {
                     this.descriptionNode.element.title = options.descriptionTitle;
                 }
                 else {
@@ -137,7 +136,7 @@ var IconLabel = /** @class */ (function (_super) {
             }
             else {
                 this.descriptionNode.textContent = description || '';
-                this.descriptionNode.title = options && options.descriptionTitle ? options.descriptionTitle : '';
+                this.descriptionNode.title = (options === null || options === void 0 ? void 0 : options.descriptionTitle) || '';
                 this.descriptionNode.empty = !description;
             }
         }
@@ -145,3 +144,99 @@ var IconLabel = /** @class */ (function (_super) {
     return IconLabel;
 }(Disposable));
 export { IconLabel };
+var Label = /** @class */ (function () {
+    function Label(container) {
+        this.container = container;
+        this.label = undefined;
+        this.singleLabel = undefined;
+    }
+    Label.prototype.setLabel = function (label, options) {
+        if (this.label === label && equals(this.options, options)) {
+            return;
+        }
+        this.label = label;
+        this.options = options;
+        if (typeof label === 'string') {
+            if (!this.singleLabel) {
+                this.container.innerHTML = '';
+                dom.removeClass(this.container, 'multiple');
+                this.singleLabel = dom.append(this.container, dom.$('a.label-name', { id: options === null || options === void 0 ? void 0 : options.domId }));
+            }
+            this.singleLabel.textContent = label;
+        }
+        else {
+            this.container.innerHTML = '';
+            dom.addClass(this.container, 'multiple');
+            this.singleLabel = undefined;
+            for (var i = 0; i < label.length; i++) {
+                var l = label[i];
+                var id = (options === null || options === void 0 ? void 0 : options.domId) && (options === null || options === void 0 ? void 0 : options.domId) + "_" + i;
+                dom.append(this.container, dom.$('a.label-name', { id: id, 'data-icon-label-count': label.length, 'data-icon-label-index': i }, l));
+                if (i < label.length - 1) {
+                    dom.append(this.container, dom.$('span.label-separator', undefined, (options === null || options === void 0 ? void 0 : options.separator) || '/'));
+                }
+            }
+        }
+    };
+    return Label;
+}());
+function splitMatches(labels, separator, matches) {
+    if (!matches) {
+        return undefined;
+    }
+    var labelStart = 0;
+    return labels.map(function (label) {
+        var labelRange = { start: labelStart, end: labelStart + label.length };
+        var result = matches
+            .map(function (match) { return Range.intersect(labelRange, match); })
+            .filter(function (range) { return !Range.isEmpty(range); })
+            .map(function (_a) {
+            var start = _a.start, end = _a.end;
+            return ({ start: start - labelStart, end: end - labelStart });
+        });
+        labelStart = labelRange.end + separator.length;
+        return result;
+    });
+}
+var LabelWithHighlights = /** @class */ (function () {
+    function LabelWithHighlights(container, supportCodicons) {
+        this.container = container;
+        this.supportCodicons = supportCodicons;
+        this.label = undefined;
+        this.singleLabel = undefined;
+    }
+    LabelWithHighlights.prototype.setLabel = function (label, options) {
+        if (this.label === label && equals(this.options, options)) {
+            return;
+        }
+        this.label = label;
+        this.options = options;
+        if (typeof label === 'string') {
+            if (!this.singleLabel) {
+                this.container.innerHTML = '';
+                dom.removeClass(this.container, 'multiple');
+                this.singleLabel = new HighlightedLabel(dom.append(this.container, dom.$('a.label-name', { id: options === null || options === void 0 ? void 0 : options.domId })), this.supportCodicons);
+            }
+            this.singleLabel.set(label, options === null || options === void 0 ? void 0 : options.matches, options === null || options === void 0 ? void 0 : options.title, options === null || options === void 0 ? void 0 : options.labelEscapeNewLines);
+        }
+        else {
+            this.container.innerHTML = '';
+            dom.addClass(this.container, 'multiple');
+            this.singleLabel = undefined;
+            var separator = (options === null || options === void 0 ? void 0 : options.separator) || '/';
+            var matches = splitMatches(label, separator, options === null || options === void 0 ? void 0 : options.matches);
+            for (var i = 0; i < label.length; i++) {
+                var l = label[i];
+                var m = matches ? matches[i] : undefined;
+                var id = (options === null || options === void 0 ? void 0 : options.domId) && (options === null || options === void 0 ? void 0 : options.domId) + "_" + i;
+                var name_1 = dom.$('a.label-name', { id: id, 'data-icon-label-count': label.length, 'data-icon-label-index': i });
+                var highlightedLabel = new HighlightedLabel(dom.append(this.container, name_1), this.supportCodicons);
+                highlightedLabel.set(l, m, options === null || options === void 0 ? void 0 : options.title, options === null || options === void 0 ? void 0 : options.labelEscapeNewLines);
+                if (i < label.length - 1) {
+                    dom.append(name_1, dom.$('span.label-separator', undefined, separator));
+                }
+            }
+        }
+    };
+    return LabelWithHighlights;
+}());

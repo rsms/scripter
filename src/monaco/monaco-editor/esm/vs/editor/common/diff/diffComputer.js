@@ -4,57 +4,43 @@
  *--------------------------------------------------------------------------------------------*/
 import { LcsDiff } from '../../../base/common/diff/diff.js';
 import * as strings from '../../../base/common/strings.js';
-var MAXIMUM_RUN_TIME = 5000; // 5 seconds
 var MINIMUM_MATCHING_CHARACTER_LENGTH = 3;
 function computeDiff(originalSequence, modifiedSequence, continueProcessingPredicate, pretty) {
     var diffAlgo = new LcsDiff(originalSequence, modifiedSequence, continueProcessingPredicate);
     return diffAlgo.ComputeDiff(pretty);
 }
-var LineMarkerSequence = /** @class */ (function () {
-    function LineMarkerSequence(lines) {
+var LineSequence = /** @class */ (function () {
+    function LineSequence(lines) {
         var startColumns = [];
         var endColumns = [];
         for (var i = 0, length_1 = lines.length; i < length_1; i++) {
-            startColumns[i] = LineMarkerSequence._getFirstNonBlankColumn(lines[i], 1);
-            endColumns[i] = LineMarkerSequence._getLastNonBlankColumn(lines[i], 1);
+            startColumns[i] = getFirstNonBlankColumn(lines[i], 1);
+            endColumns[i] = getLastNonBlankColumn(lines[i], 1);
         }
-        this._lines = lines;
+        this.lines = lines;
         this._startColumns = startColumns;
         this._endColumns = endColumns;
     }
-    LineMarkerSequence.prototype.getLength = function () {
-        return this._lines.length;
+    LineSequence.prototype.getElements = function () {
+        var elements = [];
+        for (var i = 0, len = this.lines.length; i < len; i++) {
+            elements[i] = this.lines[i].substring(this._startColumns[i] - 1, this._endColumns[i] - 1);
+        }
+        return elements;
     };
-    LineMarkerSequence.prototype.getElementAtIndex = function (i) {
-        return this._lines[i].substring(this._startColumns[i] - 1, this._endColumns[i] - 1);
-    };
-    LineMarkerSequence.prototype.getStartLineNumber = function (i) {
+    LineSequence.prototype.getStartLineNumber = function (i) {
         return i + 1;
     };
-    LineMarkerSequence.prototype.getEndLineNumber = function (i) {
+    LineSequence.prototype.getEndLineNumber = function (i) {
         return i + 1;
     };
-    LineMarkerSequence._getFirstNonBlankColumn = function (txt, defaultValue) {
-        var r = strings.firstNonWhitespaceIndex(txt);
-        if (r === -1) {
-            return defaultValue;
-        }
-        return r + 1;
-    };
-    LineMarkerSequence._getLastNonBlankColumn = function (txt, defaultValue) {
-        var r = strings.lastNonWhitespaceIndex(txt);
-        if (r === -1) {
-            return defaultValue;
-        }
-        return r + 2;
-    };
-    LineMarkerSequence.prototype.getCharSequence = function (shouldIgnoreTrimWhitespace, startIndex, endIndex) {
+    LineSequence.prototype.createCharSequence = function (shouldIgnoreTrimWhitespace, startIndex, endIndex) {
         var charCodes = [];
         var lineNumbers = [];
         var columns = [];
         var len = 0;
         for (var index = startIndex; index <= endIndex; index++) {
-            var lineContent = this._lines[index];
+            var lineContent = this.lines[index];
             var startColumn = (shouldIgnoreTrimWhitespace ? this._startColumns[index] : 1);
             var endColumn = (shouldIgnoreTrimWhitespace ? this._endColumns[index] : lineContent.length + 1);
             for (var col = startColumn; col < endColumn; col++) {
@@ -66,7 +52,7 @@ var LineMarkerSequence = /** @class */ (function () {
         }
         return new CharSequence(charCodes, lineNumbers, columns);
     };
-    return LineMarkerSequence;
+    return LineSequence;
 }());
 var CharSequence = /** @class */ (function () {
     function CharSequence(charCodes, lineNumbers, columns) {
@@ -74,11 +60,8 @@ var CharSequence = /** @class */ (function () {
         this._lineNumbers = lineNumbers;
         this._columns = columns;
     }
-    CharSequence.prototype.getLength = function () {
-        return this._charCodes.length;
-    };
-    CharSequence.prototype.getElementAtIndex = function (i) {
-        return this._charCodes[i];
+    CharSequence.prototype.getElements = function () {
+        return this._charCodes;
     };
     CharSequence.prototype.getStartLineNumber = function (i) {
         return this._lineNumbers[i];
@@ -175,7 +158,7 @@ var LineChange = /** @class */ (function () {
         this.modifiedEndLineNumber = modifiedEndLineNumber;
         this.charChanges = charChanges;
     }
-    LineChange.createFromDiffResult = function (shouldIgnoreTrimWhitespace, diffChange, originalLineSequence, modifiedLineSequence, continueProcessingPredicate, shouldComputeCharChanges, shouldPostProcessCharChanges) {
+    LineChange.createFromDiffResult = function (shouldIgnoreTrimWhitespace, diffChange, originalLineSequence, modifiedLineSequence, continueCharDiff, shouldComputeCharChanges, shouldPostProcessCharChanges) {
         var originalStartLineNumber;
         var originalEndLineNumber;
         var modifiedStartLineNumber;
@@ -197,10 +180,11 @@ var LineChange = /** @class */ (function () {
             modifiedStartLineNumber = modifiedLineSequence.getStartLineNumber(diffChange.modifiedStart);
             modifiedEndLineNumber = modifiedLineSequence.getEndLineNumber(diffChange.modifiedStart + diffChange.modifiedLength - 1);
         }
-        if (shouldComputeCharChanges && diffChange.originalLength !== 0 && diffChange.modifiedLength !== 0 && continueProcessingPredicate()) {
-            var originalCharSequence = originalLineSequence.getCharSequence(shouldIgnoreTrimWhitespace, diffChange.originalStart, diffChange.originalStart + diffChange.originalLength - 1);
-            var modifiedCharSequence = modifiedLineSequence.getCharSequence(shouldIgnoreTrimWhitespace, diffChange.modifiedStart, diffChange.modifiedStart + diffChange.modifiedLength - 1);
-            var rawChanges = computeDiff(originalCharSequence, modifiedCharSequence, continueProcessingPredicate, true);
+        if (shouldComputeCharChanges && diffChange.originalLength > 0 && diffChange.originalLength < 20 && diffChange.modifiedLength > 0 && diffChange.modifiedLength < 20 && continueCharDiff()) {
+            // Compute character changes for diff chunks of at most 20 lines...
+            var originalCharSequence = originalLineSequence.createCharSequence(shouldIgnoreTrimWhitespace, diffChange.originalStart, diffChange.originalStart + diffChange.originalLength - 1);
+            var modifiedCharSequence = modifiedLineSequence.createCharSequence(shouldIgnoreTrimWhitespace, diffChange.modifiedStart, diffChange.modifiedStart + diffChange.modifiedLength - 1);
+            var rawChanges = computeDiff(originalCharSequence, modifiedCharSequence, continueCharDiff, true).changes;
             if (shouldPostProcessCharChanges) {
                 rawChanges = postProcessCharChanges(rawChanges);
             }
@@ -219,62 +203,72 @@ var DiffComputer = /** @class */ (function () {
         this.shouldPostProcessCharChanges = opts.shouldPostProcessCharChanges;
         this.shouldIgnoreTrimWhitespace = opts.shouldIgnoreTrimWhitespace;
         this.shouldMakePrettyDiff = opts.shouldMakePrettyDiff;
-        this.maximumRunTimeMs = MAXIMUM_RUN_TIME;
         this.originalLines = originalLines;
         this.modifiedLines = modifiedLines;
-        this.original = new LineMarkerSequence(originalLines);
-        this.modified = new LineMarkerSequence(modifiedLines);
-        this.computationStartTime = (new Date()).getTime();
+        this.original = new LineSequence(originalLines);
+        this.modified = new LineSequence(modifiedLines);
+        this.continueLineDiff = createContinueProcessingPredicate(opts.maxComputationTime);
+        this.continueCharDiff = createContinueProcessingPredicate(opts.maxComputationTime === 0 ? 0 : Math.min(opts.maxComputationTime, 5000)); // never run after 5s for character changes...
     }
     DiffComputer.prototype.computeDiff = function () {
-        if (this.original.getLength() === 1 && this.original.getElementAtIndex(0).length === 0) {
+        if (this.original.lines.length === 1 && this.original.lines[0].length === 0) {
             // empty original => fast path
-            return [{
-                    originalStartLineNumber: 1,
-                    originalEndLineNumber: 1,
-                    modifiedStartLineNumber: 1,
-                    modifiedEndLineNumber: this.modified.getLength(),
-                    charChanges: [{
-                            modifiedEndColumn: 0,
-                            modifiedEndLineNumber: 0,
-                            modifiedStartColumn: 0,
-                            modifiedStartLineNumber: 0,
-                            originalEndColumn: 0,
-                            originalEndLineNumber: 0,
-                            originalStartColumn: 0,
-                            originalStartLineNumber: 0
-                        }]
-                }];
+            return {
+                quitEarly: false,
+                changes: [{
+                        originalStartLineNumber: 1,
+                        originalEndLineNumber: 1,
+                        modifiedStartLineNumber: 1,
+                        modifiedEndLineNumber: this.modified.lines.length,
+                        charChanges: [{
+                                modifiedEndColumn: 0,
+                                modifiedEndLineNumber: 0,
+                                modifiedStartColumn: 0,
+                                modifiedStartLineNumber: 0,
+                                originalEndColumn: 0,
+                                originalEndLineNumber: 0,
+                                originalStartColumn: 0,
+                                originalStartLineNumber: 0
+                            }]
+                    }]
+            };
         }
-        if (this.modified.getLength() === 1 && this.modified.getElementAtIndex(0).length === 0) {
+        if (this.modified.lines.length === 1 && this.modified.lines[0].length === 0) {
             // empty modified => fast path
-            return [{
-                    originalStartLineNumber: 1,
-                    originalEndLineNumber: this.original.getLength(),
-                    modifiedStartLineNumber: 1,
-                    modifiedEndLineNumber: 1,
-                    charChanges: [{
-                            modifiedEndColumn: 0,
-                            modifiedEndLineNumber: 0,
-                            modifiedStartColumn: 0,
-                            modifiedStartLineNumber: 0,
-                            originalEndColumn: 0,
-                            originalEndLineNumber: 0,
-                            originalStartColumn: 0,
-                            originalStartLineNumber: 0
-                        }]
-                }];
+            return {
+                quitEarly: false,
+                changes: [{
+                        originalStartLineNumber: 1,
+                        originalEndLineNumber: this.original.lines.length,
+                        modifiedStartLineNumber: 1,
+                        modifiedEndLineNumber: 1,
+                        charChanges: [{
+                                modifiedEndColumn: 0,
+                                modifiedEndLineNumber: 0,
+                                modifiedStartColumn: 0,
+                                modifiedStartLineNumber: 0,
+                                originalEndColumn: 0,
+                                originalEndLineNumber: 0,
+                                originalStartColumn: 0,
+                                originalStartLineNumber: 0
+                            }]
+                    }]
+            };
         }
-        this.computationStartTime = (new Date()).getTime();
-        var rawChanges = computeDiff(this.original, this.modified, this._continueProcessingPredicate.bind(this), this.shouldMakePrettyDiff);
+        var diffResult = computeDiff(this.original, this.modified, this.continueLineDiff, this.shouldMakePrettyDiff);
+        var rawChanges = diffResult.changes;
+        var quitEarly = diffResult.quitEarly;
         // The diff is always computed with ignoring trim whitespace
         // This ensures we get the prettiest diff
         if (this.shouldIgnoreTrimWhitespace) {
             var lineChanges = [];
             for (var i = 0, length_3 = rawChanges.length; i < length_3; i++) {
-                lineChanges.push(LineChange.createFromDiffResult(this.shouldIgnoreTrimWhitespace, rawChanges[i], this.original, this.modified, this._continueProcessingPredicate.bind(this), this.shouldComputeCharChanges, this.shouldPostProcessCharChanges));
+                lineChanges.push(LineChange.createFromDiffResult(this.shouldIgnoreTrimWhitespace, rawChanges[i], this.original, this.modified, this.continueCharDiff, this.shouldComputeCharChanges, this.shouldPostProcessCharChanges));
             }
-            return lineChanges;
+            return {
+                quitEarly: quitEarly,
+                changes: lineChanges
+            };
         }
         // Need to post-process and introduce changes where the trim whitespace is different
         // Note that we are looping starting at -1 to also cover the lines before the first change
@@ -292,8 +286,8 @@ var DiffComputer = /** @class */ (function () {
                     // These lines differ only in trim whitespace
                     // Check the leading whitespace
                     {
-                        var originalStartColumn = LineMarkerSequence._getFirstNonBlankColumn(originalLine, 1);
-                        var modifiedStartColumn = LineMarkerSequence._getFirstNonBlankColumn(modifiedLine, 1);
+                        var originalStartColumn = getFirstNonBlankColumn(originalLine, 1);
+                        var modifiedStartColumn = getFirstNonBlankColumn(modifiedLine, 1);
                         while (originalStartColumn > 1 && modifiedStartColumn > 1) {
                             var originalChar = originalLine.charCodeAt(originalStartColumn - 2);
                             var modifiedChar = modifiedLine.charCodeAt(modifiedStartColumn - 2);
@@ -309,8 +303,8 @@ var DiffComputer = /** @class */ (function () {
                     }
                     // Check the trailing whitespace
                     {
-                        var originalEndColumn = LineMarkerSequence._getLastNonBlankColumn(originalLine, 1);
-                        var modifiedEndColumn = LineMarkerSequence._getLastNonBlankColumn(modifiedLine, 1);
+                        var originalEndColumn = getLastNonBlankColumn(originalLine, 1);
+                        var modifiedEndColumn = getLastNonBlankColumn(modifiedLine, 1);
                         var originalMaxColumn = originalLine.length + 1;
                         var modifiedMaxColumn = modifiedLine.length + 1;
                         while (originalEndColumn < originalMaxColumn && modifiedEndColumn < modifiedMaxColumn) {
@@ -332,12 +326,15 @@ var DiffComputer = /** @class */ (function () {
             }
             if (nextChange) {
                 // Emit the actual change
-                result.push(LineChange.createFromDiffResult(this.shouldIgnoreTrimWhitespace, nextChange, this.original, this.modified, this._continueProcessingPredicate.bind(this), this.shouldComputeCharChanges, this.shouldPostProcessCharChanges));
+                result.push(LineChange.createFromDiffResult(this.shouldIgnoreTrimWhitespace, nextChange, this.original, this.modified, this.continueCharDiff, this.shouldComputeCharChanges, this.shouldPostProcessCharChanges));
                 originalLineIndex += nextChange.originalLength;
                 modifiedLineIndex += nextChange.modifiedLength;
             }
         }
-        return result;
+        return {
+            quitEarly: quitEarly,
+            changes: result
+        };
     };
     DiffComputer.prototype._pushTrimWhitespaceCharChange = function (result, originalLineNumber, originalStartColumn, originalEndColumn, modifiedLineNumber, modifiedStartColumn, modifiedEndColumn) {
         if (this._mergeTrimWhitespaceCharChange(result, originalLineNumber, originalStartColumn, originalEndColumn, modifiedLineNumber, modifiedStartColumn, modifiedEndColumn)) {
@@ -363,20 +360,36 @@ var DiffComputer = /** @class */ (function () {
         if (prevChange.originalEndLineNumber + 1 === originalLineNumber && prevChange.modifiedEndLineNumber + 1 === modifiedLineNumber) {
             prevChange.originalEndLineNumber = originalLineNumber;
             prevChange.modifiedEndLineNumber = modifiedLineNumber;
-            if (this.shouldComputeCharChanges) {
+            if (this.shouldComputeCharChanges && prevChange.charChanges) {
                 prevChange.charChanges.push(new CharChange(originalLineNumber, originalStartColumn, originalLineNumber, originalEndColumn, modifiedLineNumber, modifiedStartColumn, modifiedLineNumber, modifiedEndColumn));
             }
             return true;
         }
         return false;
     };
-    DiffComputer.prototype._continueProcessingPredicate = function () {
-        if (this.maximumRunTimeMs === 0) {
-            return true;
-        }
-        var now = (new Date()).getTime();
-        return now - this.computationStartTime < this.maximumRunTimeMs;
-    };
     return DiffComputer;
 }());
 export { DiffComputer };
+function getFirstNonBlankColumn(txt, defaultValue) {
+    var r = strings.firstNonWhitespaceIndex(txt);
+    if (r === -1) {
+        return defaultValue;
+    }
+    return r + 1;
+}
+function getLastNonBlankColumn(txt, defaultValue) {
+    var r = strings.lastNonWhitespaceIndex(txt);
+    if (r === -1) {
+        return defaultValue;
+    }
+    return r + 2;
+}
+function createContinueProcessingPredicate(maximumRuntime) {
+    if (maximumRuntime === 0) {
+        return function () { return true; };
+    }
+    var startTime = Date.now();
+    return function () {
+        return Date.now() - startTime < maximumRuntime;
+    };
+}

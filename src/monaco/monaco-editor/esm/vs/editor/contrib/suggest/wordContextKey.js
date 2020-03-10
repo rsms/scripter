@@ -33,7 +33,7 @@ var WordContextKey = /** @class */ (function (_super) {
         _this._editor = _editor;
         _this._enabled = false;
         _this._ckAtEnd = WordContextKey.AtEnd.bindTo(contextKeyService);
-        _this._register(_this._editor.onDidChangeConfiguration(function (e) { return e.contribInfo && _this._update(); }));
+        _this._register(_this._editor.onDidChangeConfiguration(function (e) { return e.hasChanged(94 /* tabCompletion */) && _this._update(); }));
         _this._update();
         return _this;
     }
@@ -45,7 +45,7 @@ var WordContextKey = /** @class */ (function (_super) {
     WordContextKey.prototype._update = function () {
         var _this = this;
         // only update this when tab completions are enabled
-        var enabled = this._editor.getConfiguration().contribInfo.tabCompletion === 'on';
+        var enabled = this._editor.getOption(94 /* tabCompletion */) === 'on';
         if (this._enabled === enabled) {
             return;
         }

@@ -22,12 +22,15 @@ import { ScrollbarState } from './scrollbarState.js';
 var VerticalScrollbar = /** @class */ (function (_super) {
     __extends(VerticalScrollbar, _super);
     function VerticalScrollbar(scrollable, options, host) {
-        var _this = _super.call(this, {
+        var _this = this;
+        var scrollDimensions = scrollable.getScrollDimensions();
+        var scrollPosition = scrollable.getCurrentScrollPosition();
+        _this = _super.call(this, {
             lazyRender: options.lazyRender,
             host: host,
             scrollbarState: new ScrollbarState((options.verticalHasArrows ? options.arrowSize : 0), (options.vertical === 2 /* Hidden */ ? 0 : options.verticalScrollbarSize), 
             // give priority to vertical scroll bar over horizontal and let it scroll all the way to the bottom
-            0),
+            0, scrollDimensions.height, scrollDimensions.scrollHeight, scrollPosition.scrollTop),
             visibility: options.vertical,
             extraScrollbarClassName: 'vertical',
             scrollable: scrollable

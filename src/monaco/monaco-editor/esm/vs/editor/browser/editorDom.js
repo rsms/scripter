@@ -120,6 +120,41 @@ var EditorMouseEventFactory = /** @class */ (function () {
     return EditorMouseEventFactory;
 }());
 export { EditorMouseEventFactory };
+var EditorPointerEventFactory = /** @class */ (function () {
+    function EditorPointerEventFactory(editorViewDomNode) {
+        this._editorViewDomNode = editorViewDomNode;
+    }
+    EditorPointerEventFactory.prototype._create = function (e) {
+        return new EditorMouseEvent(e, this._editorViewDomNode);
+    };
+    EditorPointerEventFactory.prototype.onPointerUp = function (target, callback) {
+        var _this = this;
+        return dom.addDisposableListener(target, 'pointerup', function (e) {
+            callback(_this._create(e));
+        });
+    };
+    EditorPointerEventFactory.prototype.onPointerDown = function (target, callback) {
+        var _this = this;
+        return dom.addDisposableListener(target, 'pointerdown', function (e) {
+            callback(_this._create(e));
+        });
+    };
+    EditorPointerEventFactory.prototype.onPointerLeave = function (target, callback) {
+        var _this = this;
+        return dom.addDisposableNonBubblingPointerOutListener(target, function (e) {
+            callback(_this._create(e));
+        });
+    };
+    EditorPointerEventFactory.prototype.onPointerMoveThrottled = function (target, callback, merger, minimumTimeMs) {
+        var _this = this;
+        var myMerger = function (lastEvent, currentEvent) {
+            return merger(lastEvent, _this._create(currentEvent));
+        };
+        return dom.addDisposableThrottledListener(target, 'pointermove', callback, myMerger, minimumTimeMs);
+    };
+    return EditorPointerEventFactory;
+}());
+export { EditorPointerEventFactory };
 var GlobalEditorMouseMoveMonitor = /** @class */ (function (_super) {
     __extends(GlobalEditorMouseMoveMonitor, _super);
     function GlobalEditorMouseMoveMonitor(editorViewDomNode) {
@@ -129,7 +164,7 @@ var GlobalEditorMouseMoveMonitor = /** @class */ (function (_super) {
         _this._keydownListener = null;
         return _this;
     }
-    GlobalEditorMouseMoveMonitor.prototype.startMonitoring = function (merger, mouseMoveCallback, onStopCallback) {
+    GlobalEditorMouseMoveMonitor.prototype.startMonitoring = function (initialElement, initialButtons, merger, mouseMoveCallback, onStopCallback) {
         var _this = this;
         // Add a <<capture>> keydown event listener that will cancel the monitoring
         // if something other than a modifier key is pressed
@@ -144,7 +179,7 @@ var GlobalEditorMouseMoveMonitor = /** @class */ (function (_super) {
         var myMerger = function (lastEvent, currentEvent) {
             return merger(lastEvent, new EditorMouseEvent(currentEvent, _this._editorViewDomNode));
         };
-        this._globalMouseMoveMonitor.startMonitoring(myMerger, mouseMoveCallback, function () {
+        this._globalMouseMoveMonitor.startMonitoring(initialElement, initialButtons, myMerger, mouseMoveCallback, function () {
             _this._keydownListener.dispose();
             onStopCallback();
         });

@@ -162,6 +162,9 @@ var KeybindingResolver = /** @class */ (function () {
         }
         return false;
     };
+    KeybindingResolver.prototype.getKeybindings = function () {
+        return this._keybindings;
+    };
     KeybindingResolver.prototype.lookupPrimaryKeybinding = function (commandId) {
         var items = this._lookupMap.get(commandId);
         if (typeof items === 'undefined' || items.length === 0) {

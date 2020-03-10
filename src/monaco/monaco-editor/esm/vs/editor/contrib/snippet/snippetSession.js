@@ -14,7 +14,7 @@ import { IClipboardService } from '../../../platform/clipboard/common/clipboardS
 import { IWorkspaceContextService } from '../../../platform/workspace/common/workspace.js';
 import { optional } from '../../../platform/instantiation/common/instantiation.js';
 import { Choice, Placeholder, SnippetParser, Text } from './snippetParser.js';
-import { ClipboardBasedVariableResolver, CompositeSnippetVariableResolver, ModelBasedVariableResolver, SelectionBasedVariableResolver, TimeBasedVariableResolver, CommentBasedVariableResolver, WorkspaceBasedVariableResolver } from './snippetVariables.js';
+import { ClipboardBasedVariableResolver, CompositeSnippetVariableResolver, ModelBasedVariableResolver, SelectionBasedVariableResolver, TimeBasedVariableResolver, CommentBasedVariableResolver, WorkspaceBasedVariableResolver, RandomBasedVariableResolver } from './snippetVariables.js';
 import { registerThemingParticipant } from '../../../platform/theme/common/themeService.js';
 import * as colors from '../../../platform/theme/common/colorRegistry.js';
 import { ILabelService } from '../../../platform/label/common/label.js';
@@ -282,7 +282,7 @@ var SnippetSession = /** @class */ (function () {
         this._template = template;
         this._options = options;
     }
-    SnippetSession.adjustWhitespace = function (model, position, snippet) {
+    SnippetSession.adjustWhitespace = function (model, position, snippet, adjustIndentation, adjustNewlines) {
         var line = model.getLineContent(position.lineNumber);
         var lineLeadingWhitespace = getLeadingWhitespace(line, 0, position.column - 1);
         snippet.walk(function (marker) {
@@ -290,13 +290,17 @@ var SnippetSession = /** @class */ (function () {
                 // adjust indentation of text markers, except for choise elements
                 // which get adjusted when being selected
                 var lines = marker.value.split(/\r\n|\r|\n/);
-                for (var i = 1; i < lines.length; i++) {
-                    var templateLeadingWhitespace = getLeadingWhitespace(lines[i]);
-                    lines[i] = model.normalizeIndentation(lineLeadingWhitespace + templateLeadingWhitespace) + lines[i].substr(templateLeadingWhitespace.length);
+                if (adjustIndentation) {
+                    for (var i = 1; i < lines.length; i++) {
+                        var templateLeadingWhitespace = getLeadingWhitespace(lines[i]);
+                        lines[i] = model.normalizeIndentation(lineLeadingWhitespace + templateLeadingWhitespace) + lines[i].substr(templateLeadingWhitespace.length);
+                    }
                 }
-                var newValue = lines.join(model.getEOL());
-                if (newValue !== marker.value) {
-                    marker.parent.replace(marker, [new Text(newValue)]);
+                if (adjustNewlines) {
+                    var newValue = lines.join(model.getEOL());
+                    if (newValue !== marker.value) {
+                        marker.parent.replace(marker, [new Text(newValue)]);
+                    }
                 }
             }
             return true;
@@ -329,7 +333,7 @@ var SnippetSession = /** @class */ (function () {
         var workspaceService = editor.invokeWithinContext(function (accessor) { return accessor.get(IWorkspaceContextService, optional); });
         var modelBasedVariableResolver = editor.invokeWithinContext(function (accessor) { return new ModelBasedVariableResolver(accessor.get(ILabelService, optional), model); });
         var clipboardService = editor.invokeWithinContext(function (accessor) { return accessor.get(IClipboardService, optional); });
-        clipboardText = clipboardText || clipboardService && clipboardService.readTextSync();
+        var readClipboardText = function () { return clipboardText || clipboardService && clipboardService.readTextSync(); };
         var delta = 0;
         // know what text the overwrite[Before|After] extensions
         // of the primary curser have selected because only when
@@ -368,16 +372,15 @@ var SnippetSession = /** @class */ (function () {
             // happens when being asked for (default) or when this is a secondary
             // cursor and the leading whitespace is different
             var start = snippetSelection.getStartPosition();
-            if (adjustWhitespace || (idx > 0 && firstLineFirstNonWhitespace !== model.getLineFirstNonWhitespaceColumn(selection.positionLineNumber))) {
-                SnippetSession.adjustWhitespace(model, start, snippet);
-            }
+            SnippetSession.adjustWhitespace(model, start, snippet, adjustWhitespace || (idx > 0 && firstLineFirstNonWhitespace !== model.getLineFirstNonWhitespaceColumn(selection.positionLineNumber)), true);
             snippet.resolveVariables(new CompositeSnippetVariableResolver([
                 modelBasedVariableResolver,
-                new ClipboardBasedVariableResolver(clipboardText, idx, indexedSelections.length),
+                new ClipboardBasedVariableResolver(readClipboardText, idx, indexedSelections.length, editor.getOption(60 /* multiCursorPaste */) === 'spread'),
                 new SelectionBasedVariableResolver(model, selection),
                 new CommentBasedVariableResolver(model),
                 new TimeBasedVariableResolver,
                 new WorkspaceBasedVariableResolver(workspaceService),
+                new RandomBasedVariableResolver,
             ]));
             var offset = model.getOffsetAt(start) + delta;
             delta += snippet.toString().length - model.getValueLengthInRange(snippetSelection);

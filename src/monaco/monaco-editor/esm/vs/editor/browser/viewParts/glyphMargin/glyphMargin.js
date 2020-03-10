@@ -78,10 +78,12 @@ var GlyphMarginOverlay = /** @class */ (function (_super) {
     function GlyphMarginOverlay(context) {
         var _this = _super.call(this) || this;
         _this._context = context;
-        _this._lineHeight = _this._context.configuration.editor.lineHeight;
-        _this._glyphMargin = _this._context.configuration.editor.viewInfo.glyphMargin;
-        _this._glyphMarginLeft = _this._context.configuration.editor.layoutInfo.glyphMarginLeft;
-        _this._glyphMarginWidth = _this._context.configuration.editor.layoutInfo.glyphMarginWidth;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._glyphMargin = options.get(40 /* glyphMargin */);
+        _this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
+        _this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
         _this._renderResult = null;
         _this._context.addEventHandler(_this);
         return _this;
@@ -93,16 +95,12 @@ var GlyphMarginOverlay = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     GlyphMarginOverlay.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.viewInfo) {
-            this._glyphMargin = this._context.configuration.editor.viewInfo.glyphMargin;
-        }
-        if (e.layoutInfo) {
-            this._glyphMarginLeft = this._context.configuration.editor.layoutInfo.glyphMarginLeft;
-            this._glyphMarginWidth = this._context.configuration.editor.layoutInfo.glyphMarginWidth;
-        }
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._glyphMargin = options.get(40 /* glyphMargin */);
+        this._glyphMarginLeft = layoutInfo.glyphMarginLeft;
+        this._glyphMarginWidth = layoutInfo.glyphMarginWidth;
         return true;
     };
     GlyphMarginOverlay.prototype.onDecorationsChanged = function (e) {
@@ -159,7 +157,7 @@ var GlyphMarginOverlay = /** @class */ (function (_super) {
                 output[lineIndex] = '';
             }
             else {
-                output[lineIndex] = ('<div class="cgmr '
+                output[lineIndex] = ('<div class="cgmr codicon '
                     + classNames.join(' ')
                     + common);
             }

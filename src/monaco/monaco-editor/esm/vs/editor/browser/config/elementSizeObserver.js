@@ -16,16 +16,18 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import { Disposable } from '../../../base/common/lifecycle.js';
+import * as dom from '../../../base/browser/dom.js';
 var ElementSizeObserver = /** @class */ (function (_super) {
     __extends(ElementSizeObserver, _super);
-    function ElementSizeObserver(referenceDomElement, changeCallback) {
+    function ElementSizeObserver(referenceDomElement, dimension, changeCallback) {
         var _this = _super.call(this) || this;
         _this.referenceDomElement = referenceDomElement;
         _this.changeCallback = changeCallback;
-        _this.measureReferenceDomElementToken = -1;
         _this.width = -1;
         _this.height = -1;
-        _this.measureReferenceDomElement(false);
+        _this.mutationObserver = null;
+        _this.windowSizeListener = null;
+        _this.measureReferenceDomElement(false, dimension);
         return _this;
     }
     ElementSizeObserver.prototype.dispose = function () {
@@ -40,18 +42,34 @@ var ElementSizeObserver = /** @class */ (function (_super) {
     };
     ElementSizeObserver.prototype.startObserving = function () {
         var _this = this;
-        if (this.measureReferenceDomElementToken === -1) {
-            this.measureReferenceDomElementToken = setInterval(function () { return _this.measureReferenceDomElement(true); }, 100);
+        if (!this.mutationObserver && this.referenceDomElement) {
+            this.mutationObserver = new MutationObserver(function () { return _this._onDidMutate(); });
+            this.mutationObserver.observe(this.referenceDomElement, {
+                attributes: true,
+            });
+        }
+        if (!this.windowSizeListener) {
+            this.windowSizeListener = dom.addDisposableListener(window, 'resize', function () { return _this._onDidResizeWindow(); });
         }
     };
     ElementSizeObserver.prototype.stopObserving = function () {
-        if (this.measureReferenceDomElementToken !== -1) {
-            clearInterval(this.measureReferenceDomElementToken);
-            this.measureReferenceDomElementToken = -1;
+        if (this.mutationObserver) {
+            this.mutationObserver.disconnect();
+            this.mutationObserver = null;
+        }
+        if (this.windowSizeListener) {
+            this.windowSizeListener.dispose();
+            this.windowSizeListener = null;
         }
     };
     ElementSizeObserver.prototype.observe = function (dimension) {
         this.measureReferenceDomElement(true, dimension);
+    };
+    ElementSizeObserver.prototype._onDidMutate = function () {
+        this.measureReferenceDomElement(true);
+    };
+    ElementSizeObserver.prototype._onDidResizeWindow = function () {
+        this.measureReferenceDomElement(true);
     };
     ElementSizeObserver.prototype.measureReferenceDomElement = function (callChangeCallback, dimension) {
         var observedWidth = 0;

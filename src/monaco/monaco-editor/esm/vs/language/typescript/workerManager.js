@@ -45,8 +45,7 @@ var WorkerManager = /** @class */ (function () {
         this._modeId = modeId;
         this._defaults = defaults;
         this._worker = null;
-        this._idleCheckInterval = setInterval(function () { return _this._checkIfIdle(); }, 30 * 1000);
-        this._lastUsedTime = 0;
+        this._client = null;
         this._configChangeListener = this._defaults.onDidChange(function () { return _this._stopWorker(); });
         this._updateExtraLibsToken = 0;
         this._extraLibsChangeListener = this._defaults.onDidExtraLibsChange(function () { return _this._updateExtraLibs(); });
@@ -59,7 +58,6 @@ var WorkerManager = /** @class */ (function () {
         this._client = null;
     };
     WorkerManager.prototype.dispose = function () {
-        clearInterval(this._idleCheckInterval);
         this._configChangeListener.dispose();
         this._extraLibsChangeListener.dispose();
         this._stopWorker();
@@ -87,24 +85,14 @@ var WorkerManager = /** @class */ (function () {
             });
         });
     };
-    WorkerManager.prototype._checkIfIdle = function () {
-        if (!this._worker) {
-            return;
-        }
-        var maxIdleTime = this._defaults.getWorkerMaxIdleTime();
-        var timePassedSinceLastUsed = Date.now() - this._lastUsedTime;
-        if (maxIdleTime > 0 && timePassedSinceLastUsed > maxIdleTime) {
-            this._stopWorker();
-        }
-    };
     WorkerManager.prototype._getClient = function () {
         var _this = this;
-        this._lastUsedTime = Date.now();
         if (!this._client) {
             this._worker = monaco.editor.createWebWorker({
                 // module that exports the create() method and returns a `TypeScriptWorker` instance
                 moduleId: 'vs/language/typescript/tsWorker',
                 label: this._modeId,
+                keepIdleModels: true,
                 // passed in to the create() method
                 createData: {
                     compilerOptions: this._defaults.getCompilerOptions(),
@@ -114,9 +102,12 @@ var WorkerManager = /** @class */ (function () {
             var p = this._worker.getProxy();
             if (this._defaults.getEagerModelSync()) {
                 p = p.then(function (worker) {
-                    return _this._worker.withSyncedResources(monaco.editor.getModels()
-                        .filter(function (model) { return model.getModeId() === _this._modeId; })
-                        .map(function (model) { return model.uri; }));
+                    if (_this._worker) {
+                        return _this._worker.withSyncedResources(monaco.editor.getModels()
+                            .filter(function (model) { return model.getModeId() === _this._modeId; })
+                            .map(function (model) { return model.uri; }));
+                    }
+                    return worker;
                 });
             }
             this._client = p;
@@ -133,7 +124,9 @@ var WorkerManager = /** @class */ (function () {
         return this._getClient().then(function (client) {
             _client = client;
         }).then(function (_) {
-            return _this._worker.withSyncedResources(resources);
+            if (_this._worker) {
+                return _this._worker.withSyncedResources(resources);
+            }
         }).then(function (_) { return _client; });
     };
     return WorkerManager;

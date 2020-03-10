@@ -368,9 +368,6 @@ export { Color };
              * The default format will use HEX if opaque and RGBA otherwise.
              */
             function format(color) {
-                if (!color) {
-                    return null;
-                }
                 if (color.isOpaque()) {
                     return Color.Format.CSS.formatHex(color);
                 }
@@ -383,10 +380,6 @@ export { Color };
              * @param hex string (#RGB, #RGBA, #RRGGBB or #RRGGBBAA).
              */
             function parseHex(hex) {
-                if (!hex) {
-                    // Invalid color
-                    return null;
-                }
                 var length = hex.length;
                 if (length === 0) {
                     // Invalid color

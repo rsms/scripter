@@ -99,19 +99,18 @@ var CursorMoveCommands = /** @class */ (function () {
         var result = [];
         for (var i = 0, len = cursors.length; i < len; i++) {
             var cursor = cursors[i];
-            var viewSelection = cursor.viewState.selection;
-            var startLineNumber = viewSelection.startLineNumber;
-            var lineCount = context.viewModel.getLineCount();
-            var endLineNumber = viewSelection.endLineNumber;
+            var startLineNumber = cursor.modelState.selection.startLineNumber;
+            var lineCount = context.model.getLineCount();
+            var endLineNumber = cursor.modelState.selection.endLineNumber;
             var endColumn = void 0;
             if (endLineNumber === lineCount) {
-                endColumn = context.viewModel.getLineMaxColumn(lineCount);
+                endColumn = context.model.getLineMaxColumn(lineCount);
             }
             else {
                 endLineNumber++;
                 endColumn = 1;
             }
-            result[i] = CursorState.fromViewState(new SingleCursorState(new Range(startLineNumber, 1, startLineNumber, 1), 0, new Position(endLineNumber, endColumn), 0));
+            result[i] = CursorState.fromModelState(new SingleCursorState(new Range(startLineNumber, 1, startLineNumber, 1), 0, new Position(endLineNumber, endColumn), 0));
         }
         return result;
     };

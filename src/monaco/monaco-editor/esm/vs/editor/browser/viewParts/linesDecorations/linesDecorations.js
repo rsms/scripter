@@ -22,8 +22,10 @@ var LinesDecorationsOverlay = /** @class */ (function (_super) {
     function LinesDecorationsOverlay(context) {
         var _this = _super.call(this) || this;
         _this._context = context;
-        _this._decorationsLeft = _this._context.configuration.editor.layoutInfo.decorationsLeft;
-        _this._decorationsWidth = _this._context.configuration.editor.layoutInfo.decorationsWidth;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        _this._decorationsLeft = layoutInfo.decorationsLeft;
+        _this._decorationsWidth = layoutInfo.decorationsWidth;
         _this._renderResult = null;
         _this._context.addEventHandler(_this);
         return _this;
@@ -35,10 +37,10 @@ var LinesDecorationsOverlay = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     LinesDecorationsOverlay.prototype.onConfigurationChanged = function (e) {
-        if (e.layoutInfo) {
-            this._decorationsLeft = this._context.configuration.editor.layoutInfo.decorationsLeft;
-            this._decorationsWidth = this._context.configuration.editor.layoutInfo.decorationsWidth;
-        }
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._decorationsLeft = layoutInfo.decorationsLeft;
+        this._decorationsWidth = layoutInfo.decorationsWidth;
         return true;
     };
     LinesDecorationsOverlay.prototype.onDecorationsChanged = function (e) {

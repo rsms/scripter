@@ -45,20 +45,20 @@ var KeybindingLabel = /** @class */ (function () {
     KeybindingLabel.prototype.renderPart = function (parent, part, match) {
         var modifierLabels = UILabelProvider.modifierLabels[this.os];
         if (part.ctrlKey) {
-            this.renderKey(parent, modifierLabels.ctrlKey, Boolean(match && match.ctrlKey), modifierLabels.separator);
+            this.renderKey(parent, modifierLabels.ctrlKey, Boolean(match === null || match === void 0 ? void 0 : match.ctrlKey), modifierLabels.separator);
         }
         if (part.shiftKey) {
-            this.renderKey(parent, modifierLabels.shiftKey, Boolean(match && match.shiftKey), modifierLabels.separator);
+            this.renderKey(parent, modifierLabels.shiftKey, Boolean(match === null || match === void 0 ? void 0 : match.shiftKey), modifierLabels.separator);
         }
         if (part.altKey) {
-            this.renderKey(parent, modifierLabels.altKey, Boolean(match && match.altKey), modifierLabels.separator);
+            this.renderKey(parent, modifierLabels.altKey, Boolean(match === null || match === void 0 ? void 0 : match.altKey), modifierLabels.separator);
         }
         if (part.metaKey) {
-            this.renderKey(parent, modifierLabels.metaKey, Boolean(match && match.metaKey), modifierLabels.separator);
+            this.renderKey(parent, modifierLabels.metaKey, Boolean(match === null || match === void 0 ? void 0 : match.metaKey), modifierLabels.separator);
         }
         var keyLabel = part.keyLabel;
         if (keyLabel) {
-            this.renderKey(parent, keyLabel, Boolean(match && match.keyCode), '');
+            this.renderKey(parent, keyLabel, Boolean(match === null || match === void 0 ? void 0 : match.keyCode), '');
         }
     };
     KeybindingLabel.prototype.renderKey = function (parent, label, highlight, separator) {

@@ -350,6 +350,18 @@ export function registerSelectionRangeProvider(languageId, provider) {
     return modes.SelectionRangeRegistry.register(languageId, provider);
 }
 /**
+ * Register a document semantic tokens provider
+ */
+export function registerDocumentSemanticTokensProvider(languageId, provider) {
+    return modes.DocumentSemanticTokensProviderRegistry.register(languageId, provider);
+}
+/**
+ * Register a document range semantic tokens provider
+ */
+export function registerDocumentRangeSemanticTokensProvider(languageId, provider) {
+    return modes.DocumentRangeSemanticTokensProviderRegistry.register(languageId, provider);
+}
+/**
  * @internal
  */
 export function createMonacoLanguagesAPI() {
@@ -382,6 +394,8 @@ export function createMonacoLanguagesAPI() {
         registerFoldingRangeProvider: registerFoldingRangeProvider,
         registerDeclarationProvider: registerDeclarationProvider,
         registerSelectionRangeProvider: registerSelectionRangeProvider,
+        registerDocumentSemanticTokensProvider: registerDocumentSemanticTokensProvider,
+        registerDocumentRangeSemanticTokensProvider: registerDocumentRangeSemanticTokensProvider,
         // enums
         DocumentHighlightKind: standaloneEnums.DocumentHighlightKind,
         CompletionItemKind: standaloneEnums.CompletionItemKind,

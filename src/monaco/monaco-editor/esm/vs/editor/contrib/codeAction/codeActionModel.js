@@ -22,6 +22,7 @@ import { Range } from '../../common/core/range.js';
 import { CodeActionProviderRegistry } from '../../common/modes.js';
 import { RawContextKey } from '../../../platform/contextkey/common/contextkey.js';
 import { getCodeActions } from './codeAction.js';
+import { isEqual } from '../../../base/common/resources.js';
 export var SUPPORTED_CODE_ACTIONS = new RawContextKey('supportedCodeAction', '');
 var CodeActionOracle = /** @class */ (function (_super) {
     __extends(CodeActionOracle, _super);
@@ -47,16 +48,16 @@ var CodeActionOracle = /** @class */ (function (_super) {
         if (!model) {
             return;
         }
-        if (resources.some(function (resource) { return resource.toString() === model.uri.toString(); })) {
+        if (resources.some(function (resource) { return isEqual(resource, model.uri); })) {
             this._autoTriggerTimer.cancelAndSet(function () {
-                _this.trigger({ type: 'auto' });
+                _this.trigger({ type: 1 /* Auto */ });
             }, this._delay);
         }
     };
     CodeActionOracle.prototype._onCursorChange = function () {
         var _this = this;
         this._autoTriggerTimer.cancelAndSet(function () {
-            _this.trigger({ type: 'auto' });
+            _this.trigger({ type: 1 /* Auto */ });
         }, this._delay);
     };
     CodeActionOracle.prototype._getRangeOfMarker = function (selection) {
@@ -66,8 +67,9 @@ var CodeActionOracle = /** @class */ (function (_super) {
         }
         for (var _i = 0, _a = this._markerService.read({ resource: model.uri }); _i < _a.length; _i++) {
             var marker = _a[_i];
-            if (Range.intersectRanges(marker, selection)) {
-                return Range.lift(marker);
+            var markerRange = model.validateRange(marker);
+            if (Range.intersectRanges(markerRange, selection)) {
+                return Range.lift(markerRange);
             }
         }
         return undefined;
@@ -78,7 +80,7 @@ var CodeActionOracle = /** @class */ (function (_super) {
         }
         var model = this._editor.getModel();
         var selection = this._editor.getSelection();
-        if (selection.isEmpty() && trigger.type === 'auto') {
+        if (selection.isEmpty() && trigger.type === 1 /* Auto */) {
             var _a = selection.getPosition(), lineNumber = _a.lineNumber, column = _a.column;
             var line = model.getLineContent(lineNumber);
             if (line.length === 0) {
@@ -127,12 +129,7 @@ var CodeActionOracle = /** @class */ (function (_super) {
 }(Disposable));
 export var CodeActionsState;
 (function (CodeActionsState) {
-    CodeActionsState.Empty = new /** @class */ (function () {
-        function class_1() {
-            this.type = 0 /* Empty */;
-        }
-        return class_1;
-    }());
+    CodeActionsState.Empty = { type: 0 /* Empty */ };
     var Triggered = /** @class */ (function () {
         function Triggered(trigger, rangeOrSelection, position, actions) {
             this.trigger = trigger;
@@ -174,7 +171,7 @@ var CodeActionModel = /** @class */ (function (_super) {
         var model = this._editor.getModel();
         if (model
             && CodeActionProviderRegistry.has(model)
-            && !this._editor.getConfiguration().readOnly) {
+            && !this._editor.getOption(68 /* readOnly */)) {
             var supportedActions = [];
             for (var _i = 0, _a = CodeActionProviderRegistry.all(model); _i < _a.length; _i++) {
                 var provider = _a[_i];
@@ -189,12 +186,12 @@ var CodeActionModel = /** @class */ (function (_super) {
                     return;
                 }
                 var actions = createCancelablePromise(function (token) { return getCodeActions(model, trigger.selection, trigger.trigger, token); });
-                if (_this._progressService && trigger.trigger.type === 'manual') {
+                if (_this._progressService && trigger.trigger.type === 2 /* Manual */) {
                     _this._progressService.showWhile(actions, 250);
                 }
                 _this.setState(new CodeActionsState.Triggered(trigger.trigger, trigger.selection, trigger.position, actions));
             }, undefined);
-            this._codeActionOracle.value.trigger({ type: 'auto' });
+            this._codeActionOracle.value.trigger({ type: 1 /* Auto */ });
         }
         else {
             this._supportedCodeActions.reset();

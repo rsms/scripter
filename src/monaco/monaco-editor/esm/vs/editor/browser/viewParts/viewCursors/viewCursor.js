@@ -23,10 +23,12 @@ var ViewCursorRenderData = /** @class */ (function () {
 var ViewCursor = /** @class */ (function () {
     function ViewCursor(context) {
         this._context = context;
-        this._cursorStyle = this._context.configuration.editor.viewInfo.cursorStyle;
-        this._lineHeight = this._context.configuration.editor.lineHeight;
-        this._typicalHalfwidthCharacterWidth = this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        this._lineCursorWidth = Math.min(this._context.configuration.editor.viewInfo.cursorWidth, this._typicalHalfwidthCharacterWidth);
+        var options = this._context.configuration.options;
+        var fontInfo = options.get(34 /* fontInfo */);
+        this._cursorStyle = options.get(18 /* cursorStyle */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._typicalHalfwidthCharacterWidth = fontInfo.typicalHalfwidthCharacterWidth;
+        this._lineCursorWidth = Math.min(options.get(21 /* cursorWidth */), this._typicalHalfwidthCharacterWidth);
         this._isVisible = true;
         // Create the dom node
         this._domNode = createFastDomNode(document.createElement('div'));
@@ -34,7 +36,7 @@ var ViewCursor = /** @class */ (function () {
         this._domNode.setHeight(this._lineHeight);
         this._domNode.setTop(0);
         this._domNode.setLeft(0);
-        Configuration.applyFontInfo(this._domNode, this._context.configuration.editor.fontInfo);
+        Configuration.applyFontInfo(this._domNode, fontInfo);
         this._domNode.setDisplay('none');
         this._position = new Position(1, 1);
         this._lastRenderedContent = '';
@@ -59,17 +61,13 @@ var ViewCursor = /** @class */ (function () {
         }
     };
     ViewCursor.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.fontInfo) {
-            Configuration.applyFontInfo(this._domNode, this._context.configuration.editor.fontInfo);
-            this._typicalHalfwidthCharacterWidth = this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        }
-        if (e.viewInfo) {
-            this._cursorStyle = this._context.configuration.editor.viewInfo.cursorStyle;
-            this._lineCursorWidth = Math.min(this._context.configuration.editor.viewInfo.cursorWidth, this._typicalHalfwidthCharacterWidth);
-        }
+        var options = this._context.configuration.options;
+        var fontInfo = options.get(34 /* fontInfo */);
+        this._cursorStyle = options.get(18 /* cursorStyle */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._typicalHalfwidthCharacterWidth = fontInfo.typicalHalfwidthCharacterWidth;
+        this._lineCursorWidth = Math.min(options.get(21 /* cursorWidth */), this._typicalHalfwidthCharacterWidth);
+        Configuration.applyFontInfo(this._domNode, fontInfo);
         return true;
     };
     ViewCursor.prototype.onCursorPositionChanged = function (position) {
@@ -78,10 +76,9 @@ var ViewCursor = /** @class */ (function () {
     };
     ViewCursor.prototype._prepareRender = function (ctx) {
         var textContent = '';
-        var textContentClassName = '';
         if (this._cursorStyle === TextEditorCursorStyle.Line || this._cursorStyle === TextEditorCursorStyle.LineThin) {
             var visibleRange = ctx.visibleRangeForPosition(this._position);
-            if (!visibleRange) {
+            if (!visibleRange || visibleRange.outsideRenderedLine) {
                 // Outside viewport
                 return null;
             }
@@ -89,8 +86,9 @@ var ViewCursor = /** @class */ (function () {
             if (this._cursorStyle === TextEditorCursorStyle.Line) {
                 width_1 = dom.computeScreenAwareSize(this._lineCursorWidth > 0 ? this._lineCursorWidth : 2);
                 if (width_1 > 2) {
-                    var lineContent = this._context.model.getLineContent(this._position.lineNumber);
-                    textContent = lineContent.charAt(this._position.column - 1);
+                    var lineContent_1 = this._context.model.getLineContent(this._position.lineNumber);
+                    var nextCharLength_1 = strings.nextCharLength(lineContent_1, this._position.column - 1);
+                    textContent = lineContent_1.substr(this._position.column - 1, nextCharLength_1);
                 }
             }
             else {
@@ -102,21 +100,26 @@ var ViewCursor = /** @class */ (function () {
                 left -= 1;
             }
             var top_1 = ctx.getVerticalOffsetForLineNumber(this._position.lineNumber) - ctx.bigNumbersDelta;
-            return new ViewCursorRenderData(top_1, left, width_1, this._lineHeight, textContent, textContentClassName);
+            return new ViewCursorRenderData(top_1, left, width_1, this._lineHeight, textContent, '');
         }
-        var visibleRangeForCharacter = ctx.linesVisibleRangesForRange(new Range(this._position.lineNumber, this._position.column, this._position.lineNumber, this._position.column + 1), false);
-        if (!visibleRangeForCharacter || visibleRangeForCharacter.length === 0 || visibleRangeForCharacter[0].ranges.length === 0) {
+        var lineContent = this._context.model.getLineContent(this._position.lineNumber);
+        var nextCharLength = strings.nextCharLength(lineContent, this._position.column - 1);
+        var visibleRangeForCharacter = ctx.linesVisibleRangesForRange(new Range(this._position.lineNumber, this._position.column, this._position.lineNumber, this._position.column + nextCharLength), false);
+        if (!visibleRangeForCharacter || visibleRangeForCharacter.length === 0) {
             // Outside viewport
             return null;
         }
-        var range = visibleRangeForCharacter[0].ranges[0];
+        var firstVisibleRangeForCharacter = visibleRangeForCharacter[0];
+        if (firstVisibleRangeForCharacter.outsideRenderedLine || firstVisibleRangeForCharacter.ranges.length === 0) {
+            // Outside viewport
+            return null;
+        }
+        var range = firstVisibleRangeForCharacter.ranges[0];
         var width = range.width < 1 ? this._typicalHalfwidthCharacterWidth : range.width;
+        var textContentClassName = '';
         if (this._cursorStyle === TextEditorCursorStyle.Block) {
             var lineData = this._context.model.getViewLineData(this._position.lineNumber);
-            textContent = lineData.content.charAt(this._position.column - 1);
-            if (strings.isHighSurrogate(lineData.content.charCodeAt(this._position.column - 1))) {
-                textContent += lineData.content.charAt(this._position.column);
-            }
+            textContent = lineContent.substr(this._position.column - 1, nextCharLength);
             var tokenIndex = lineData.tokens.findTokenIndexAtOffset(this._position.column - 1);
             textContentClassName = lineData.tokens.getClassName(tokenIndex);
         }

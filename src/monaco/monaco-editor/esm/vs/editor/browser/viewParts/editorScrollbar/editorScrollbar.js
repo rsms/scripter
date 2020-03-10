@@ -24,27 +24,30 @@ var EditorScrollbar = /** @class */ (function (_super) {
     __extends(EditorScrollbar, _super);
     function EditorScrollbar(context, linesContent, viewDomNode, overflowGuardDomNode) {
         var _this = _super.call(this, context) || this;
-        var editor = _this._context.configuration.editor;
-        var configScrollbarOpts = editor.viewInfo.scrollbar;
+        var options = _this._context.configuration.options;
+        var scrollbar = options.get(78 /* scrollbar */);
+        var mouseWheelScrollSensitivity = options.get(56 /* mouseWheelScrollSensitivity */);
+        var fastScrollSensitivity = options.get(27 /* fastScrollSensitivity */);
         var scrollbarOptions = {
             listenOnDomNode: viewDomNode.domNode,
             className: 'editor-scrollable' + ' ' + getThemeTypeSelector(context.theme.type),
             useShadows: false,
             lazyRender: true,
-            vertical: configScrollbarOpts.vertical,
-            horizontal: configScrollbarOpts.horizontal,
-            verticalHasArrows: configScrollbarOpts.verticalHasArrows,
-            horizontalHasArrows: configScrollbarOpts.horizontalHasArrows,
-            verticalScrollbarSize: configScrollbarOpts.verticalScrollbarSize,
-            verticalSliderSize: configScrollbarOpts.verticalSliderSize,
-            horizontalScrollbarSize: configScrollbarOpts.horizontalScrollbarSize,
-            horizontalSliderSize: configScrollbarOpts.horizontalSliderSize,
-            handleMouseWheel: configScrollbarOpts.handleMouseWheel,
-            arrowSize: configScrollbarOpts.arrowSize,
-            mouseWheelScrollSensitivity: configScrollbarOpts.mouseWheelScrollSensitivity,
-            fastScrollSensitivity: configScrollbarOpts.fastScrollSensitivity,
+            vertical: scrollbar.vertical,
+            horizontal: scrollbar.horizontal,
+            verticalHasArrows: scrollbar.verticalHasArrows,
+            horizontalHasArrows: scrollbar.horizontalHasArrows,
+            verticalScrollbarSize: scrollbar.verticalScrollbarSize,
+            verticalSliderSize: scrollbar.verticalSliderSize,
+            horizontalScrollbarSize: scrollbar.horizontalScrollbarSize,
+            horizontalSliderSize: scrollbar.horizontalSliderSize,
+            handleMouseWheel: scrollbar.handleMouseWheel,
+            alwaysConsumeMouseWheel: scrollbar.alwaysConsumeMouseWheel,
+            arrowSize: scrollbar.arrowSize,
+            mouseWheelScrollSensitivity: mouseWheelScrollSensitivity,
+            fastScrollSensitivity: fastScrollSensitivity,
         };
-        _this.scrollbar = _this._register(new SmoothScrollableElement(linesContent.domNode, scrollbarOptions, _this._context.viewLayout.scrollable));
+        _this.scrollbar = _this._register(new SmoothScrollableElement(linesContent.domNode, scrollbarOptions, _this._context.viewLayout.getScrollable()));
         PartFingerprints.write(_this.scrollbar.getDomNode(), 5 /* ScrollableElement */);
         _this.scrollbarDomNode = createFastDomNode(_this.scrollbar.getDomNode());
         _this.scrollbarDomNode.setPosition('absolute');
@@ -81,16 +84,18 @@ var EditorScrollbar = /** @class */ (function (_super) {
         _super.prototype.dispose.call(this);
     };
     EditorScrollbar.prototype._setLayout = function () {
-        var layoutInfo = this._context.configuration.editor.layoutInfo;
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
         this.scrollbarDomNode.setLeft(layoutInfo.contentLeft);
-        var side = this._context.configuration.editor.viewInfo.minimap.side;
+        var minimap = options.get(54 /* minimap */);
+        var side = minimap.side;
         if (side === 'right') {
             this.scrollbarDomNode.setWidth(layoutInfo.contentWidth + layoutInfo.minimapWidth);
         }
         else {
             this.scrollbarDomNode.setWidth(layoutInfo.contentWidth);
         }
-        this.scrollbarDomNode.setHeight(layoutInfo.contentHeight);
+        this.scrollbarDomNode.setHeight(layoutInfo.height);
     };
     EditorScrollbar.prototype.getOverviewRulerLayoutInfo = function () {
         return this.scrollbar.getOverviewRulerLayoutInfo();
@@ -103,16 +108,21 @@ var EditorScrollbar = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     EditorScrollbar.prototype.onConfigurationChanged = function (e) {
-        if (e.viewInfo) {
-            var editor = this._context.configuration.editor;
+        if (e.hasChanged(78 /* scrollbar */)
+            || e.hasChanged(56 /* mouseWheelScrollSensitivity */)
+            || e.hasChanged(27 /* fastScrollSensitivity */)) {
+            var options = this._context.configuration.options;
+            var scrollbar = options.get(78 /* scrollbar */);
+            var mouseWheelScrollSensitivity = options.get(56 /* mouseWheelScrollSensitivity */);
+            var fastScrollSensitivity = options.get(27 /* fastScrollSensitivity */);
             var newOpts = {
-                handleMouseWheel: editor.viewInfo.scrollbar.handleMouseWheel,
-                mouseWheelScrollSensitivity: editor.viewInfo.scrollbar.mouseWheelScrollSensitivity,
-                fastScrollSensitivity: editor.viewInfo.scrollbar.fastScrollSensitivity
+                handleMouseWheel: scrollbar.handleMouseWheel,
+                mouseWheelScrollSensitivity: mouseWheelScrollSensitivity,
+                fastScrollSensitivity: fastScrollSensitivity
             };
             this.scrollbar.updateOptions(newOpts);
         }
-        if (e.layoutInfo) {
+        if (e.hasChanged(107 /* layoutInfo */)) {
             this._setLayout();
         }
         return true;

@@ -294,17 +294,10 @@ var FindInput = /** @class */ (function (_super) {
         dom.addClass(this.domNode, 'highlight-' + (this._lastHighlightFindOptions));
     };
     FindInput.prototype.validate = function () {
-        if (this.inputBox) {
-            this.inputBox.validate();
-        }
+        this.inputBox.validate();
     };
     FindInput.prototype.clearMessage = function () {
-        if (this.inputBox) {
-            this.inputBox.hideMessage();
-        }
-    };
-    FindInput.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
+        this.inputBox.hideMessage();
     };
     return FindInput;
 }(Widget));

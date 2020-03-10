@@ -2,15 +2,16 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { EDITOR_DEFAULTS } from './common/config/editorOptions.js';
+import { EditorOptions } from './common/config/editorOptions.js';
 import { createMonacoBaseAPI } from './common/standalone/standaloneBase.js';
 import { createMonacoEditorAPI } from './standalone/browser/standaloneEditor.js';
 import { createMonacoLanguagesAPI } from './standalone/browser/standaloneLanguages.js';
 var global = self;
 // Set defaults for standalone editor
-EDITOR_DEFAULTS.wrappingIndent = 0 /* None */;
-EDITOR_DEFAULTS.viewInfo.glyphMargin = false;
-EDITOR_DEFAULTS.autoIndent = false;
+EditorOptions.wrappingIndent.defaultValue = 0 /* None */;
+EditorOptions.glyphMargin.defaultValue = false;
+EditorOptions.autoIndent.defaultValue = 3 /* Advanced */;
+EditorOptions.overviewRulerLanes.defaultValue = 2;
 var api = createMonacoBaseAPI();
 api.editor = createMonacoEditorAPI();
 api.languages = createMonacoLanguagesAPI();

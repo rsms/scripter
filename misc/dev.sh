@@ -52,22 +52,16 @@ function cleanup {
 trap cleanup EXIT
 
 # build monaco if needed
-# dep_pids=()
-set +e
-spawn_monaco_build "$rootdir/build/dev"
-monaco_build_pid=$?
-set -e
-if [[ "$monaco_build_pid" != "0" ]]; then
-  pids+=( $monaco_build_pid )
+docs_dir=$rootdir/docs
+monaco_build_dir=$docs_dir/$monaco_build_basedir
+if ! [ -d "$monaco_build_dir" ] || has_newer "src/monaco" "$monaco_build_dir/monaco.js"; then
+  bash misc/build-monaco.sh
 fi
-# spawn_monaco_build "$rootdir/build/dev" || true
-# # wait for dep build processes to finish before continuing
-# for pid in ${dep_pids[*]}; do wait $pid; done
 
 # symlink monaco
 rm -rf build/dev/monaco-*
 pushd build/dev >/dev/null
-ln -s $(ls -d ../../docs/monaco-*)
+ln -s $(ls -d "../../docs/$monaco_build_basedir")
 popd >/dev/null
 
 # figma-plugin

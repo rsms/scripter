@@ -13,7 +13,7 @@ export function tokenizeToString(text, tokenizationSupport) {
     if (tokenizationSupport === void 0) { tokenizationSupport = fallback; }
     return _tokenizeToString(text, tokenizationSupport || fallback);
 }
-export function tokenizeLineToHTML(text, viewLineTokens, colorMap, startOffset, endOffset, tabSize) {
+export function tokenizeLineToHTML(text, viewLineTokens, colorMap, startOffset, endOffset, tabSize, useNbsp) {
     var result = "<div>";
     var charIndex = startOffset;
     var tabsCharDelta = 0;
@@ -30,7 +30,7 @@ export function tokenizeLineToHTML(text, viewLineTokens, colorMap, startOffset, 
                     var insertSpacesCount = tabSize - (charIndex + tabsCharDelta) % tabSize;
                     tabsCharDelta += insertSpacesCount - 1;
                     while (insertSpacesCount > 0) {
-                        partContent += '&nbsp;';
+                        partContent += useNbsp ? '&#160;' : ' ';
                         insertSpacesCount--;
                     }
                     break;
@@ -55,7 +55,7 @@ export function tokenizeLineToHTML(text, viewLineTokens, colorMap, startOffset, 
                     partContent += '&#8203';
                     break;
                 case 32 /* Space */:
-                    partContent += '&nbsp;';
+                    partContent += useNbsp ? '&#160;' : ' ';
                     break;
                 default:
                     partContent += String.fromCharCode(charCode);

@@ -24,8 +24,9 @@ var DecorationsOverlay = /** @class */ (function (_super) {
     function DecorationsOverlay(context) {
         var _this = _super.call(this) || this;
         _this._context = context;
-        _this._lineHeight = _this._context.configuration.editor.lineHeight;
-        _this._typicalHalfwidthCharacterWidth = _this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
+        var options = _this._context.configuration.options;
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._typicalHalfwidthCharacterWidth = options.get(34 /* fontInfo */).typicalHalfwidthCharacterWidth;
         _this._renderResult = null;
         _this._context.addEventHandler(_this);
         return _this;
@@ -37,12 +38,9 @@ var DecorationsOverlay = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     DecorationsOverlay.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.fontInfo) {
-            this._typicalHalfwidthCharacterWidth = this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        }
+        var options = this._context.configuration.options;
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._typicalHalfwidthCharacterWidth = options.get(34 /* fontInfo */).typicalHalfwidthCharacterWidth;
         return true;
     };
     DecorationsOverlay.prototype.onDecorationsChanged = function (e) {
@@ -170,6 +168,9 @@ var DecorationsOverlay = /** @class */ (function (_super) {
         }
         for (var j = 0, lenJ = linesVisibleRanges.length; j < lenJ; j++) {
             var lineVisibleRanges = linesVisibleRanges[j];
+            if (lineVisibleRanges.outsideRenderedLine) {
+                continue;
+            }
             var lineIndex = lineVisibleRanges.lineNumber - visibleStartLineNumber;
             if (showIfCollapsed && lineVisibleRanges.ranges.length === 1) {
                 var singleVisibleRange = lineVisibleRanges.ranges[0];

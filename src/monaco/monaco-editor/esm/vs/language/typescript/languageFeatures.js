@@ -97,17 +97,15 @@ var Adapter = /** @class */ (function () {
     function Adapter(_worker) {
         this._worker = _worker;
     }
-    Adapter.prototype._positionToOffset = function (uri, position) {
-        var model = monaco.editor.getModel(uri);
-        return model.getOffsetAt(position);
-    };
-    Adapter.prototype._offsetToPosition = function (uri, offset) {
-        var model = monaco.editor.getModel(uri);
-        return model.getPositionAt(offset);
-    };
-    Adapter.prototype._textSpanToRange = function (uri, span) {
-        var p1 = this._offsetToPosition(uri, span.start);
-        var p2 = this._offsetToPosition(uri, span.start + span.length);
+    // protected _positionToOffset(model: monaco.editor.ITextModel, position: monaco.IPosition): number {
+    // 	return model.getOffsetAt(position);
+    // }
+    // protected _offsetToPosition(model: monaco.editor.ITextModel, offset: number): monaco.IPosition {
+    // 	return model.getPositionAt(offset);
+    // }
+    Adapter.prototype._textSpanToRange = function (model, span) {
+        var p1 = model.getPositionAt(span.start);
+        var p2 = model.getPositionAt(span.start + span.length);
         var startLineNumber = p1.lineNumber, startColumn = p1.column;
         var endLineNumber = p2.lineNumber, endColumn = p2.column;
         return { startLineNumber: startLineNumber, startColumn: startColumn, endLineNumber: endLineNumber, endColumn: endColumn };
@@ -116,9 +114,16 @@ var Adapter = /** @class */ (function () {
 }());
 export { Adapter };
 // --- diagnostics --- ---
-var DiagnostcsAdapter = /** @class */ (function (_super) {
-    __extends(DiagnostcsAdapter, _super);
-    function DiagnostcsAdapter(_defaults, _selector, worker) {
+var DiagnosticCategory;
+(function (DiagnosticCategory) {
+    DiagnosticCategory[DiagnosticCategory["Warning"] = 0] = "Warning";
+    DiagnosticCategory[DiagnosticCategory["Error"] = 1] = "Error";
+    DiagnosticCategory[DiagnosticCategory["Suggestion"] = 2] = "Suggestion";
+    DiagnosticCategory[DiagnosticCategory["Message"] = 3] = "Message";
+})(DiagnosticCategory || (DiagnosticCategory = {}));
+var DiagnosticsAdapter = /** @class */ (function (_super) {
+    __extends(DiagnosticsAdapter, _super);
+    function DiagnosticsAdapter(_defaults, _selector, worker) {
         var _this = _super.call(this, worker) || this;
         _this._defaults = _defaults;
         _this._selector = _selector;
@@ -131,7 +136,7 @@ var DiagnostcsAdapter = /** @class */ (function (_super) {
             var handle;
             var changeSubscription = model.onDidChangeContent(function () {
                 clearTimeout(handle);
-                handle = setTimeout(function () { return _this._doValidate(model.uri); }, 500);
+                handle = setTimeout(function () { return _this._doValidate(model); }, 500);
             });
             _this._listener[model.uri.toString()] = {
                 dispose: function () {
@@ -139,7 +144,7 @@ var DiagnostcsAdapter = /** @class */ (function (_super) {
                     clearTimeout(handle);
                 }
             };
-            _this._doValidate(model.uri);
+            _this._doValidate(model);
         };
         var onModelRemoved = function (model) {
             monaco.editor.setModelMarkers(model, _this._selector, []);
@@ -176,54 +181,109 @@ var DiagnostcsAdapter = /** @class */ (function (_super) {
         monaco.editor.getModels().forEach(onModelAdd);
         return _this;
     }
-    DiagnostcsAdapter.prototype.dispose = function () {
+    DiagnosticsAdapter.prototype.dispose = function () {
         this._disposables.forEach(function (d) { return d && d.dispose(); });
         this._disposables = [];
     };
-    DiagnostcsAdapter.prototype._doValidate = function (resource) {
-        var _this = this;
-        this._worker(resource).then(function (worker) {
-            if (!monaco.editor.getModel(resource)) {
-                // model was disposed in the meantime
-                return null;
-            }
-            var promises = [];
-            var _a = _this._defaults.getDiagnosticsOptions(), noSyntaxValidation = _a.noSyntaxValidation, noSemanticValidation = _a.noSemanticValidation;
-            if (!noSyntaxValidation) {
-                promises.push(worker.getSyntacticDiagnostics(resource.toString()));
-            }
-            if (!noSemanticValidation) {
-                promises.push(worker.getSemanticDiagnostics(resource.toString()));
-            }
-            return Promise.all(promises);
-        }).then(function (diagnostics) {
-            if (!diagnostics || !monaco.editor.getModel(resource)) {
-                // model was disposed in the meantime
-                return null;
-            }
-            var markers = diagnostics
-                .reduce(function (p, c) { return c.concat(p); }, [])
-                .map(function (d) { return _this._convertDiagnostics(resource, d); });
-            monaco.editor.setModelMarkers(monaco.editor.getModel(resource), _this._selector, markers);
-        }).then(undefined, function (err) {
-            console.error(err);
+    DiagnosticsAdapter.prototype._doValidate = function (model) {
+        return __awaiter(this, void 0, void 0, function () {
+            var worker, promises, _a, noSyntaxValidation, noSemanticValidation, noSuggestionDiagnostics, diagnostics, markers;
+            var _this = this;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4 /*yield*/, this._worker(model.uri)];
+                    case 1:
+                        worker = _b.sent();
+                        if (model.isDisposed()) {
+                            // model was disposed in the meantime
+                            return [2 /*return*/];
+                        }
+                        promises = [];
+                        _a = this._defaults.getDiagnosticsOptions(), noSyntaxValidation = _a.noSyntaxValidation, noSemanticValidation = _a.noSemanticValidation, noSuggestionDiagnostics = _a.noSuggestionDiagnostics;
+                        if (!noSyntaxValidation) {
+                            promises.push(worker.getSyntacticDiagnostics(model.uri.toString()));
+                        }
+                        if (!noSemanticValidation) {
+                            promises.push(worker.getSemanticDiagnostics(model.uri.toString()));
+                        }
+                        if (!noSuggestionDiagnostics) {
+                            promises.push(worker.getSuggestionDiagnostics(model.uri.toString()));
+                        }
+                        return [4 /*yield*/, Promise.all(promises)];
+                    case 2:
+                        diagnostics = _b.sent();
+                        if (!diagnostics || model.isDisposed()) {
+                            // model was disposed in the meantime
+                            return [2 /*return*/];
+                        }
+                        markers = diagnostics
+                            .reduce(function (p, c) { return c.concat(p); }, [])
+                            .filter(function (d) { return (_this._defaults.getDiagnosticsOptions().diagnosticCodesToIgnore || []).indexOf(d.code) === -1; })
+                            .map(function (d) { return _this._convertDiagnostics(model, d); });
+                        monaco.editor.setModelMarkers(model, this._selector, markers);
+                        return [2 /*return*/];
+                }
+            });
         });
     };
-    DiagnostcsAdapter.prototype._convertDiagnostics = function (resource, diag) {
-        var _a = this._offsetToPosition(resource, diag.start), startLineNumber = _a.lineNumber, startColumn = _a.column;
-        var _b = this._offsetToPosition(resource, diag.start + diag.length), endLineNumber = _b.lineNumber, endColumn = _b.column;
+    DiagnosticsAdapter.prototype._convertDiagnostics = function (model, diag) {
+        var diagStart = diag.start || 0;
+        var diagLength = diag.length || 1;
+        var _a = model.getPositionAt(diagStart), startLineNumber = _a.lineNumber, startColumn = _a.column;
+        var _b = model.getPositionAt(diagStart + diagLength), endLineNumber = _b.lineNumber, endColumn = _b.column;
         return {
-            severity: monaco.MarkerSeverity.Error,
+            severity: this._tsDiagnosticCategoryToMarkerSeverity(diag.category),
             startLineNumber: startLineNumber,
             startColumn: startColumn,
             endLineNumber: endLineNumber,
             endColumn: endColumn,
-            message: flattenDiagnosticMessageText(diag.messageText, '\n')
+            message: flattenDiagnosticMessageText(diag.messageText, '\n'),
+            code: diag.code.toString(),
+            tags: diag.reportsUnnecessary ? [monaco.MarkerTag.Unnecessary] : [],
+            relatedInformation: this._convertRelatedInformation(model, diag.relatedInformation),
         };
     };
-    return DiagnostcsAdapter;
+    DiagnosticsAdapter.prototype._convertRelatedInformation = function (model, relatedInformation) {
+        if (!relatedInformation) {
+            return;
+        }
+        var result = [];
+        relatedInformation.forEach(function (info) {
+            var relatedResource = model;
+            if (info.file) {
+                var relatedResourceUri = monaco.Uri.parse(info.file.fileName);
+                relatedResource = monaco.editor.getModel(relatedResourceUri);
+            }
+            if (!relatedResource) {
+                return;
+            }
+            var infoStart = info.start || 0;
+            var infoLength = info.length || 1;
+            var _a = relatedResource.getPositionAt(infoStart), startLineNumber = _a.lineNumber, startColumn = _a.column;
+            var _b = relatedResource.getPositionAt(infoStart + infoLength), endLineNumber = _b.lineNumber, endColumn = _b.column;
+            result.push({
+                resource: relatedResource.uri,
+                startLineNumber: startLineNumber,
+                startColumn: startColumn,
+                endLineNumber: endLineNumber,
+                endColumn: endColumn,
+                message: flattenDiagnosticMessageText(info.messageText, '\n')
+            });
+        });
+        return result;
+    };
+    DiagnosticsAdapter.prototype._tsDiagnosticCategoryToMarkerSeverity = function (category) {
+        switch (category) {
+            case DiagnosticCategory.Error: return monaco.MarkerSeverity.Error;
+            case DiagnosticCategory.Message: return monaco.MarkerSeverity.Info;
+            case DiagnosticCategory.Warning: return monaco.MarkerSeverity.Warning;
+            case DiagnosticCategory.Suggestion: return monaco.MarkerSeverity.Hint;
+        }
+        return monaco.MarkerSeverity.Info;
+    };
+    return DiagnosticsAdapter;
 }(Adapter));
-export { DiagnostcsAdapter };
+export { DiagnosticsAdapter };
 var SuggestAdapter = /** @class */ (function (_super) {
     __extends(SuggestAdapter, _super);
     function SuggestAdapter() {
@@ -237,59 +297,79 @@ var SuggestAdapter = /** @class */ (function (_super) {
         configurable: true
     });
     SuggestAdapter.prototype.provideCompletionItems = function (model, position, _context, token) {
-        var wordInfo = model.getWordUntilPosition(position);
-        var wordRange = new Range(position.lineNumber, wordInfo.startColumn, position.lineNumber, wordInfo.endColumn);
-        var resource = model.uri;
-        var offset = this._positionToOffset(resource, position);
-        return this._worker(resource).then(function (worker) {
-            return worker.getCompletionsAtPosition(resource.toString(), offset);
-        }).then(function (info) {
-            if (!info) {
-                return;
-            }
-            var suggestions = info.entries.map(function (entry) {
-                var range = wordRange;
-                if (entry.replacementSpan) {
-                    var p1 = model.getPositionAt(entry.replacementSpan.start);
-                    var p2 = model.getPositionAt(entry.replacementSpan.start + entry.replacementSpan.length);
-                    range = new Range(p1.lineNumber, p1.column, p2.lineNumber, p2.column);
+        return __awaiter(this, void 0, void 0, function () {
+            var wordInfo, wordRange, resource, offset, worker, info, suggestions;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        wordInfo = model.getWordUntilPosition(position);
+                        wordRange = new Range(position.lineNumber, wordInfo.startColumn, position.lineNumber, wordInfo.endColumn);
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getCompletionsAtPosition(resource.toString(), offset)];
+                    case 2:
+                        info = _a.sent();
+                        if (!info || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        suggestions = info.entries.map(function (entry) {
+                            var range = wordRange;
+                            if (entry.replacementSpan) {
+                                var p1 = model.getPositionAt(entry.replacementSpan.start);
+                                var p2 = model.getPositionAt(entry.replacementSpan.start + entry.replacementSpan.length);
+                                range = new Range(p1.lineNumber, p1.column, p2.lineNumber, p2.column);
+                            }
+                            return {
+                                uri: resource,
+                                position: position,
+                                range: range,
+                                label: entry.name,
+                                insertText: entry.name,
+                                sortText: entry.sortText,
+                                kind: SuggestAdapter.convertKind(entry.kind)
+                            };
+                        });
+                        return [2 /*return*/, {
+                                suggestions: suggestions
+                            }];
                 }
-                return {
-                    uri: resource,
-                    position: position,
-                    range: range,
-                    label: entry.name,
-                    insertText: entry.name,
-                    sortText: entry.sortText,
-                    kind: SuggestAdapter.convertKind(entry.kind)
-                };
             });
-            return {
-                suggestions: suggestions
-            };
         });
     };
-    SuggestAdapter.prototype.resolveCompletionItem = function (_model, _position, item, token) {
-        var _this = this;
-        var myItem = item;
-        var resource = myItem.uri;
-        var position = myItem.position;
-        return this._worker(resource).then(function (worker) {
-            return worker.getCompletionEntryDetails(resource.toString(), _this._positionToOffset(resource, position), myItem.label);
-        }).then(function (details) {
-            if (!details) {
-                return myItem;
-            }
-            return {
-                uri: resource,
-                position: position,
-                label: details.name,
-                kind: SuggestAdapter.convertKind(details.kind),
-                detail: displayPartsToString(details.displayParts),
-                documentation: {
-                    value: displayPartsToString(details.documentation)
+    SuggestAdapter.prototype.resolveCompletionItem = function (model, _position, item, token) {
+        return __awaiter(this, void 0, void 0, function () {
+            var myItem, resource, position, offset, worker, details;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        myItem = item;
+                        resource = myItem.uri;
+                        position = myItem.position;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getCompletionEntryDetails(resource.toString(), offset, myItem.label)];
+                    case 2:
+                        details = _a.sent();
+                        if (!details || model.isDisposed()) {
+                            return [2 /*return*/, myItem];
+                        }
+                        return [2 /*return*/, {
+                                uri: resource,
+                                position: position,
+                                label: details.name,
+                                kind: SuggestAdapter.convertKind(details.kind),
+                                detail: displayPartsToString(details.displayParts),
+                                documentation: {
+                                    value: displayPartsToString(details.documentation)
+                                }
+                            }];
                 }
-            };
+            });
         });
     };
     SuggestAdapter.convertKind = function (kind) {
@@ -334,42 +414,55 @@ var SignatureHelpAdapter = /** @class */ (function (_super) {
         return _this;
     }
     SignatureHelpAdapter.prototype.provideSignatureHelp = function (model, position, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) { return worker.getSignatureHelpItems(resource.toString(), _this._positionToOffset(resource, position)); }).then(function (info) {
-            if (!info) {
-                return;
-            }
-            var ret = {
-                activeSignature: info.selectedItemIndex,
-                activeParameter: info.argumentIndex,
-                signatures: []
-            };
-            info.items.forEach(function (item) {
-                var signature = {
-                    label: '',
-                    parameters: []
-                };
-                signature.label += displayPartsToString(item.prefixDisplayParts);
-                item.parameters.forEach(function (p, i, a) {
-                    var label = displayPartsToString(p.displayParts);
-                    var parameter = {
-                        label: label,
-                        documentation: displayPartsToString(p.documentation)
-                    };
-                    signature.label += label;
-                    signature.parameters.push(parameter);
-                    if (i < a.length - 1) {
-                        signature.label += displayPartsToString(item.separatorDisplayParts);
-                    }
-                });
-                signature.label += displayPartsToString(item.suffixDisplayParts);
-                ret.signatures.push(signature);
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, info, ret;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getSignatureHelpItems(resource.toString(), offset)];
+                    case 2:
+                        info = _a.sent();
+                        if (!info || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        ret = {
+                            activeSignature: info.selectedItemIndex,
+                            activeParameter: info.argumentIndex,
+                            signatures: []
+                        };
+                        info.items.forEach(function (item) {
+                            var signature = {
+                                label: '',
+                                parameters: []
+                            };
+                            signature.documentation = displayPartsToString(item.documentation);
+                            signature.label += displayPartsToString(item.prefixDisplayParts);
+                            item.parameters.forEach(function (p, i, a) {
+                                var label = displayPartsToString(p.displayParts);
+                                var parameter = {
+                                    label: label,
+                                    documentation: displayPartsToString(p.documentation)
+                                };
+                                signature.label += label;
+                                signature.parameters.push(parameter);
+                                if (i < a.length - 1) {
+                                    signature.label += displayPartsToString(item.separatorDisplayParts);
+                                }
+                            });
+                            signature.label += displayPartsToString(item.suffixDisplayParts);
+                            ret.signatures.push(signature);
+                        });
+                        return [2 /*return*/, {
+                                value: ret,
+                                dispose: function () { }
+                            }];
+                }
             });
-            return {
-                value: ret,
-                dispose: function () { }
-            };
         });
     };
     return SignatureHelpAdapter;
@@ -382,32 +475,41 @@ var QuickInfoAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     QuickInfoAdapter.prototype.provideHover = function (model, position, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getQuickInfoAtPosition(resource.toString(), _this._positionToOffset(resource, position));
-        }).then(function (info) {
-            if (!info) {
-                return;
-            }
-            var documentation = displayPartsToString(info.documentation);
-            var tags = info.tags ? info.tags.map(function (tag) {
-                var label = "*@" + tag.name + "*";
-                if (!tag.text) {
-                    return label;
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, info, documentation, tags, contents;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getQuickInfoAtPosition(resource.toString(), offset)];
+                    case 2:
+                        info = _a.sent();
+                        if (!info || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        documentation = displayPartsToString(info.documentation);
+                        tags = info.tags ? info.tags.map(function (tag) {
+                            var label = "*@" + tag.name + "*";
+                            if (!tag.text) {
+                                return label;
+                            }
+                            return label + (tag.text.match(/\r\n|\n/g) ? ' \n' + tag.text : " - " + tag.text);
+                        }).join('  \n\n') : '';
+                        contents = displayPartsToString(info.displayParts);
+                        return [2 /*return*/, {
+                                range: this._textSpanToRange(model, info.textSpan),
+                                contents: [{
+                                        value: '```js\n' + contents + '\n```\n'
+                                    }, {
+                                        value: documentation + (tags ? '\n\n' + tags : '')
+                                    }]
+                            }];
                 }
-                return label + (tag.text.match(/\r\n|\n/g) ? ' \n' + tag.text : " - " + tag.text);
-            })
-                .join('  \n\n') : '';
-            var contents = displayPartsToString(info.displayParts);
-            return {
-                range: _this._textSpanToRange(resource, info.textSpan),
-                contents: [{
-                        value: '```js\n' + contents + '\n```\n'
-                    }, {
-                        value: documentation + (tags ? '\n\n' + tags : '')
-                    }]
-            };
+            });
         });
     };
     return QuickInfoAdapter;
@@ -420,19 +522,30 @@ var OccurrencesAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     OccurrencesAdapter.prototype.provideDocumentHighlights = function (model, position, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getOccurrencesAtPosition(resource.toString(), _this._positionToOffset(resource, position));
-        }).then(function (entries) {
-            if (!entries) {
-                return;
-            }
-            return entries.map(function (entry) {
-                return {
-                    range: _this._textSpanToRange(resource, entry.textSpan),
-                    kind: entry.isWriteAccess ? monaco.languages.DocumentHighlightKind.Write : monaco.languages.DocumentHighlightKind.Text
-                };
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, entries;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getOccurrencesAtPosition(resource.toString(), offset)];
+                    case 2:
+                        entries = _a.sent();
+                        if (!entries || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        return [2 /*return*/, entries.map(function (entry) {
+                                return {
+                                    range: _this._textSpanToRange(model, entry.textSpan),
+                                    kind: entry.isWriteAccess ? monaco.languages.DocumentHighlightKind.Write : monaco.languages.DocumentHighlightKind.Text
+                                };
+                            })];
+                }
             });
         });
     };
@@ -446,26 +559,37 @@ var DefinitionAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     DefinitionAdapter.prototype.provideDefinition = function (model, position, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getDefinitionAtPosition(resource.toString(), _this._positionToOffset(resource, position));
-        }).then(function (entries) {
-            if (!entries) {
-                return;
-            }
-            var result = [];
-            for (var _i = 0, entries_1 = entries; _i < entries_1.length; _i++) {
-                var entry = entries_1[_i];
-                var uri = Uri.parse(entry.fileName);
-                if (monaco.editor.getModel(uri)) {
-                    result.push({
-                        uri: uri,
-                        range: _this._textSpanToRange(uri, entry.textSpan)
-                    });
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, entries, result, _i, entries_1, entry, uri, refModel;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getDefinitionAtPosition(resource.toString(), offset)];
+                    case 2:
+                        entries = _a.sent();
+                        if (!entries || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        result = [];
+                        for (_i = 0, entries_1 = entries; _i < entries_1.length; _i++) {
+                            entry = entries_1[_i];
+                            uri = Uri.parse(entry.fileName);
+                            refModel = monaco.editor.getModel(uri);
+                            if (refModel) {
+                                result.push({
+                                    uri: uri,
+                                    range: this._textSpanToRange(refModel, entry.textSpan)
+                                });
+                            }
+                        }
+                        return [2 /*return*/, result];
                 }
-            }
-            return result;
+            });
         });
     };
     return DefinitionAdapter;
@@ -478,26 +602,37 @@ var ReferenceAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     ReferenceAdapter.prototype.provideReferences = function (model, position, context, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getReferencesAtPosition(resource.toString(), _this._positionToOffset(resource, position));
-        }).then(function (entries) {
-            if (!entries) {
-                return;
-            }
-            var result = [];
-            for (var _i = 0, entries_2 = entries; _i < entries_2.length; _i++) {
-                var entry = entries_2[_i];
-                var uri = Uri.parse(entry.fileName);
-                if (monaco.editor.getModel(uri)) {
-                    result.push({
-                        uri: uri,
-                        range: _this._textSpanToRange(uri, entry.textSpan)
-                    });
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, entries, result, _i, entries_2, entry, uri, refModel;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getReferencesAtPosition(resource.toString(), offset)];
+                    case 2:
+                        entries = _a.sent();
+                        if (!entries || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        result = [];
+                        for (_i = 0, entries_2 = entries; _i < entries_2.length; _i++) {
+                            entry = entries_2[_i];
+                            uri = Uri.parse(entry.fileName);
+                            refModel = monaco.editor.getModel(uri);
+                            if (refModel) {
+                                result.push({
+                                    uri: uri,
+                                    range: this._textSpanToRange(refModel, entry.textSpan)
+                                });
+                            }
+                        }
+                        return [2 /*return*/, result];
                 }
-            }
-            return result;
+            });
         });
     };
     return ReferenceAdapter;
@@ -510,33 +645,45 @@ var OutlineAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     OutlineAdapter.prototype.provideDocumentSymbols = function (model, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) { return worker.getNavigationBarItems(resource.toString()); }).then(function (items) {
-            if (!items) {
-                return;
-            }
-            var convert = function (bucket, item, containerLabel) {
-                var result = {
-                    name: item.text,
-                    detail: '',
-                    kind: (outlineTypeTable[item.kind] || monaco.languages.SymbolKind.Variable),
-                    range: _this._textSpanToRange(resource, item.spans[0]),
-                    selectionRange: _this._textSpanToRange(resource, item.spans[0]),
-                    tags: [],
-                    containerName: containerLabel
-                };
-                if (item.childItems && item.childItems.length > 0) {
-                    for (var _i = 0, _a = item.childItems; _i < _a.length; _i++) {
-                        var child = _a[_i];
-                        convert(bucket, child, result.name);
-                    }
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, worker, items, convert, result;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getNavigationBarItems(resource.toString())];
+                    case 2:
+                        items = _a.sent();
+                        if (!items || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        convert = function (bucket, item, containerLabel) {
+                            var result = {
+                                name: item.text,
+                                detail: '',
+                                kind: (outlineTypeTable[item.kind] || monaco.languages.SymbolKind.Variable),
+                                range: _this._textSpanToRange(model, item.spans[0]),
+                                selectionRange: _this._textSpanToRange(model, item.spans[0]),
+                                tags: [],
+                                containerName: containerLabel
+                            };
+                            if (item.childItems && item.childItems.length > 0) {
+                                for (var _i = 0, _a = item.childItems; _i < _a.length; _i++) {
+                                    var child = _a[_i];
+                                    convert(bucket, child, result.name);
+                                }
+                            }
+                            bucket.push(result);
+                        };
+                        result = [];
+                        items.forEach(function (item) { return convert(result, item); });
+                        return [2 /*return*/, result];
                 }
-                bucket.push(result);
-            };
-            var result = [];
-            items.forEach(function (item) { return convert(result, item); });
-            return result;
+            });
         });
     };
     return OutlineAdapter;
@@ -616,10 +763,10 @@ var FormatHelper = /** @class */ (function (_super) {
             PlaceOpenBraceOnNewLineForFunctions: false
         };
     };
-    FormatHelper.prototype._convertTextChanges = function (uri, change) {
+    FormatHelper.prototype._convertTextChanges = function (model, change) {
         return {
             text: change.newText,
-            range: this._textSpanToRange(uri, change.span)
+            range: this._textSpanToRange(model, change.span)
         };
     };
     return FormatHelper;
@@ -631,14 +778,27 @@ var FormatAdapter = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     FormatAdapter.prototype.provideDocumentRangeFormattingEdits = function (model, range, options, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getFormattingEditsForRange(resource.toString(), _this._positionToOffset(resource, { lineNumber: range.startLineNumber, column: range.startColumn }), _this._positionToOffset(resource, { lineNumber: range.endLineNumber, column: range.endColumn }), FormatHelper._convertOptions(options));
-        }).then(function (edits) {
-            if (edits) {
-                return edits.map(function (edit) { return _this._convertTextChanges(resource, edit); });
-            }
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, startOffset, endOffset, worker, edits;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        startOffset = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn });
+                        endOffset = model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn });
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getFormattingEditsForRange(resource.toString(), startOffset, endOffset, FormatHelper._convertOptions(options))];
+                    case 2:
+                        edits = _a.sent();
+                        if (!edits || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        return [2 /*return*/, edits.map(function (edit) { return _this._convertTextChanges(model, edit); })];
+                }
+            });
         });
     };
     return FormatAdapter;
@@ -657,19 +817,98 @@ var FormatOnTypeAdapter = /** @class */ (function (_super) {
         configurable: true
     });
     FormatOnTypeAdapter.prototype.provideOnTypeFormattingEdits = function (model, position, ch, options, token) {
-        var _this = this;
-        var resource = model.uri;
-        return this._worker(resource).then(function (worker) {
-            return worker.getFormattingEditsAfterKeystroke(resource.toString(), _this._positionToOffset(resource, position), ch, FormatHelper._convertOptions(options));
-        }).then(function (edits) {
-            if (edits) {
-                return edits.map(function (edit) { return _this._convertTextChanges(resource, edit); });
-            }
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, offset, worker, edits;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        offset = model.getOffsetAt(position);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getFormattingEditsAfterKeystroke(resource.toString(), offset, ch, FormatHelper._convertOptions(options))];
+                    case 2:
+                        edits = _a.sent();
+                        if (!edits || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        return [2 /*return*/, edits.map(function (edit) { return _this._convertTextChanges(model, edit); })];
+                }
+            });
         });
     };
     return FormatOnTypeAdapter;
 }(FormatHelper));
 export { FormatOnTypeAdapter };
+// --- code actions ------
+var CodeActionAdaptor = /** @class */ (function (_super) {
+    __extends(CodeActionAdaptor, _super);
+    function CodeActionAdaptor() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    CodeActionAdaptor.prototype.provideCodeActions = function (model, range, context, token) {
+        return __awaiter(this, void 0, void 0, function () {
+            var resource, start, end, formatOptions, errorCodes, worker, codeFixes, actions;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        resource = model.uri;
+                        start = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn });
+                        end = model.getOffsetAt({ lineNumber: range.endLineNumber, column: range.endColumn });
+                        formatOptions = FormatHelper._convertOptions(model.getOptions());
+                        errorCodes = context.markers.filter(function (m) { return m.code; }).map(function (m) { return m.code; }).map(Number);
+                        return [4 /*yield*/, this._worker(resource)];
+                    case 1:
+                        worker = _a.sent();
+                        return [4 /*yield*/, worker.getCodeFixesAtPosition(resource.toString(), start, end, errorCodes, formatOptions)];
+                    case 2:
+                        codeFixes = _a.sent();
+                        if (!codeFixes || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
+                        actions = codeFixes.filter(function (fix) {
+                            // Removes any 'make a new file'-type code fix
+                            return fix.changes.filter(function (change) { return change.isNewFile; }).length === 0;
+                        }).map(function (fix) {
+                            return _this._tsCodeFixActionToMonacoCodeAction(model, context, fix);
+                        });
+                        return [2 /*return*/, {
+                                actions: actions,
+                                dispose: function () { }
+                            }];
+                }
+            });
+        });
+    };
+    CodeActionAdaptor.prototype._tsCodeFixActionToMonacoCodeAction = function (model, context, codeFix) {
+        var edits = [];
+        for (var _i = 0, _a = codeFix.changes; _i < _a.length; _i++) {
+            var change = _a[_i];
+            for (var _b = 0, _c = change.textChanges; _b < _c.length; _b++) {
+                var textChange = _c[_b];
+                edits.push({
+                    resource: model.uri,
+                    edit: {
+                        range: this._textSpanToRange(model, textChange.span),
+                        text: textChange.newText
+                    }
+                });
+            }
+        }
+        var action = {
+            title: codeFix.description,
+            edit: { edits: edits },
+            diagnostics: context.markers,
+            kind: "quickfix"
+        };
+        return action;
+    };
+    return CodeActionAdaptor;
+}(FormatHelper));
+export { CodeActionAdaptor };
 // --- rename ----
 var RenameAdapter = /** @class */ (function (_super) {
     __extends(RenameAdapter, _super);
@@ -678,13 +917,13 @@ var RenameAdapter = /** @class */ (function (_super) {
     }
     RenameAdapter.prototype.provideRenameEdits = function (model, position, newName, token) {
         return __awaiter(this, void 0, void 0, function () {
-            var resource, fileName, offset, worker, renameInfo, renameLocations, fileNameToResourceTextEditMap, edits, _i, renameLocations_1, renameLocation, resourceTextEdit;
+            var resource, fileName, offset, worker, renameInfo, renameLocations, edits, _i, renameLocations_1, renameLocation;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         resource = model.uri;
                         fileName = resource.toString();
-                        offset = this._positionToOffset(resource, position);
+                        offset = model.getOffsetAt(position);
                         return [4 /*yield*/, this._worker(resource)];
                     case 1:
                         worker = _a.sent();
@@ -703,21 +942,18 @@ var RenameAdapter = /** @class */ (function (_super) {
                         return [4 /*yield*/, worker.findRenameLocations(fileName, offset, /*strings*/ false, /*comments*/ false, /*prefixAndSuffix*/ false)];
                     case 3:
                         renameLocations = _a.sent();
-                        fileNameToResourceTextEditMap = {};
+                        if (!renameLocations || model.isDisposed()) {
+                            return [2 /*return*/];
+                        }
                         edits = [];
                         for (_i = 0, renameLocations_1 = renameLocations; _i < renameLocations_1.length; _i++) {
                             renameLocation = renameLocations_1[_i];
-                            if (!(renameLocation.fileName in fileNameToResourceTextEditMap)) {
-                                resourceTextEdit = {
-                                    edits: [],
-                                    resource: monaco.Uri.parse(renameLocation.fileName)
-                                };
-                                fileNameToResourceTextEditMap[renameLocation.fileName] = resourceTextEdit;
-                                edits.push(resourceTextEdit);
-                            }
-                            fileNameToResourceTextEditMap[renameLocation.fileName].edits.push({
-                                range: this._textSpanToRange(resource, renameLocation.textSpan),
-                                text: newName
+                            edits.push({
+                                resource: monaco.Uri.parse(renameLocation.fileName),
+                                edit: {
+                                    range: this._textSpanToRange(model, renameLocation.textSpan),
+                                    text: newName
+                                }
                             });
                         }
                         return [2 /*return*/, { edits: edits }];

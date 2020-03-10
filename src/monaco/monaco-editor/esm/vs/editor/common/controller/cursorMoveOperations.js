@@ -5,6 +5,7 @@
 import { CursorColumns, SingleCursorState } from './cursorCommon.js';
 import { Position } from '../core/position.js';
 import { Range } from '../core/range.js';
+import * as strings from '../../../base/common/strings.js';
 var CursorPosition = /** @class */ (function () {
     function CursorPosition(lineNumber, column, leftoverVisibleColumns) {
         this.lineNumber = lineNumber;
@@ -17,21 +18,19 @@ export { CursorPosition };
 var MoveOperations = /** @class */ (function () {
     function MoveOperations() {
     }
-    MoveOperations.left = function (config, model, lineNumber, column) {
+    MoveOperations.leftPosition = function (model, lineNumber, column) {
         if (column > model.getLineMinColumn(lineNumber)) {
-            if (CursorColumns.isLowSurrogate(model, lineNumber, column - 2)) {
-                // character before column is a low surrogate
-                column = column - 2;
-            }
-            else {
-                column = column - 1;
-            }
+            column = column - strings.prevCharLength(model.getLineContent(lineNumber), column - 1);
         }
         else if (lineNumber > 1) {
             lineNumber = lineNumber - 1;
             column = model.getLineMaxColumn(lineNumber);
         }
-        return new CursorPosition(lineNumber, column, 0);
+        return new Position(lineNumber, column);
+    };
+    MoveOperations.left = function (config, model, lineNumber, column) {
+        var pos = MoveOperations.leftPosition(model, lineNumber, column);
+        return new CursorPosition(pos.lineNumber, pos.column, 0);
     };
     MoveOperations.moveLeft = function (config, model, cursor, inSelectionMode, noOfColumns) {
         var lineNumber, column;
@@ -47,21 +46,19 @@ var MoveOperations = /** @class */ (function () {
         }
         return cursor.move(inSelectionMode, lineNumber, column, 0);
     };
-    MoveOperations.right = function (config, model, lineNumber, column) {
+    MoveOperations.rightPosition = function (model, lineNumber, column) {
         if (column < model.getLineMaxColumn(lineNumber)) {
-            if (CursorColumns.isHighSurrogate(model, lineNumber, column - 1)) {
-                // character after column is a high surrogate
-                column = column + 2;
-            }
-            else {
-                column = column + 1;
-            }
+            column = column + strings.nextCharLength(model.getLineContent(lineNumber), column - 1);
         }
         else if (lineNumber < model.getLineCount()) {
             lineNumber = lineNumber + 1;
             column = model.getLineMinColumn(lineNumber);
         }
-        return new CursorPosition(lineNumber, column, 0);
+        return new Position(lineNumber, column);
+    };
+    MoveOperations.right = function (config, model, lineNumber, column) {
+        var pos = MoveOperations.rightPosition(model, lineNumber, column);
+        return new CursorPosition(pos.lineNumber, pos.column, 0);
     };
     MoveOperations.moveRight = function (config, model, cursor, inSelectionMode, noOfColumns) {
         var lineNumber, column;
@@ -88,16 +85,10 @@ var MoveOperations = /** @class */ (function () {
             }
             else {
                 column = Math.min(model.getLineMaxColumn(lineNumber), column);
-                if (CursorColumns.isInsideSurrogatePair(model, lineNumber, column)) {
-                    column = column - 1;
-                }
             }
         }
         else {
             column = CursorColumns.columnFromVisibleColumn2(config, model, lineNumber, currentVisibleColumn);
-            if (CursorColumns.isInsideSurrogatePair(model, lineNumber, column)) {
-                column = column - 1;
-            }
         }
         leftoverVisibleColumns = currentVisibleColumn - CursorColumns.visibleColumnFromColumn(model.getLineContent(lineNumber), column, config.tabSize);
         return new CursorPosition(lineNumber, column, leftoverVisibleColumns);
@@ -132,16 +123,10 @@ var MoveOperations = /** @class */ (function () {
             }
             else {
                 column = Math.min(model.getLineMaxColumn(lineNumber), column);
-                if (CursorColumns.isInsideSurrogatePair(model, lineNumber, column)) {
-                    column = column - 1;
-                }
             }
         }
         else {
             column = CursorColumns.columnFromVisibleColumn2(config, model, lineNumber, currentVisibleColumn);
-            if (CursorColumns.isInsideSurrogatePair(model, lineNumber, column)) {
-                column = column - 1;
-            }
         }
         leftoverVisibleColumns = currentVisibleColumn - CursorColumns.visibleColumnFromColumn(model.getLineContent(lineNumber), column, config.tabSize);
         return new CursorPosition(lineNumber, column, leftoverVisibleColumns);

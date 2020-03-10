@@ -52,9 +52,10 @@ var SelectionsOverlay = /** @class */ (function (_super) {
         var _this = _super.call(this) || this;
         _this._previousFrameVisibleRangesWithStyle = [];
         _this._context = context;
-        _this._lineHeight = _this._context.configuration.editor.lineHeight;
-        _this._roundedSelection = _this._context.configuration.editor.viewInfo.roundedSelection;
-        _this._typicalHalfwidthCharacterWidth = _this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
+        var options = _this._context.configuration.options;
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._roundedSelection = options.get(76 /* roundedSelection */);
+        _this._typicalHalfwidthCharacterWidth = options.get(34 /* fontInfo */).typicalHalfwidthCharacterWidth;
         _this._selections = [];
         _this._renderResult = null;
         _this._context.addEventHandler(_this);
@@ -67,15 +68,10 @@ var SelectionsOverlay = /** @class */ (function (_super) {
     };
     // --- begin event handlers
     SelectionsOverlay.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.viewInfo) {
-            this._roundedSelection = this._context.configuration.editor.viewInfo.roundedSelection;
-        }
-        if (e.fontInfo) {
-            this._typicalHalfwidthCharacterWidth = this._context.configuration.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        }
+        var options = this._context.configuration.options;
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._roundedSelection = options.get(76 /* roundedSelection */);
+        this._typicalHalfwidthCharacterWidth = options.get(34 /* fontInfo */).typicalHalfwidthCharacterWidth;
         return true;
     };
     SelectionsOverlay.prototype.onCursorStateChanged = function (e) {
@@ -228,18 +224,22 @@ var SelectionsOverlay = /** @class */ (function (_super) {
             + 'px;"></div>');
     };
     SelectionsOverlay.prototype._actualRenderOneSelection = function (output2, visibleStartLineNumber, hasMultipleSelections, visibleRanges) {
-        var visibleRangesHaveStyle = (visibleRanges.length > 0 && visibleRanges[0].ranges[0].startStyle);
+        if (visibleRanges.length === 0) {
+            return;
+        }
+        var visibleRangesHaveStyle = !!visibleRanges[0].ranges[0].startStyle;
         var fullLineHeight = (this._lineHeight).toString();
         var reducedLineHeight = (this._lineHeight - 1).toString();
-        var firstLineNumber = (visibleRanges.length > 0 ? visibleRanges[0].lineNumber : 0);
-        var lastLineNumber = (visibleRanges.length > 0 ? visibleRanges[visibleRanges.length - 1].lineNumber : 0);
+        var firstLineNumber = visibleRanges[0].lineNumber;
+        var lastLineNumber = visibleRanges[visibleRanges.length - 1].lineNumber;
         for (var i = 0, len = visibleRanges.length; i < len; i++) {
             var lineVisibleRanges = visibleRanges[i];
             var lineNumber = lineVisibleRanges.lineNumber;
             var lineIndex = lineNumber - visibleStartLineNumber;
             var lineHeight = hasMultipleSelections ? (lineNumber === lastLineNumber || lineNumber === firstLineNumber ? reducedLineHeight : fullLineHeight) : fullLineHeight;
             var top_1 = hasMultipleSelections ? (lineNumber === firstLineNumber ? 1 : 0) : 0;
-            var lineOutput = '';
+            var innerCornerOutput = '';
+            var restOfSelectionOutput = '';
             for (var j = 0, lenJ = lineVisibleRanges.ranges.length; j < lenJ; j++) {
                 var visibleRange = lineVisibleRanges.ranges[j];
                 if (visibleRangesHaveStyle) {
@@ -248,7 +248,7 @@ var SelectionsOverlay = /** @class */ (function (_super) {
                     if (startStyle.top === 1 /* INTERN */ || startStyle.bottom === 1 /* INTERN */) {
                         // Reverse rounded corner to the left
                         // First comes the selection (blue layer)
-                        lineOutput += this._createSelectionPiece(top_1, lineHeight, SelectionsOverlay.SELECTION_CLASS_NAME, visibleRange.left - SelectionsOverlay.ROUNDED_PIECE_WIDTH, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
+                        innerCornerOutput += this._createSelectionPiece(top_1, lineHeight, SelectionsOverlay.SELECTION_CLASS_NAME, visibleRange.left - SelectionsOverlay.ROUNDED_PIECE_WIDTH, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
                         // Second comes the background (white layer) with inverse border radius
                         var className_1 = SelectionsOverlay.EDITOR_BACKGROUND_CLASS_NAME;
                         if (startStyle.top === 1 /* INTERN */) {
@@ -257,12 +257,12 @@ var SelectionsOverlay = /** @class */ (function (_super) {
                         if (startStyle.bottom === 1 /* INTERN */) {
                             className_1 += ' ' + SelectionsOverlay.SELECTION_BOTTOM_RIGHT;
                         }
-                        lineOutput += this._createSelectionPiece(top_1, lineHeight, className_1, visibleRange.left - SelectionsOverlay.ROUNDED_PIECE_WIDTH, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
+                        innerCornerOutput += this._createSelectionPiece(top_1, lineHeight, className_1, visibleRange.left - SelectionsOverlay.ROUNDED_PIECE_WIDTH, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
                     }
                     if (endStyle.top === 1 /* INTERN */ || endStyle.bottom === 1 /* INTERN */) {
                         // Reverse rounded corner to the right
                         // First comes the selection (blue layer)
-                        lineOutput += this._createSelectionPiece(top_1, lineHeight, SelectionsOverlay.SELECTION_CLASS_NAME, visibleRange.left + visibleRange.width, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
+                        innerCornerOutput += this._createSelectionPiece(top_1, lineHeight, SelectionsOverlay.SELECTION_CLASS_NAME, visibleRange.left + visibleRange.width, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
                         // Second comes the background (white layer) with inverse border radius
                         var className_2 = SelectionsOverlay.EDITOR_BACKGROUND_CLASS_NAME;
                         if (endStyle.top === 1 /* INTERN */) {
@@ -271,7 +271,7 @@ var SelectionsOverlay = /** @class */ (function (_super) {
                         if (endStyle.bottom === 1 /* INTERN */) {
                             className_2 += ' ' + SelectionsOverlay.SELECTION_BOTTOM_LEFT;
                         }
-                        lineOutput += this._createSelectionPiece(top_1, lineHeight, className_2, visibleRange.left + visibleRange.width, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
+                        innerCornerOutput += this._createSelectionPiece(top_1, lineHeight, className_2, visibleRange.left + visibleRange.width, SelectionsOverlay.ROUNDED_PIECE_WIDTH);
                     }
                 }
                 var className = SelectionsOverlay.SELECTION_CLASS_NAME;
@@ -291,18 +291,22 @@ var SelectionsOverlay = /** @class */ (function (_super) {
                         className += ' ' + SelectionsOverlay.SELECTION_BOTTOM_RIGHT;
                     }
                 }
-                lineOutput += this._createSelectionPiece(top_1, lineHeight, className, visibleRange.left, visibleRange.width);
+                restOfSelectionOutput += this._createSelectionPiece(top_1, lineHeight, className, visibleRange.left, visibleRange.width);
             }
-            output2[lineIndex] += lineOutput;
+            output2[lineIndex][0] += innerCornerOutput;
+            output2[lineIndex][1] += restOfSelectionOutput;
         }
     };
     SelectionsOverlay.prototype.prepareRender = function (ctx) {
+        // Build HTML for inner corners separate from HTML for the rest of selections,
+        // as the inner corner HTML can interfere with that of other selections.
+        // In final render, make sure to place the inner corner HTML before the rest of selection HTML. See issue #77777.
         var output = [];
         var visibleStartLineNumber = ctx.visibleRange.startLineNumber;
         var visibleEndLineNumber = ctx.visibleRange.endLineNumber;
         for (var lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {
             var lineIndex = lineNumber - visibleStartLineNumber;
-            output[lineIndex] = '';
+            output[lineIndex] = ['', ''];
         }
         var thisFrameVisibleRangesWithStyle = [];
         for (var i = 0, len = this._selections.length; i < len; i++) {
@@ -316,7 +320,10 @@ var SelectionsOverlay = /** @class */ (function (_super) {
             this._actualRenderOneSelection(output, visibleStartLineNumber, this._selections.length > 1, visibleRangesWithStyle);
         }
         this._previousFrameVisibleRangesWithStyle = thisFrameVisibleRangesWithStyle;
-        this._renderResult = output;
+        this._renderResult = output.map(function (_a) {
+            var internalCorners = _a[0], restOfSelection = _a[1];
+            return internalCorners + restOfSelection;
+        });
     };
     SelectionsOverlay.prototype.render = function (startLineNumber, lineNumber) {
         if (!this._renderResult) {

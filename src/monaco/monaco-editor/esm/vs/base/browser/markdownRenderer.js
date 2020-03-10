@@ -13,6 +13,8 @@ import { parse } from '../common/marshalling.js';
 import { cloneAndChange } from '../common/objects.js';
 import { escape } from '../common/strings.js';
 import { URI } from '../common/uri.js';
+import { Schemas } from '../common/network.js';
+import { renderCodicons, markdownEscapeEscapedCodicons } from '../common/codicons.js';
 /**
  * Create html nodes for the given content element.
  */
@@ -43,19 +45,19 @@ export function renderMarkdown(markdown, options) {
     var _href = function (href, isDomUri) {
         var data = markdown.uris && markdown.uris[href];
         if (!data) {
-            return href;
+            return href; // no uri exists
         }
         var uri = URI.revive(data);
+        if (URI.parse(href).toString() === uri.toString()) {
+            return href; // no tranformation performed
+        }
         if (isDomUri) {
             uri = DOM.asDomUri(uri);
         }
         if (uri.query) {
             uri = uri.with({ query: _uriMassage(uri.query) });
         }
-        if (data) {
-            href = uri.toString(true);
-        }
-        return href;
+        return uri.toString(true);
     };
     // signal to code-block render that the
     // element has been created
@@ -108,7 +110,7 @@ export function renderMarkdown(markdown, options) {
         }
     };
     renderer.paragraph = function (text) {
-        return "<p>" + text + "</p>";
+        return "<p>" + (markdown.supportThemeIcons ? renderCodicons(text) : text) + "</p>";
     };
     if (options.codeBlockRenderer) {
         renderer.code = function (code, lang) {
@@ -159,18 +161,21 @@ export function renderMarkdown(markdown, options) {
         sanitize: true,
         renderer: renderer
     };
-    var allowedSchemes = ['http', 'https', 'mailto', 'data'];
+    var allowedSchemes = [Schemas.http, Schemas.https, Schemas.mailto, Schemas.data, Schemas.file, Schemas.vscodeRemote, Schemas.vscodeRemoteResource];
     if (markdown.isTrusted) {
-        allowedSchemes.push('command');
+        allowedSchemes.push(Schemas.command);
     }
-    var renderedMarkdown = marked.parse(markdown.value, markedOptions);
+    var renderedMarkdown = marked.parse(markdown.supportThemeIcons
+        ? markdownEscapeEscapedCodicons(markdown.value)
+        : markdown.value, markedOptions);
     element.innerHTML = insane(renderedMarkdown, {
         allowedSchemes: allowedSchemes,
         allowedAttributes: {
             'a': ['href', 'name', 'target', 'data-href'],
             'iframe': ['allowfullscreen', 'frameborder', 'src'],
             'img': ['src', 'title', 'alt', 'width', 'height'],
-            'div': ['class', 'data-code']
+            'div': ['class', 'data-code'],
+            'span': ['class']
         }
     });
     signalInnerHTML();

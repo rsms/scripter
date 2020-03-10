@@ -53,6 +53,18 @@ export var Iterator;
         };
     }
     Iterator.fromArray = fromArray;
+    function fromNativeIterator(it) {
+        return {
+            next: function () {
+                var result = it.next();
+                if (result.done) {
+                    return FIN;
+                }
+                return { done: false, value: result.value };
+            }
+        };
+    }
+    Iterator.fromNativeIterator = fromNativeIterator;
     function from(elements) {
         if (!elements) {
             return Iterator.empty();
@@ -139,10 +151,25 @@ export var Iterator;
         };
     }
     Iterator.concat = concat;
+    function chain(iterator) {
+        return new ChainableIterator(iterator);
+    }
+    Iterator.chain = chain;
 })(Iterator || (Iterator = {}));
+var ChainableIterator = /** @class */ (function () {
+    function ChainableIterator(it) {
+        this.it = it;
+    }
+    ChainableIterator.prototype.next = function () { return this.it.next(); };
+    return ChainableIterator;
+}());
+export { ChainableIterator };
 export function getSequenceIterator(arg) {
     if (Array.isArray(arg)) {
         return Iterator.fromArray(arg);
+    }
+    else if (!arg) {
+        return Iterator.empty();
     }
     else {
         return arg;

@@ -44,9 +44,6 @@ var ParameterHintsController = /** @class */ (function (_super) {
     ParameterHintsController.get = function (editor) {
         return editor.getContribution(ParameterHintsController.ID);
     };
-    ParameterHintsController.prototype.getId = function () {
-        return ParameterHintsController.ID;
-    };
     ParameterHintsController.prototype.cancel = function () {
         this.widget.cancel();
     };
@@ -91,7 +88,7 @@ var TriggerParameterHintsAction = /** @class */ (function (_super) {
     return TriggerParameterHintsAction;
 }(EditorAction));
 export { TriggerParameterHintsAction };
-registerEditorContribution(ParameterHintsController);
+registerEditorContribution(ParameterHintsController.ID, ParameterHintsController);
 registerEditorAction(TriggerParameterHintsAction);
 var weight = 100 /* EditorContrib */ + 75;
 var ParameterHintsCommand = EditorCommand.bindToContribution(ParameterHintsController.get);

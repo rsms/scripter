@@ -16,7 +16,6 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import * as platform from '../../../base/common/platform.js';
-import { EDITOR_FONT_DEFAULTS } from './editorOptions.js';
 import { EditorZoom } from './editorZoom.js';
 /**
  * Determined from empirical observations.
@@ -24,55 +23,9 @@ import { EditorZoom } from './editorZoom.js';
  */
 var GOLDEN_LINE_HEIGHT_RATIO = platform.isMacintosh ? 1.5 : 1.35;
 /**
- * Font settings maximum and minimum limits
+ * @internal
  */
-var MINIMUM_FONT_SIZE = 8;
-var MAXIMUM_FONT_SIZE = 100;
 var MINIMUM_LINE_HEIGHT = 8;
-var MAXIMUM_LINE_HEIGHT = 150;
-var MINIMUM_LETTER_SPACING = -5;
-var MAXIMUM_LETTER_SPACING = 20;
-function safeParseFloat(n, defaultValue) {
-    if (typeof n === 'number') {
-        return n;
-    }
-    if (typeof n === 'undefined') {
-        return defaultValue;
-    }
-    var r = parseFloat(n);
-    if (isNaN(r)) {
-        return defaultValue;
-    }
-    return r;
-}
-function safeParseInt(n, defaultValue) {
-    if (typeof n === 'number') {
-        return Math.round(n);
-    }
-    if (typeof n === 'undefined') {
-        return defaultValue;
-    }
-    var r = parseInt(n);
-    if (isNaN(r)) {
-        return defaultValue;
-    }
-    return r;
-}
-function clamp(n, min, max) {
-    if (n < min) {
-        return min;
-    }
-    if (n > max) {
-        return max;
-    }
-    return n;
-}
-function _string(value, defaultValue) {
-    if (typeof value !== 'string') {
-        return defaultValue;
-    }
-    return value;
-}
 var BareFontInfo = /** @class */ (function () {
     /**
      * @internal
@@ -82,34 +35,32 @@ var BareFontInfo = /** @class */ (function () {
         this.fontFamily = String(opts.fontFamily);
         this.fontWeight = String(opts.fontWeight);
         this.fontSize = opts.fontSize;
+        this.fontFeatureSettings = opts.fontFeatureSettings;
         this.lineHeight = opts.lineHeight | 0;
         this.letterSpacing = opts.letterSpacing;
     }
     /**
      * @internal
      */
-    BareFontInfo.createFromRawSettings = function (opts, zoomLevel, ignoreEditorZoom) {
-        if (ignoreEditorZoom === void 0) { ignoreEditorZoom = false; }
-        var fontFamily = _string(opts.fontFamily, EDITOR_FONT_DEFAULTS.fontFamily);
-        var fontWeight = _string(opts.fontWeight, EDITOR_FONT_DEFAULTS.fontWeight);
-        var fontSize = safeParseFloat(opts.fontSize, EDITOR_FONT_DEFAULTS.fontSize);
-        fontSize = clamp(fontSize, 0, MAXIMUM_FONT_SIZE);
-        if (fontSize === 0) {
-            fontSize = EDITOR_FONT_DEFAULTS.fontSize;
-        }
-        else if (fontSize < MINIMUM_FONT_SIZE) {
-            fontSize = MINIMUM_FONT_SIZE;
-        }
-        var lineHeight = safeParseInt(opts.lineHeight, 0);
-        lineHeight = clamp(lineHeight, 0, MAXIMUM_LINE_HEIGHT);
+    BareFontInfo.createFromValidatedSettings = function (options, zoomLevel, ignoreEditorZoom) {
+        var fontFamily = options.get(33 /* fontFamily */);
+        var fontWeight = options.get(37 /* fontWeight */);
+        var fontSize = options.get(36 /* fontSize */);
+        var fontFeatureSettings = options.get(35 /* fontLigatures */);
+        var lineHeight = options.get(49 /* lineHeight */);
+        var letterSpacing = options.get(46 /* letterSpacing */);
+        return BareFontInfo._create(fontFamily, fontWeight, fontSize, fontFeatureSettings, lineHeight, letterSpacing, zoomLevel, ignoreEditorZoom);
+    };
+    /**
+     * @internal
+     */
+    BareFontInfo._create = function (fontFamily, fontWeight, fontSize, fontFeatureSettings, lineHeight, letterSpacing, zoomLevel, ignoreEditorZoom) {
         if (lineHeight === 0) {
             lineHeight = Math.round(GOLDEN_LINE_HEIGHT_RATIO * fontSize);
         }
         else if (lineHeight < MINIMUM_LINE_HEIGHT) {
             lineHeight = MINIMUM_LINE_HEIGHT;
         }
-        var letterSpacing = safeParseFloat(opts.letterSpacing, 0);
-        letterSpacing = clamp(letterSpacing, MINIMUM_LETTER_SPACING, MAXIMUM_LETTER_SPACING);
         var editorZoomLevelMultiplier = 1 + (ignoreEditorZoom ? 0 : EditorZoom.getZoomLevel() * 0.1);
         fontSize *= editorZoomLevelMultiplier;
         lineHeight *= editorZoomLevelMultiplier;
@@ -118,6 +69,7 @@ var BareFontInfo = /** @class */ (function () {
             fontFamily: fontFamily,
             fontWeight: fontWeight,
             fontSize: fontSize,
+            fontFeatureSettings: fontFeatureSettings,
             lineHeight: lineHeight,
             letterSpacing: letterSpacing
         });
@@ -126,7 +78,7 @@ var BareFontInfo = /** @class */ (function () {
      * @internal
      */
     BareFontInfo.prototype.getId = function () {
-        return this.zoomLevel + '-' + this.fontFamily + '-' + this.fontWeight + '-' + this.fontSize + '-' + this.lineHeight + '-' + this.letterSpacing;
+        return this.zoomLevel + '-' + this.fontFamily + '-' + this.fontWeight + '-' + this.fontSize + '-' + this.fontFeatureSettings + '-' + this.lineHeight + '-' + this.letterSpacing;
     };
     /**
      * @internal
@@ -158,6 +110,7 @@ var FontInfo = /** @class */ (function (_super) {
         _this.typicalFullwidthCharacterWidth = opts.typicalFullwidthCharacterWidth;
         _this.canUseHalfwidthRightwardsArrow = opts.canUseHalfwidthRightwardsArrow;
         _this.spaceWidth = opts.spaceWidth;
+        _this.middotWidth = opts.middotWidth;
         _this.maxDigitWidth = opts.maxDigitWidth;
         return _this;
     }
@@ -168,12 +121,14 @@ var FontInfo = /** @class */ (function (_super) {
         return (this.fontFamily === other.fontFamily
             && this.fontWeight === other.fontWeight
             && this.fontSize === other.fontSize
+            && this.fontFeatureSettings === other.fontFeatureSettings
             && this.lineHeight === other.lineHeight
             && this.letterSpacing === other.letterSpacing
             && this.typicalHalfwidthCharacterWidth === other.typicalHalfwidthCharacterWidth
             && this.typicalFullwidthCharacterWidth === other.typicalFullwidthCharacterWidth
             && this.canUseHalfwidthRightwardsArrow === other.canUseHalfwidthRightwardsArrow
             && this.spaceWidth === other.spaceWidth
+            && this.middotWidth === other.middotWidth
             && this.maxDigitWidth === other.maxDigitWidth);
     };
     return FontInfo;

@@ -83,7 +83,7 @@ var QuickCommandAction = /** @class */ (function (_super) {
                 primary: (browser.isIE ? 512 /* Alt */ | 59 /* F1 */ : 59 /* F1 */),
                 weight: 100 /* EditorContrib */
             },
-            menuOpts: {
+            contextMenuOpts: {
                 group: 'z_commands',
                 order: 1
             }

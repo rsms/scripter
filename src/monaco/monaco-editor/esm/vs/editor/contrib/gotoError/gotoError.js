@@ -25,10 +25,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -70,12 +71,14 @@ import { IThemeService } from '../../../platform/theme/common/themeService.js';
 import { EditorContextKeys } from '../../common/editorContextKeys.js';
 import { MarkerNavigationWidget } from './gotoErrorWidget.js';
 import { compare } from '../../../base/common/strings.js';
-import { binarySearch } from '../../../base/common/arrays.js';
+import { binarySearch, find } from '../../../base/common/arrays.js';
 import { ICodeEditorService } from '../../browser/services/codeEditorService.js';
 import { onUnexpectedError } from '../../../base/common/errors.js';
 import { MenuRegistry } from '../../../platform/actions/common/actions.js';
 import { Action } from '../../../base/common/actions.js';
 import { IKeybindingService } from '../../../platform/keybinding/common/keybinding.js';
+import { isEqual } from '../../../base/common/resources.js';
+import { IOpenerService } from '../../../platform/opener/common/opener.js';
 var MarkerModel = /** @class */ (function () {
     function MarkerModel(editor, markers) {
         var _this = this;
@@ -212,13 +215,7 @@ var MarkerModel = /** @class */ (function () {
         return this._markers.length > 0;
     };
     MarkerModel.prototype.findMarkerAtPosition = function (pos) {
-        for (var _i = 0, _a = this._markers; _i < _a.length; _i++) {
-            var marker = _a[_i];
-            if (Range.containsPosition(marker, pos)) {
-                return marker;
-            }
-        }
-        return undefined;
+        return find(this._markers, function (marker) { return Range.containsPosition(marker, pos); });
     };
     Object.defineProperty(MarkerModel.prototype, "total", {
         get: function () {
@@ -236,12 +233,13 @@ var MarkerModel = /** @class */ (function () {
     return MarkerModel;
 }());
 var MarkerController = /** @class */ (function () {
-    function MarkerController(editor, _markerService, _contextKeyService, _themeService, _editorService, _keybindingService) {
+    function MarkerController(editor, _markerService, _contextKeyService, _themeService, _editorService, _keybindingService, _openerService) {
         this._markerService = _markerService;
         this._contextKeyService = _contextKeyService;
         this._themeService = _themeService;
         this._editorService = _editorService;
         this._keybindingService = _keybindingService;
+        this._openerService = _openerService;
         this._model = null;
         this._widget = null;
         this._disposeOnClose = new DisposableStore();
@@ -250,9 +248,6 @@ var MarkerController = /** @class */ (function () {
     }
     MarkerController.get = function (editor) {
         return editor.getContribution(MarkerController.ID);
-    };
-    MarkerController.prototype.getId = function () {
-        return MarkerController.ID;
     };
     MarkerController.prototype.dispose = function () {
         this._cleanUp();
@@ -275,22 +270,22 @@ var MarkerController = /** @class */ (function () {
         var prevMarkerKeybinding = this._keybindingService.lookupKeybinding(PrevMarkerAction.ID);
         var nextMarkerKeybinding = this._keybindingService.lookupKeybinding(NextMarkerAction.ID);
         var actions = [
-            new Action(PrevMarkerAction.ID, PrevMarkerAction.LABEL + (prevMarkerKeybinding ? " (" + prevMarkerKeybinding.getLabel() + ")" : ''), 'show-previous-problem chevron-up', this._model.canNavigate(), function () { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
-                if (this._model) {
-                    this._model.move(false, true);
-                }
-                return [2 /*return*/];
-            }); }); }),
-            new Action(NextMarkerAction.ID, NextMarkerAction.LABEL + (nextMarkerKeybinding ? " (" + nextMarkerKeybinding.getLabel() + ")" : ''), 'show-next-problem chevron-down', this._model.canNavigate(), function () { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
+            new Action(NextMarkerAction.ID, NextMarkerAction.LABEL + (nextMarkerKeybinding ? " (" + nextMarkerKeybinding.getLabel() + ")" : ''), 'show-next-problem codicon-chevron-down', this._model.canNavigate(), function () { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
                 if (this._model) {
                     this._model.move(true, true);
                 }
                 return [2 /*return*/];
+            }); }); }),
+            new Action(PrevMarkerAction.ID, PrevMarkerAction.LABEL + (prevMarkerKeybinding ? " (" + prevMarkerKeybinding.getLabel() + ")" : ''), 'show-previous-problem codicon-chevron-up', this._model.canNavigate(), function () { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
+                if (this._model) {
+                    this._model.move(false, true);
+                }
+                return [2 /*return*/];
             }); }); })
         ];
-        this._widget = new MarkerNavigationWidget(this._editor, actions, this._themeService);
+        this._widget = new MarkerNavigationWidget(this._editor, actions, this._themeService, this._openerService);
         this._widgetVisible.set(true);
-        this._widget.onDidClose(function () { return _this._cleanUp(); }, this, this._disposeOnClose);
+        this._widget.onDidClose(function () { return _this.closeMarkersNavigation(); }, this, this._disposeOnClose);
         this._disposeOnClose.add(this._model);
         this._disposeOnClose.add(this._widget);
         for (var _i = 0, actions_1 = actions; _i < actions_1.length; _i++) {
@@ -351,7 +346,7 @@ var MarkerController = /** @class */ (function () {
         if (!this._model) {
             return;
         }
-        if (!changedResources.some(function (r) { return editorModel.uri.toString() === r.toString(); })) {
+        if (!changedResources.some(function (r) { return isEqual(editorModel.uri, r); })) {
             return;
         }
         this._model.setMarkers(this._getMarkers());
@@ -372,7 +367,8 @@ var MarkerController = /** @class */ (function () {
         __param(2, IContextKeyService),
         __param(3, IThemeService),
         __param(4, ICodeEditorService),
-        __param(5, IKeybindingService)
+        __param(5, IKeybindingService),
+        __param(6, IOpenerService)
     ], MarkerController);
     return MarkerController;
 }());
@@ -421,7 +417,7 @@ var MarkerNavigationAction = /** @class */ (function (_super) {
             idx = (idx + markers.length - 1) % markers.length;
         }
         var newMarker = markers[idx];
-        if (newMarker.resource.toString() === editorModel.uri.toString()) {
+        if (isEqual(newMarker.resource, editorModel.uri)) {
             // the next `resource` is this resource which
             // means we cycle within this file
             model.move(this._isNext, true);
@@ -460,7 +456,7 @@ var NextMarkerAction = /** @class */ (function (_super) {
             label: NextMarkerAction.LABEL,
             alias: 'Go to Next Problem (Error, Warning, Info)',
             precondition: EditorContextKeys.writable,
-            kbOpts: { kbExpr: EditorContextKeys.editorTextFocus, primary: 512 /* Alt */ | 66 /* F8 */, weight: 100 /* EditorContrib */ }
+            kbOpts: { kbExpr: EditorContextKeys.focus, primary: 512 /* Alt */ | 66 /* F8 */, weight: 100 /* EditorContrib */ }
         }) || this;
     }
     NextMarkerAction.ID = 'editor.action.marker.next';
@@ -476,7 +472,7 @@ var PrevMarkerAction = /** @class */ (function (_super) {
             label: PrevMarkerAction.LABEL,
             alias: 'Go to Previous Problem (Error, Warning, Info)',
             precondition: EditorContextKeys.writable,
-            kbOpts: { kbExpr: EditorContextKeys.editorTextFocus, primary: 1024 /* Shift */ | 512 /* Alt */ | 66 /* F8 */, weight: 100 /* EditorContrib */ }
+            kbOpts: { kbExpr: EditorContextKeys.focus, primary: 1024 /* Shift */ | 512 /* Alt */ | 66 /* F8 */, weight: 100 /* EditorContrib */ }
         }) || this;
     }
     PrevMarkerAction.ID = 'editor.action.marker.prev';
@@ -517,7 +513,7 @@ var PrevMarkerInFilesAction = /** @class */ (function (_super) {
     }
     return PrevMarkerInFilesAction;
 }(MarkerNavigationAction));
-registerEditorContribution(MarkerController);
+registerEditorContribution(MarkerController.ID, MarkerController);
 registerEditorAction(NextMarkerAction);
 registerEditorAction(PrevMarkerAction);
 registerEditorAction(NextMarkerInFilesAction);
@@ -536,7 +532,7 @@ registerEditorCommand(new MarkerCommand({
     }
 }));
 // Go to menu
-MenuRegistry.appendMenuItem(16 /* MenubarGoMenu */, {
+MenuRegistry.appendMenuItem(19 /* MenubarGoMenu */, {
     group: '6_problem_nav',
     command: {
         id: 'editor.action.marker.nextInFiles',
@@ -544,7 +540,7 @@ MenuRegistry.appendMenuItem(16 /* MenubarGoMenu */, {
     },
     order: 1
 });
-MenuRegistry.appendMenuItem(16 /* MenubarGoMenu */, {
+MenuRegistry.appendMenuItem(19 /* MenubarGoMenu */, {
     group: '6_problem_nav',
     command: {
         id: 'editor.action.marker.prevInFiles',

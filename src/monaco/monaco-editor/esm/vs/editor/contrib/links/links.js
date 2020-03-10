@@ -36,10 +36,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -81,7 +82,7 @@ import * as platform from '../../../base/common/platform.js';
 import { EditorAction, registerEditorAction, registerEditorContribution } from '../../browser/editorExtensions.js';
 import { ModelDecorationOptions } from '../../common/model/textModel.js';
 import { LinkProviderRegistry } from '../../common/modes.js';
-import { ClickLinkGesture } from '../goToDefinition/clickLinkGesture.js';
+import { ClickLinkGesture } from '../gotoSymbol/link/clickLinkGesture.js';
 import { getLinks } from './getLinks.js';
 import { INotificationService } from '../../../platform/notification/common/notification.js';
 import { IOpenerService } from '../../../platform/opener/common/opener.js';
@@ -102,8 +103,7 @@ function getHoverMessage(link, useMetaKey) {
             ? nls.localize('links.navigate.kb.alt.mac', "option + click")
             : nls.localize('links.navigate.kb.alt', "alt + click");
     if (link.url) {
-        var hoverMessage = new MarkdownString().appendMarkdown("[" + label + "](" + link.url.toString() + ") (" + kb + ")");
-        hoverMessage.isTrusted = true;
+        var hoverMessage = new MarkdownString('', true).appendMarkdown("[" + label + "](" + link.url.toString() + ") (" + kb + ")");
         return hoverMessage;
     }
     else {
@@ -165,9 +165,9 @@ var LinkDetector = /** @class */ (function () {
         this.listenersToRemove.add(clickLinkGesture.onCancel(function (e) {
             _this.cleanUpActiveLinkDecoration();
         }));
-        this.enabled = editor.getConfiguration().contribInfo.links;
+        this.enabled = editor.getOption(52 /* links */);
         this.listenersToRemove.add(editor.onDidChangeConfiguration(function (e) {
-            var enabled = editor.getConfiguration().contribInfo.links;
+            var enabled = editor.getOption(52 /* links */);
             if (_this.enabled === enabled) {
                 // No change in our configuration option
                 return;
@@ -193,9 +193,6 @@ var LinkDetector = /** @class */ (function () {
     }
     LinkDetector.get = function (editor) {
         return editor.getContribution(LinkDetector.ID);
-    };
-    LinkDetector.prototype.getId = function () {
-        return LinkDetector.ID;
     };
     LinkDetector.prototype.onModelChanged = function () {
         this.currentOccurrences = {};
@@ -251,7 +248,7 @@ var LinkDetector = /** @class */ (function () {
         });
     };
     LinkDetector.prototype.updateDecorations = function (links) {
-        var useMetaKey = (this.editor.getConfiguration().multiCursorModifier === 'altKey');
+        var useMetaKey = (this.editor.getOption(59 /* multiCursorModifier */) === 'altKey');
         var oldDecorations = [];
         var keys = Object.keys(this.currentOccurrences);
         for (var i = 0, len = keys.length; i < len; i++) {
@@ -277,7 +274,7 @@ var LinkDetector = /** @class */ (function () {
     };
     LinkDetector.prototype._onEditorMouseMove = function (mouseEvent, withKey) {
         var _this = this;
-        var useMetaKey = (this.editor.getConfiguration().multiCursorModifier === 'altKey');
+        var useMetaKey = (this.editor.getOption(59 /* multiCursorModifier */) === 'altKey');
         if (this.isEnabled(mouseEvent, withKey)) {
             this.cleanUpActiveLinkDecoration(); // always remove previous link decoration as their can only be one
             var occurrence_1 = this.getLinkOccurrence(mouseEvent.target.position);
@@ -293,7 +290,7 @@ var LinkDetector = /** @class */ (function () {
         }
     };
     LinkDetector.prototype.cleanUpActiveLinkDecoration = function () {
-        var useMetaKey = (this.editor.getConfiguration().multiCursorModifier === 'altKey');
+        var useMetaKey = (this.editor.getOption(59 /* multiCursorModifier */) === 'altKey');
         if (this.activeLinkDecorationId) {
             var occurrence_2 = this.currentOccurrences[this.activeLinkDecorationId];
             if (occurrence_2) {
@@ -312,17 +309,18 @@ var LinkDetector = /** @class */ (function () {
         if (!occurrence) {
             return;
         }
-        this.openLinkOccurrence(occurrence, mouseEvent.hasSideBySideModifier);
+        this.openLinkOccurrence(occurrence, mouseEvent.hasSideBySideModifier, true /* from user gesture */);
     };
-    LinkDetector.prototype.openLinkOccurrence = function (occurrence, openToSide) {
+    LinkDetector.prototype.openLinkOccurrence = function (occurrence, openToSide, fromUserGesture) {
         var _this = this;
+        if (fromUserGesture === void 0) { fromUserGesture = false; }
         if (!this.openerService) {
             return;
         }
         var link = occurrence.link;
         link.resolve(CancellationToken.None).then(function (uri) {
             // open the uri
-            return _this.openerService.open(uri, { openToSide: openToSide });
+            return _this.openerService.open(uri, { openToSide: openToSide, fromUserGesture: fromUserGesture });
         }, function (err) {
             var messageOrError = err instanceof Error ? err.message : err;
             // different error cases
@@ -412,7 +410,7 @@ var OpenLinkAction = /** @class */ (function (_super) {
     };
     return OpenLinkAction;
 }(EditorAction));
-registerEditorContribution(LinkDetector);
+registerEditorContribution(LinkDetector.ID, LinkDetector);
 registerEditorAction(OpenLinkAction);
 registerThemingParticipant(function (theme, collector) {
     var activeLinkForeground = theme.getColor(editorActiveLinkForeground);

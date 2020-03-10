@@ -16,10 +16,11 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -50,7 +51,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-var _this = this;
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { onUnexpectedExternalError } from '../../../base/common/errors.js';
 import { URI } from '../../../base/common/uri.js';
@@ -94,31 +94,25 @@ var Link = /** @class */ (function () {
         configurable: true
     });
     Link.prototype.resolve = function (token) {
-        var _this = this;
-        if (this._link.url) {
-            try {
-                if (typeof this._link.url === 'string') {
-                    return Promise.resolve(URI.parse(this._link.url));
+        return __awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            return __generator(this, function (_a) {
+                if (this._link.url) {
+                    return [2 /*return*/, this._link.url];
                 }
-                else {
-                    return Promise.resolve(this._link.url);
+                if (typeof this._provider.resolveLink === 'function') {
+                    return [2 /*return*/, Promise.resolve(this._provider.resolveLink(this._link, token)).then(function (value) {
+                            _this._link = value || _this._link;
+                            if (_this._link.url) {
+                                // recurse
+                                return _this.resolve(token);
+                            }
+                            return Promise.reject(new Error('missing'));
+                        })];
                 }
-            }
-            catch (e) {
-                return Promise.reject(new Error('invalid'));
-            }
-        }
-        if (typeof this._provider.resolveLink === 'function') {
-            return Promise.resolve(this._provider.resolveLink(this._link, token)).then(function (value) {
-                _this._link = value || _this._link;
-                if (_this._link.url) {
-                    // recurse
-                    return _this.resolve(token);
-                }
-                return Promise.reject(new Error('missing'));
+                return [2 /*return*/, Promise.reject(new Error('missing'))];
             });
-        }
-        return Promise.reject(new Error('missing'));
+        });
     };
     return Link;
 }());
@@ -207,7 +201,7 @@ CommandsRegistry.registerCommand('_executeLinkProvider', function (accessor) {
     for (var _i = 1; _i < arguments.length; _i++) {
         args[_i - 1] = arguments[_i];
     }
-    return __awaiter(_this, void 0, void 0, function () {
+    return __awaiter(void 0, void 0, void 0, function () {
         var uri, model, list, result;
         return __generator(this, function (_a) {
             switch (_a.label) {

@@ -13,9 +13,9 @@ var CommitCharacterController = /** @class */ (function () {
         this._disposables.add(widget.onDidFocus(this._onItem, this));
         this._disposables.add(widget.onDidHide(this.reset, this));
         this._disposables.add(editor.onWillType(function (text) {
-            if (_this._active) {
+            if (_this._active && !widget.isFrozen()) {
                 var ch = text.charCodeAt(text.length - 1);
-                if (_this._active.acceptCharacters.has(ch) && editor.getConfiguration().contribInfo.acceptSuggestionOnCommitCharacter) {
+                if (_this._active.acceptCharacters.has(ch) && editor.getOption(0 /* acceptSuggestionOnCommitCharacter */)) {
                     accept(_this._active.item);
                 }
             }

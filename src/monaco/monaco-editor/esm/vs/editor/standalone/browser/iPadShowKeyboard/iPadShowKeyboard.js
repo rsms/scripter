@@ -33,7 +33,7 @@ var IPadShowKeyboard = /** @class */ (function (_super) {
         return _this;
     }
     IPadShowKeyboard.prototype.update = function () {
-        var shouldHaveWidget = (!this.editor.getConfiguration().readOnly);
+        var shouldHaveWidget = (!this.editor.getOption(68 /* readOnly */));
         if (!this.widget && shouldHaveWidget) {
             this.widget = new ShowKeyboardWidget(this.editor);
         }
@@ -41,9 +41,6 @@ var IPadShowKeyboard = /** @class */ (function (_super) {
             this.widget.dispose();
             this.widget = null;
         }
-    };
-    IPadShowKeyboard.prototype.getId = function () {
-        return IPadShowKeyboard.ID;
     };
     IPadShowKeyboard.prototype.dispose = function () {
         _super.prototype.dispose.call(this);
@@ -91,4 +88,4 @@ var ShowKeyboardWidget = /** @class */ (function (_super) {
     ShowKeyboardWidget.ID = 'editor.contrib.ShowKeyboardWidget';
     return ShowKeyboardWidget;
 }(Disposable));
-registerEditorContribution(IPadShowKeyboard);
+registerEditorContribution(IPadShowKeyboard.ID, IPadShowKeyboard);

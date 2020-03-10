@@ -8,12 +8,13 @@ import { onUnexpectedError } from '../../../base/common/errors.js';
 import { Emitter } from '../../../base/common/event.js';
 import { dispose, DisposableStore, isDisposable } from '../../../base/common/lifecycle.js';
 import { Selection } from '../../common/core/selection.js';
-import { CompletionProviderRegistry, completionKindFromString } from '../../common/modes.js';
+import { CompletionProviderRegistry } from '../../common/modes.js';
 import { CompletionModel } from './completionModel.js';
 import { getSuggestionComparator, provideSuggestionItems, getSnippetSuggestSupport, CompletionOptions } from './suggest.js';
 import { SnippetController2 } from '../snippet/snippetController2.js';
 import { CancellationTokenSource } from '../../../base/common/cancellation.js';
 import { WordDistance } from './wordDistance.js';
+import { isLowSurrogate, isHighSurrogate } from '../../../base/common/strings.js';
 var LineContext = /** @class */ (function () {
     function LineContext(model, position, auto, shy) {
         this.leadingLineContent = model.getLineContent(position.lineNumber).substr(0, position.column - 1);
@@ -52,6 +53,7 @@ var SuggestModel = /** @class */ (function () {
         this._editorWorker = _editorWorker;
         this._toDispose = new DisposableStore();
         this._quickSuggestDelay = 10;
+        this._triggerCharacterListener = new DisposableStore();
         this._triggerQuickSuggest = new TimeoutTimer();
         this._state = 0 /* Idle */;
         this._completionDisposables = new DisposableStore();
@@ -83,10 +85,10 @@ var SuggestModel = /** @class */ (function () {
             _this._onCursorChange(e);
         }));
         var editorIsComposing = false;
-        this._toDispose.add(this._editor.onCompositionStart(function () {
+        this._toDispose.add(this._editor.onDidCompositionStart(function () {
             editorIsComposing = true;
         }));
-        this._toDispose.add(this._editor.onCompositionEnd(function () {
+        this._toDispose.add(this._editor.onDidCompositionEnd(function () {
             // refilter when composition ends
             editorIsComposing = false;
             _this._refilterCompletionItems();
@@ -111,42 +113,59 @@ var SuggestModel = /** @class */ (function () {
     };
     // --- handle configuration & precondition changes
     SuggestModel.prototype._updateQuickSuggest = function () {
-        this._quickSuggestDelay = this._editor.getConfiguration().contribInfo.quickSuggestionsDelay;
+        this._quickSuggestDelay = this._editor.getOption(67 /* quickSuggestionsDelay */);
         if (isNaN(this._quickSuggestDelay) || (!this._quickSuggestDelay && this._quickSuggestDelay !== 0) || this._quickSuggestDelay < 0) {
             this._quickSuggestDelay = 10;
         }
     };
     SuggestModel.prototype._updateTriggerCharacters = function () {
         var _this = this;
-        dispose(this._triggerCharacterListener);
-        if (this._editor.getConfiguration().readOnly
+        this._triggerCharacterListener.clear();
+        if (this._editor.getOption(68 /* readOnly */)
             || !this._editor.hasModel()
-            || !this._editor.getConfiguration().contribInfo.suggestOnTriggerCharacters) {
+            || !this._editor.getOption(92 /* suggestOnTriggerCharacters */)) {
             return;
         }
-        var supportsByTriggerCharacter = Object.create(null);
+        var supportsByTriggerCharacter = new Map();
         for (var _i = 0, _a = CompletionProviderRegistry.all(this._editor.getModel()); _i < _a.length; _i++) {
             var support = _a[_i];
             for (var _b = 0, _c = support.triggerCharacters || []; _b < _c.length; _b++) {
                 var ch = _c[_b];
-                var set = supportsByTriggerCharacter[ch];
+                var set = supportsByTriggerCharacter.get(ch);
                 if (!set) {
-                    set = supportsByTriggerCharacter[ch] = new Set();
+                    set = new Set();
                     set.add(getSnippetSuggestSupport());
+                    supportsByTriggerCharacter.set(ch, set);
                 }
                 set.add(support);
             }
         }
-        this._triggerCharacterListener = this._editor.onDidType(function (text) {
-            var lastChar = text.charAt(text.length - 1);
-            var supports = supportsByTriggerCharacter[lastChar];
+        var checkTriggerCharacter = function (text) {
+            if (!text) {
+                // came here from the compositionEnd-event
+                var position = _this._editor.getPosition();
+                var model = _this._editor.getModel();
+                text = model.getLineContent(position.lineNumber).substr(0, position.column - 1);
+            }
+            var lastChar = '';
+            if (isLowSurrogate(text.charCodeAt(text.length - 1))) {
+                if (isHighSurrogate(text.charCodeAt(text.length - 2))) {
+                    lastChar = text.substr(text.length - 2);
+                }
+            }
+            else {
+                lastChar = text.charAt(text.length - 1);
+            }
+            var supports = supportsByTriggerCharacter.get(lastChar);
             if (supports) {
                 // keep existing items that where not computed by the
                 // supports/providers that want to trigger now
                 var items = _this._completionModel ? _this._completionModel.adopt(supports) : undefined;
                 _this.trigger({ auto: true, shy: false, triggerCharacter: lastChar }, Boolean(_this._completionModel), supports, items);
             }
-        });
+        };
+        this._triggerCharacterListener.add(this._editor.onDidType(checkTriggerCharacter));
+        this._triggerCharacterListener.add(this._editor.onDidCompositionEnd(checkTriggerCharacter));
     };
     Object.defineProperty(SuggestModel.prototype, "state", {
         // --- trigger/retrigger/cancel suggest
@@ -196,16 +215,14 @@ var SuggestModel = /** @class */ (function () {
             || (e.source !== 'keyboard' && e.source !== 'deleteLeft')) {
             // Early exit if nothing needs to be done!
             // Leave some form of early exit check here if you wish to continue being a cursor position change listener ;)
-            if (this._state !== 0 /* Idle */) {
-                this.cancel();
-            }
+            this.cancel();
             return;
         }
         if (!CompletionProviderRegistry.has(model)) {
             return;
         }
         if (this._state === 0 /* Idle */) {
-            if (this._editor.getConfiguration().contribInfo.quickSuggestions === false) {
+            if (this._editor.getOption(66 /* quickSuggestions */) === false) {
                 // not enabled
                 return;
             }
@@ -213,7 +230,7 @@ var SuggestModel = /** @class */ (function () {
                 // cursor didn't move RIGHT
                 return;
             }
-            if (this._editor.getConfiguration().contribInfo.suggest.snippetsPreventQuickSuggestions && SnippetController2.get(this._editor).isInSnippet()) {
+            if (this._editor.getOption(89 /* suggest */).snippetsPreventQuickSuggestions && SnippetController2.get(this._editor).isInSnippet()) {
                 // no quick suggestion when in snippet mode
                 return;
             }
@@ -231,7 +248,7 @@ var SuggestModel = /** @class */ (function () {
                 var model = _this._editor.getModel();
                 var pos = _this._editor.getPosition();
                 // validate enabled now
-                var quickSuggestions = _this._editor.getConfiguration().contribInfo.quickSuggestions;
+                var quickSuggestions = _this._editor.getOption(66 /* quickSuggestions */);
                 if (quickSuggestions === false) {
                     return;
                 }
@@ -306,10 +323,9 @@ var SuggestModel = /** @class */ (function () {
         }
         this._requestToken = new CancellationTokenSource();
         // kind filter and snippet sort rules
-        var contribInfo = this._editor.getConfiguration().contribInfo;
-        var itemKindFilter = new Set();
+        var snippetSuggestions = this._editor.getOption(86 /* snippetSuggestions */);
         var snippetSortOrder = 1 /* Inline */;
-        switch (contribInfo.suggest.snippets) {
+        switch (snippetSuggestions) {
             case 'top':
                 snippetSortOrder = 0 /* Top */;
                 break;
@@ -320,17 +336,8 @@ var SuggestModel = /** @class */ (function () {
             case 'bottom':
                 snippetSortOrder = 2 /* Bottom */;
                 break;
-            case 'none':
-                itemKindFilter.add(25 /* Snippet */);
-                break;
         }
-        // kind filter
-        for (var key in contribInfo.suggest.filteredTypes) {
-            var kind = completionKindFromString(key, true);
-            if (typeof kind !== 'undefined' && contribInfo.suggest.filteredTypes[key] === false) {
-                itemKindFilter.add(kind);
-            }
-        }
+        var itemKindFilter = SuggestModel._createItemKindFilter(this._editor);
         var wordDistance = WordDistance.create(this._editorWorker, this._editor);
         var items = provideSuggestionItems(model, this._editor.getPosition(), new CompletionOptions(snippetSortOrder, itemKindFilter, onlyFrom), suggestCtx, this._requestToken.token);
         Promise.all([items, wordDistance]).then(function (_a) {
@@ -351,7 +358,7 @@ var SuggestModel = /** @class */ (function () {
             _this._completionModel = new CompletionModel(items, _this._context.column, {
                 leadingLineContent: ctx.leadingLineContent,
                 characterCountDelta: ctx.column - _this._context.column
-            }, wordDistance, _this._editor.getConfiguration().contribInfo.suggest);
+            }, wordDistance, _this._editor.getOption(89 /* suggest */), _this._editor.getOption(86 /* snippetSuggestions */));
             // store containers so that they can be disposed later
             for (var _i = 0, items_1 = items; _i < items_1.length; _i++) {
                 var item = items_1[_i];
@@ -361,6 +368,96 @@ var SuggestModel = /** @class */ (function () {
             }
             _this._onNewContext(ctx);
         }).catch(onUnexpectedError);
+    };
+    SuggestModel._createItemKindFilter = function (editor) {
+        // kind filter and snippet sort rules
+        var result = new Set();
+        // snippet setting
+        var snippetSuggestions = editor.getOption(86 /* snippetSuggestions */);
+        if (snippetSuggestions === 'none') {
+            result.add(25 /* Snippet */);
+        }
+        // type setting
+        var suggestOptions = editor.getOption(89 /* suggest */);
+        if (!suggestOptions.showMethods) {
+            result.add(0 /* Method */);
+        }
+        if (!suggestOptions.showFunctions) {
+            result.add(1 /* Function */);
+        }
+        if (!suggestOptions.showConstructors) {
+            result.add(2 /* Constructor */);
+        }
+        if (!suggestOptions.showFields) {
+            result.add(3 /* Field */);
+        }
+        if (!suggestOptions.showVariables) {
+            result.add(4 /* Variable */);
+        }
+        if (!suggestOptions.showClasses) {
+            result.add(5 /* Class */);
+        }
+        if (!suggestOptions.showStructs) {
+            result.add(6 /* Struct */);
+        }
+        if (!suggestOptions.showInterfaces) {
+            result.add(7 /* Interface */);
+        }
+        if (!suggestOptions.showModules) {
+            result.add(8 /* Module */);
+        }
+        if (!suggestOptions.showProperties) {
+            result.add(9 /* Property */);
+        }
+        if (!suggestOptions.showEvents) {
+            result.add(10 /* Event */);
+        }
+        if (!suggestOptions.showOperators) {
+            result.add(11 /* Operator */);
+        }
+        if (!suggestOptions.showUnits) {
+            result.add(12 /* Unit */);
+        }
+        if (!suggestOptions.showValues) {
+            result.add(13 /* Value */);
+        }
+        if (!suggestOptions.showConstants) {
+            result.add(14 /* Constant */);
+        }
+        if (!suggestOptions.showEnums) {
+            result.add(15 /* Enum */);
+        }
+        if (!suggestOptions.showEnumMembers) {
+            result.add(16 /* EnumMember */);
+        }
+        if (!suggestOptions.showKeywords) {
+            result.add(17 /* Keyword */);
+        }
+        if (!suggestOptions.showWords) {
+            result.add(18 /* Text */);
+        }
+        if (!suggestOptions.showColors) {
+            result.add(19 /* Color */);
+        }
+        if (!suggestOptions.showFiles) {
+            result.add(20 /* File */);
+        }
+        if (!suggestOptions.showReferences) {
+            result.add(21 /* Reference */);
+        }
+        if (!suggestOptions.showColors) {
+            result.add(22 /* Customcolor */);
+        }
+        if (!suggestOptions.showFolders) {
+            result.add(23 /* Folder */);
+        }
+        if (!suggestOptions.showTypeParameters) {
+            result.add(24 /* TypeParameter */);
+        }
+        if (!suggestOptions.showSnippets) {
+            result.add(25 /* Snippet */);
+        }
+        return result;
     };
     SuggestModel.prototype._onNewContext = function (ctx) {
         if (!this._context) {

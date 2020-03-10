@@ -48,9 +48,6 @@ var InPlaceReplaceController = /** @class */ (function () {
     };
     InPlaceReplaceController.prototype.dispose = function () {
     };
-    InPlaceReplaceController.prototype.getId = function () {
-        return InPlaceReplaceController.ID;
-    };
     InPlaceReplaceController.prototype.run = function (source, up) {
         var _this = this;
         // cancel any pending request
@@ -171,7 +168,7 @@ var InPlaceReplaceDown = /** @class */ (function (_super) {
     };
     return InPlaceReplaceDown;
 }(EditorAction));
-registerEditorContribution(InPlaceReplaceController);
+registerEditorContribution(InPlaceReplaceController.ID, InPlaceReplaceController);
 registerEditorAction(InPlaceReplaceUp);
 registerEditorAction(InPlaceReplaceDown);
 registerThemingParticipant(function (theme, collector) {

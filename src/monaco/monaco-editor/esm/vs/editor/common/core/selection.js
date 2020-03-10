@@ -32,12 +32,6 @@ var Selection = /** @class */ (function (_super) {
         return _this;
     }
     /**
-     * Clone this selection.
-     */
-    Selection.prototype.clone = function () {
-        return new Selection(this.selectionStartLineNumber, this.selectionStartColumn, this.positionLineNumber, this.positionColumn);
-    };
-    /**
      * Transform to a human-readable representation.
      */
     Selection.prototype.toString = function () {

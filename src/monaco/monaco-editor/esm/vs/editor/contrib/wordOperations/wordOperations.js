@@ -26,7 +26,7 @@ import { Selection } from '../../common/core/selection.js';
 import { EditorContextKeys } from '../../common/editorContextKeys.js';
 import { CONTEXT_ACCESSIBILITY_MODE_ENABLED } from '../../../platform/accessibility/common/accessibility.js';
 import { ContextKeyExpr } from '../../../platform/contextkey/common/contextkey.js';
-import { EDITOR_DEFAULTS } from '../../common/config/editorOptions.js';
+import { EditorOptions } from '../../common/config/editorOptions.js';
 var MoveWordCommand = /** @class */ (function (_super) {
     __extends(MoveWordCommand, _super);
     function MoveWordCommand(opts) {
@@ -40,8 +40,7 @@ var MoveWordCommand = /** @class */ (function (_super) {
         if (!editor.hasModel()) {
             return;
         }
-        var config = editor.getConfiguration();
-        var wordSeparators = getMapForWordSeparators(config.wordSeparators);
+        var wordSeparators = getMapForWordSeparators(editor.getOption(96 /* wordSeparators */));
         var model = editor.getModel();
         var selections = editor.getSelections();
         var result = selections.map(function (sel) {
@@ -180,6 +179,7 @@ var CursorWordLeftSelect = /** @class */ (function (_super) {
     return CursorWordLeftSelect;
 }(WordLeftCommand));
 export { CursorWordLeftSelect };
+// Accessibility navigation commands should only be enabled on windows since they are tuned to what NVDA expects
 var CursorWordAccessibilityLeft = /** @class */ (function (_super) {
     __extends(CursorWordAccessibilityLeft, _super);
     function CursorWordAccessibilityLeft() {
@@ -190,14 +190,13 @@ var CursorWordAccessibilityLeft = /** @class */ (function (_super) {
             precondition: undefined,
             kbOpts: {
                 kbExpr: ContextKeyExpr.and(EditorContextKeys.textInputFocus, CONTEXT_ACCESSIBILITY_MODE_ENABLED),
-                primary: 2048 /* CtrlCmd */ | 15 /* LeftArrow */,
-                mac: { primary: 512 /* Alt */ | 15 /* LeftArrow */ },
+                win: { primary: 2048 /* CtrlCmd */ | 15 /* LeftArrow */ },
                 weight: 100 /* EditorContrib */ + 1
             }
         }) || this;
     }
     CursorWordAccessibilityLeft.prototype._move = function (_, model, position, wordNavigationType) {
-        return _super.prototype._move.call(this, getMapForWordSeparators(EDITOR_DEFAULTS.wordSeparators), model, position, wordNavigationType);
+        return _super.prototype._move.call(this, getMapForWordSeparators(EditorOptions.wordSeparators.defaultValue), model, position, wordNavigationType);
     };
     return CursorWordAccessibilityLeft;
 }(WordLeftCommand));
@@ -212,14 +211,13 @@ var CursorWordAccessibilityLeftSelect = /** @class */ (function (_super) {
             precondition: undefined,
             kbOpts: {
                 kbExpr: ContextKeyExpr.and(EditorContextKeys.textInputFocus, CONTEXT_ACCESSIBILITY_MODE_ENABLED),
-                primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 15 /* LeftArrow */,
-                mac: { primary: 512 /* Alt */ | 1024 /* Shift */ | 15 /* LeftArrow */ },
+                win: { primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 15 /* LeftArrow */ },
                 weight: 100 /* EditorContrib */ + 1
             }
         }) || this;
     }
     CursorWordAccessibilityLeftSelect.prototype._move = function (_, model, position, wordNavigationType) {
-        return _super.prototype._move.call(this, getMapForWordSeparators(EDITOR_DEFAULTS.wordSeparators), model, position, wordNavigationType);
+        return _super.prototype._move.call(this, getMapForWordSeparators(EditorOptions.wordSeparators.defaultValue), model, position, wordNavigationType);
     };
     return CursorWordAccessibilityLeftSelect;
 }(WordLeftCommand));
@@ -324,14 +322,13 @@ var CursorWordAccessibilityRight = /** @class */ (function (_super) {
             precondition: undefined,
             kbOpts: {
                 kbExpr: ContextKeyExpr.and(EditorContextKeys.textInputFocus, CONTEXT_ACCESSIBILITY_MODE_ENABLED),
-                primary: 2048 /* CtrlCmd */ | 17 /* RightArrow */,
-                mac: { primary: 512 /* Alt */ | 17 /* RightArrow */ },
+                win: { primary: 2048 /* CtrlCmd */ | 17 /* RightArrow */ },
                 weight: 100 /* EditorContrib */ + 1
             }
         }) || this;
     }
     CursorWordAccessibilityRight.prototype._move = function (_, model, position, wordNavigationType) {
-        return _super.prototype._move.call(this, getMapForWordSeparators(EDITOR_DEFAULTS.wordSeparators), model, position, wordNavigationType);
+        return _super.prototype._move.call(this, getMapForWordSeparators(EditorOptions.wordSeparators.defaultValue), model, position, wordNavigationType);
     };
     return CursorWordAccessibilityRight;
 }(WordRightCommand));
@@ -346,14 +343,13 @@ var CursorWordAccessibilityRightSelect = /** @class */ (function (_super) {
             precondition: undefined,
             kbOpts: {
                 kbExpr: ContextKeyExpr.and(EditorContextKeys.textInputFocus, CONTEXT_ACCESSIBILITY_MODE_ENABLED),
-                primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 17 /* RightArrow */,
-                mac: { primary: 512 /* Alt */ | 1024 /* Shift */ | 17 /* RightArrow */ },
+                win: { primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 17 /* RightArrow */ },
                 weight: 100 /* EditorContrib */ + 1
             }
         }) || this;
     }
     CursorWordAccessibilityRightSelect.prototype._move = function (_, model, position, wordNavigationType) {
-        return _super.prototype._move.call(this, getMapForWordSeparators(EDITOR_DEFAULTS.wordSeparators), model, position, wordNavigationType);
+        return _super.prototype._move.call(this, getMapForWordSeparators(EditorOptions.wordSeparators.defaultValue), model, position, wordNavigationType);
     };
     return CursorWordAccessibilityRightSelect;
 }(WordRightCommand));
@@ -371,8 +367,7 @@ var DeleteWordCommand = /** @class */ (function (_super) {
         if (!editor.hasModel()) {
             return;
         }
-        var config = editor.getConfiguration();
-        var wordSeparators = getMapForWordSeparators(config.wordSeparators);
+        var wordSeparators = getMapForWordSeparators(editor.getOption(96 /* wordSeparators */));
         var model = editor.getModel();
         var selections = editor.getSelections();
         var commands = selections.map(function (sel) {

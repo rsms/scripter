@@ -57,9 +57,6 @@ var AccessibilityHelpController = /** @class */ (function (_super) {
     AccessibilityHelpController.get = function (editor) {
         return editor.getContribution(AccessibilityHelpController.ID);
     };
-    AccessibilityHelpController.prototype.getId = function () {
-        return AccessibilityHelpController.ID;
-    };
     AccessibilityHelpController.prototype.show = function () {
         this._widget.show();
     };
@@ -131,7 +128,7 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
             }
             if (e.equals(2048 /* CtrlCmd */ | 38 /* KEY_H */)) {
                 alert(AccessibilityHelpNLS.openingDocs);
-                var url = _this._editor.getRawConfiguration().accessibilityHelpUrl;
+                var url = _this._editor.getRawOptions().accessibilityHelpUrl;
                 if (typeof url === 'undefined') {
                     url = 'https://go.microsoft.com/fwlink/?linkid=852450';
                 }
@@ -182,7 +179,7 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
         return strings.format(noKbMsg, commandId);
     };
     AccessibilityHelpWidget.prototype._buildContent = function () {
-        var opts = this._editor.getConfiguration();
+        var options = this._editor.getOptions();
         var selections = this._editor.getSelections();
         var charactersSelected = 0;
         if (selections) {
@@ -194,8 +191,8 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
             }
         }
         var text = getSelectionLabel(selections, charactersSelected);
-        if (opts.wrappingInfo.inDiffEditor) {
-            if (opts.readOnly) {
+        if (options.get(45 /* inDiffEditor */)) {
+            if (options.get(68 /* readOnly */)) {
                 text += AccessibilityHelpNLS.readonlyDiffEditor;
             }
             else {
@@ -203,7 +200,7 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
             }
         }
         else {
-            if (opts.readOnly) {
+            if (options.get(68 /* readOnly */)) {
                 text += AccessibilityHelpNLS.readonlyEditor;
             }
             else {
@@ -213,7 +210,7 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
         var turnOnMessage = (platform.isMacintosh
             ? AccessibilityHelpNLS.changeConfigToOnMac
             : AccessibilityHelpNLS.changeConfigToOnWinLinux);
-        switch (opts.accessibilitySupport) {
+        switch (options.get(2 /* accessibilitySupport */)) {
             case 0 /* Unknown */:
                 text += '\n\n - ' + turnOnMessage;
                 break;
@@ -225,7 +222,7 @@ var AccessibilityHelpWidget = /** @class */ (function (_super) {
                 text += ' ' + turnOnMessage;
                 break;
         }
-        if (opts.tabFocusMode) {
+        if (options.get(106 /* tabFocusMode */)) {
             text += '\n\n - ' + this._descriptionForCommand(ToggleTabFocusModeAction.ID, AccessibilityHelpNLS.tabFocusModeOnMsg, AccessibilityHelpNLS.tabFocusModeOnMsgNoKb);
         }
         else {
@@ -296,7 +293,7 @@ var ShowAccessibilityHelpAction = /** @class */ (function (_super) {
     };
     return ShowAccessibilityHelpAction;
 }(EditorAction));
-registerEditorContribution(AccessibilityHelpController);
+registerEditorContribution(AccessibilityHelpController.ID, AccessibilityHelpController);
 registerEditorAction(ShowAccessibilityHelpAction);
 var AccessibilityHelpCommand = EditorCommand.bindToContribution(AccessibilityHelpController.get);
 registerEditorCommand(new AccessibilityHelpCommand({

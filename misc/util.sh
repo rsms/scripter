@@ -9,8 +9,10 @@ has_newer() {
   return 1
 }
 
+monaco_build_basedir="monaco-$(node -p 'require("./src/monaco/monaco-editor/package.json").version')"
+
 print_monaco_build_dir() {
-  echo "$1/monaco-$(node -p 'require("./src/monaco/monaco-editor/package.json").version')"
+  echo "$1/$monaco_build_basedir"
 }
 
 spawn_monaco_build() {

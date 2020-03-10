@@ -2,6 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import { toDisposable } from '../../../base/common/lifecycle.js';
 import { validateConstraints } from '../../../base/common/types.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
@@ -40,7 +47,7 @@ export var CommandsRegistry = new /** @class */ (function () {
                     args[_i - 1] = arguments[_i];
                 }
                 validateConstraints(args, constraints_1);
-                return actualHandler_1.apply(void 0, [accessor].concat(args));
+                return actualHandler_1.apply(void 0, __spreadArrays([accessor], args));
             };
         }
         // find a place to store the command
@@ -54,7 +61,7 @@ export var CommandsRegistry = new /** @class */ (function () {
         var ret = toDisposable(function () {
             removeFn();
             var command = _this._commands.get(id);
-            if (command && command.isEmpty()) {
+            if (command === null || command === void 0 ? void 0 : command.isEmpty()) {
                 _this._commands.delete(id);
             }
         });
@@ -69,7 +76,7 @@ export var CommandsRegistry = new /** @class */ (function () {
             for (var _i = 1; _i < arguments.length; _i++) {
                 args[_i - 1] = arguments[_i];
             }
-            return (_a = accessor.get(ICommandService)).executeCommand.apply(_a, [newId].concat(args));
+            return (_a = accessor.get(ICommandService)).executeCommand.apply(_a, __spreadArrays([newId], args));
         });
     };
     class_1.prototype.getCommand = function (id) {

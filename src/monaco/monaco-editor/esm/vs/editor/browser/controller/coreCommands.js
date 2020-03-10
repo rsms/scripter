@@ -217,7 +217,7 @@ export var CoreNavigationCommands;
             cursors.setStates(args.source, 3 /* Explicit */, [
                 CursorMoveCommands.moveTo(cursors.context, cursors.getPrimaryCursor(), this._inSelectionMode, args.position, args.viewPosition)
             ]);
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return BaseMoveToCommand;
     }(CoreEditorCommand));
@@ -247,7 +247,7 @@ export var CoreNavigationCommands;
                 toViewLineNumber: result.toLineNumber,
                 toViewVisualColumn: result.toVisualColumn
             });
-            cursors.reveal(true, (result.reversed ? 1 /* TopMost */ : 2 /* BottomMost */), 0 /* Smooth */);
+            cursors.reveal(args.source, true, (result.reversed ? 1 /* TopMost */ : 2 /* BottomMost */), 0 /* Smooth */);
         };
         return ColumnSelectCommand;
     }(CoreEditorCommand));
@@ -263,12 +263,8 @@ export var CoreNavigationCommands;
             // validate `args`
             var validatedPosition = context.model.validatePosition(args.position);
             var validatedViewPosition = context.validateViewPosition(new Position(args.viewPosition.lineNumber, args.viewPosition.column), validatedPosition);
-            var fromViewLineNumber = prevColumnSelectData.fromViewLineNumber;
-            var fromViewVisualColumn = prevColumnSelectData.fromViewVisualColumn;
-            if (!prevColumnSelectData.isReal && args.setAnchorIfNotSet) {
-                fromViewLineNumber = validatedViewPosition.lineNumber;
-                fromViewVisualColumn = args.mouseColumn - 1;
-            }
+            var fromViewLineNumber = args.doColumnSelect ? prevColumnSelectData.fromViewLineNumber : validatedViewPosition.lineNumber;
+            var fromViewVisualColumn = args.doColumnSelect ? prevColumnSelectData.fromViewVisualColumn : args.mouseColumn - 1;
             return ColumnSelection.columnSelect(context.config, context.viewModel, fromViewLineNumber, fromViewVisualColumn, validatedViewPosition.lineNumber, args.mouseColumn - 1);
         };
         return class_1;
@@ -399,7 +395,7 @@ export var CoreNavigationCommands;
         CursorMoveImpl.prototype._runCursorMove = function (cursors, source, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(source, 3 /* Explicit */, CursorMoveCommands.move(cursors.context, cursors.getAll(), args));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return CursorMoveImpl;
     }(CoreEditorCommand));
@@ -690,7 +686,7 @@ export var CoreNavigationCommands;
         HomeCommand.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, CursorMoveCommands.moveToBeginningOfLine(cursors.context, cursors.getAll(), this._inSelectionMode));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return HomeCommand;
     }(CoreEditorCommand));
@@ -733,7 +729,7 @@ export var CoreNavigationCommands;
         class_6.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, this._exec(cursors.context, cursors.getAll()));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         class_6.prototype._exec = function (context, cursors) {
             var result = [];
@@ -756,7 +752,7 @@ export var CoreNavigationCommands;
         EndCommand.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, CursorMoveCommands.moveToEndOfLine(cursors.context, cursors.getAll(), this._inSelectionMode));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return EndCommand;
     }(CoreEditorCommand));
@@ -799,7 +795,7 @@ export var CoreNavigationCommands;
         class_7.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, this._exec(cursors.context, cursors.getAll()));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         class_7.prototype._exec = function (context, cursors) {
             var result = [];
@@ -823,7 +819,7 @@ export var CoreNavigationCommands;
         TopCommand.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, CursorMoveCommands.moveToBeginningOfBuffer(cursors.context, cursors.getAll(), this._inSelectionMode));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return TopCommand;
     }(CoreEditorCommand));
@@ -859,7 +855,7 @@ export var CoreNavigationCommands;
         BottomCommand.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, CursorMoveCommands.moveToEndOfBuffer(cursors.context, cursors.getAll(), this._inSelectionMode));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return BottomCommand;
     }(CoreEditorCommand));
@@ -1060,7 +1056,7 @@ export var CoreNavigationCommands;
             cursors.setStates(args.source, 3 /* Explicit */, [
                 CursorMoveCommands.word(cursors.context, cursors.getPrimaryCursor(), this._inSelectionMode, args.position)
             ]);
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return WordCommand;
     }(CoreEditorCommand));
@@ -1106,7 +1102,7 @@ export var CoreNavigationCommands;
             cursors.setStates(args.source, 3 /* Explicit */, [
                 CursorMoveCommands.line(cursors.context, cursors.getPrimaryCursor(), this._inSelectionMode, args.position, args.viewPosition)
             ]);
-            cursors.reveal(false, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, false, 0 /* Primary */, 0 /* Smooth */);
         };
         return LineCommand;
     }(CoreEditorCommand));
@@ -1163,7 +1159,7 @@ export var CoreNavigationCommands;
         class_13.prototype.runCoreEditorCommand = function (cursors, args) {
             cursors.context.model.pushStackElement();
             cursors.setStates(args.source, 3 /* Explicit */, CursorMoveCommands.expandLineSelection(cursors.context, cursors.getAll()));
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return class_13;
     }(CoreEditorCommand)));
@@ -1186,7 +1182,7 @@ export var CoreNavigationCommands;
             cursors.setStates(args.source, 3 /* Explicit */, [
                 CursorMoveCommands.cancelSelection(cursors.context, cursors.getPrimaryCursor())
             ]);
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return class_14;
     }(CoreEditorCommand)));
@@ -1209,7 +1205,7 @@ export var CoreNavigationCommands;
             cursors.setStates(args.source, 3 /* Explicit */, [
                 cursors.getPrimaryCursor()
             ]);
-            cursors.reveal(true, 0 /* Primary */, 0 /* Smooth */);
+            cursors.reveal(args.source, true, 0 /* Primary */, 0 /* Smooth */);
         };
         return class_15;
     }(CoreEditorCommand)));
@@ -1250,7 +1246,7 @@ export var CoreNavigationCommands;
                 }
             }
             var viewRange = cursors.context.convertModelRangeToViewRange(range);
-            cursors.revealRange(false, viewRange, revealAt, 0 /* Smooth */);
+            cursors.revealRange(args.source, false, viewRange, revealAt, 0 /* Smooth */);
         };
         return class_16;
     }(CoreEditorCommand)));
@@ -1497,8 +1493,8 @@ registerCommand(new EditorOrNativeTextInputCommand({
         kbExpr: null,
         primary: 2048 /* CtrlCmd */ | 31 /* KEY_A */
     },
-    menubarOpts: {
-        menuId: 22 /* MenubarSelectionMenu */,
+    menuOpts: {
+        menuId: 25 /* MenubarSelectionMenu */,
         group: '1_basic',
         title: nls.localize({ key: 'miSelectAll', comment: ['&& denotes a mnemonic'] }, "&&Select All"),
         order: 1
@@ -1514,8 +1510,8 @@ registerCommand(new EditorOrNativeTextInputCommand({
         kbExpr: EditorContextKeys.textInputFocus,
         primary: 2048 /* CtrlCmd */ | 56 /* KEY_Z */
     },
-    menubarOpts: {
-        menuId: 14 /* MenubarEditMenu */,
+    menuOpts: {
+        menuId: 17 /* MenubarEditMenu */,
         group: '1_do',
         title: nls.localize({ key: 'miUndo', comment: ['&& denotes a mnemonic'] }, "&&Undo"),
         order: 1
@@ -1534,8 +1530,8 @@ registerCommand(new EditorOrNativeTextInputCommand({
         secondary: [2048 /* CtrlCmd */ | 1024 /* Shift */ | 56 /* KEY_Z */],
         mac: { primary: 2048 /* CtrlCmd */ | 1024 /* Shift */ | 56 /* KEY_Z */ }
     },
-    menubarOpts: {
-        menuId: 14 /* MenubarEditMenu */,
+    menuOpts: {
+        menuId: 17 /* MenubarEditMenu */,
         group: '1_do',
         title: nls.localize({ key: 'miRedo', comment: ['&& denotes a mnemonic'] }, "&&Redo"),
         order: 2

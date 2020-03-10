@@ -76,7 +76,7 @@ var Tree = /** @class */ (function () {
     };
     Object.defineProperty(Tree.prototype, "onDidFocus", {
         get: function () {
-            return this.view && this.view.onDOMFocus;
+            return this.view.onDOMFocus;
         },
         enumerable: true,
         configurable: true
@@ -173,14 +173,8 @@ var Tree = /** @class */ (function () {
     };
     Tree.prototype.dispose = function () {
         this._onDispose.fire();
-        if (this.model !== null) {
-            this.model.dispose();
-            this.model = null; // StrictNullOverride Nulling out ok in dispose
-        }
-        if (this.view !== null) {
-            this.view.dispose();
-            this.view = null; // StrictNullOverride Nulling out ok in dispose
-        }
+        this.model.dispose();
+        this.view.dispose();
         this._onDidChangeFocus.dispose();
         this._onDidChangeSelection.dispose();
         this._onHighlightChange.dispose();

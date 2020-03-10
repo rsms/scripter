@@ -40,9 +40,6 @@ var QuickOpenController = /** @class */ (function () {
     QuickOpenController.get = function (editor) {
         return editor.getContribution(QuickOpenController.ID);
     };
-    QuickOpenController.prototype.getId = function () {
-        return QuickOpenController.ID;
-    };
     QuickOpenController.prototype.dispose = function () {
         // Dispose widget
         if (this.widget) {
@@ -140,4 +137,4 @@ var BaseEditorQuickOpenAction = /** @class */ (function (_super) {
     return BaseEditorQuickOpenAction;
 }(EditorAction));
 export { BaseEditorQuickOpenAction };
-registerEditorContribution(QuickOpenController);
+registerEditorContribution(QuickOpenController.ID, QuickOpenController);

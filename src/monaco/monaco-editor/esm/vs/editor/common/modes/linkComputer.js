@@ -3,7 +3,25 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CharacterClassifier } from '../core/characterClassifier.js';
-import { Uint8Matrix } from '../core/uint.js';
+var Uint8Matrix = /** @class */ (function () {
+    function Uint8Matrix(rows, cols, defaultValue) {
+        var data = new Uint8Array(rows * cols);
+        for (var i = 0, len = rows * cols; i < len; i++) {
+            data[i] = defaultValue;
+        }
+        this._data = data;
+        this.rows = rows;
+        this.cols = cols;
+    }
+    Uint8Matrix.prototype.get = function (row, col) {
+        return this._data[row * this.cols + col];
+    };
+    Uint8Matrix.prototype.set = function (row, col, value) {
+        this._data[row * this.cols + col] = value;
+    };
+    return Uint8Matrix;
+}());
+export { Uint8Matrix };
 var StateMachine = /** @class */ (function () {
     function StateMachine(edges) {
         var maxCharCode = 0;
@@ -172,6 +190,14 @@ var LinkComputer = /** @class */ (function () {
                             break;
                         case 96 /* BackTick */:
                             chClass = (linkBeginChCode === 39 /* SingleQuote */ || linkBeginChCode === 34 /* DoubleQuote */) ? 0 /* None */ : 1 /* ForceTermination */;
+                            break;
+                        case 42 /* Asterisk */:
+                            // `*` terminates a link if the link began with `*`
+                            chClass = (linkBeginChCode === 42 /* Asterisk */) ? 1 /* ForceTermination */ : 0 /* None */;
+                            break;
+                        case 124 /* Pipe */:
+                            // `|` terminates a link if the link began with `|`
+                            chClass = (linkBeginChCode === 124 /* Pipe */) ? 1 /* ForceTermination */ : 0 /* None */;
                             break;
                         default:
                             chClass = classifier.get(chCode);

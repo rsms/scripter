@@ -19,6 +19,7 @@ import './findWidget.css';
 import * as nls from '../../../nls.js';
 import * as dom from '../../../base/browser/dom.js';
 import { alert as alertFn } from '../../../base/browser/ui/aria/aria.js';
+import { Checkbox } from '../../../base/browser/ui/checkbox/checkbox.js';
 import { Sash } from '../../../base/browser/ui/sash/sash.js';
 import { Widget } from '../../../base/browser/ui/widget.js';
 import { Delayer } from '../../../base/common/async.js';
@@ -49,7 +50,7 @@ var FIND_WIDGET_INITIAL_WIDTH = 419;
 var PART_WIDTH = 275;
 var FIND_INPUT_AREA_WIDTH = PART_WIDTH - 54;
 var MAX_MATCHES_COUNT_WIDTH = 69;
-var FIND_ALL_CONTROLS_WIDTH = 17 /** Find Input margin-left */ + (MAX_MATCHES_COUNT_WIDTH + 3 + 1) /** Match Results */ + 23 /** Button */ * 4 + 2 /** sash */;
+// let FIND_ALL_CONTROLS_WIDTH = 17/** Find Input margin-left */ + (MAX_MATCHES_COUNT_WIDTH + 3 + 1) /** Match Results */ + 23 /** Button */ * 4 + 2/** sash */;
 var FIND_INPUT_AREA_HEIGHT = 33; // The height of Find Widget when Replace Input is not visible.
 var ctrlEnterReplaceAllWarningPromptedKey = 'ctrlEnterReplaceAll.windows.donotask';
 var ctrlKeyMod = (platform.isMacintosh ? 256 /* WinCtrl */ : 2048 /* CtrlCmd */);
@@ -82,6 +83,7 @@ var FindWidget = /** @class */ (function (_super) {
     __extends(FindWidget, _super);
     function FindWidget(codeEditor, controller, state, contextViewProvider, keybindingService, contextKeyService, themeService, storageService, notificationService) {
         var _this = _super.call(this) || this;
+        _this._cachedHeight = null;
         _this._codeEditor = codeEditor;
         _this._controller = controller;
         _this._state = state;
@@ -102,21 +104,21 @@ var FindWidget = /** @class */ (function (_super) {
         _this._tryUpdateWidgetWidth();
         _this._findInput.inputBox.layout();
         _this._register(_this._codeEditor.onDidChangeConfiguration(function (e) {
-            if (e.readOnly) {
-                if (_this._codeEditor.getConfiguration().readOnly) {
+            if (e.hasChanged(68 /* readOnly */)) {
+                if (_this._codeEditor.getOption(68 /* readOnly */)) {
                     // Hide replace part if editor becomes read only
                     _this._state.change({ isReplaceRevealed: false }, false);
                 }
                 _this._updateButtons();
             }
-            if (e.layoutInfo) {
+            if (e.hasChanged(107 /* layoutInfo */)) {
                 _this._tryUpdateWidgetWidth();
             }
-            if (e.accessibilitySupport) {
+            if (e.hasChanged(2 /* accessibilitySupport */)) {
                 _this.updateAccessibilitySupport();
             }
-            if (e.contribInfo) {
-                var addExtraSpaceOnTop = _this._codeEditor.getConfiguration().contribInfo.find.addExtraSpaceOnTop;
+            if (e.hasChanged(28 /* find */)) {
+                var addExtraSpaceOnTop = _this._codeEditor.getOption(28 /* find */).addExtraSpaceOnTop;
                 if (addExtraSpaceOnTop && !_this._viewZone) {
                     _this._viewZone = new FindWidgetViewZone(0);
                     _this._showViewZone();
@@ -160,7 +162,7 @@ var FindWidget = /** @class */ (function (_super) {
             _this._replaceInputFocused.set(false);
         }));
         _this._codeEditor.addOverlayWidget(_this);
-        if (_this._codeEditor.getConfiguration().contribInfo.find.addExtraSpaceOnTop) {
+        if (_this._codeEditor.getOption(28 /* find */).addExtraSpaceOnTop) {
             _this._viewZone = new FindWidgetViewZone(0); // Put it before the first line then users can scroll beyond the first line.
         }
         _this._applyTheme(themeService.getTheme());
@@ -201,12 +203,6 @@ var FindWidget = /** @class */ (function (_super) {
     // ----- React to state changes
     FindWidget.prototype._onStateChanged = function (e) {
         if (e.searchString) {
-            if (this._state.searchString.indexOf('\n') >= 0) {
-                dom.addClass(this._domNode, 'multipleline');
-            }
-            else {
-                dom.removeClass(this._domNode, 'multipleline');
-            }
             try {
                 this._ignoreChangeEvent = true;
                 this._findInput.setValue(this._state.searchString);
@@ -229,7 +225,7 @@ var FindWidget = /** @class */ (function (_super) {
         }
         if (e.isReplaceRevealed) {
             if (this._state.isReplaceRevealed) {
-                if (!this._codeEditor.getConfiguration().readOnly && !this._isReplaceVisible) {
+                if (!this._codeEditor.getOption(68 /* readOnly */) && !this._isReplaceVisible) {
                     this._isReplaceVisible = true;
                     this._replaceInput.width = dom.getTotalWidth(this._findInput.domNode);
                     this._updateButtons();
@@ -340,7 +336,12 @@ var FindWidget = /** @class */ (function (_super) {
         var selection = this._codeEditor.getSelection();
         var isSelection = selection ? (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn) : false;
         var isChecked = this._toggleSelectionFind.checked;
-        this._toggleSelectionFind.setEnabled(this._isVisible && (isChecked || isSelection));
+        if (this._isVisible && (isChecked || isSelection)) {
+            this._toggleSelectionFind.enable();
+        }
+        else {
+            this._toggleSelectionFind.disable();
+        }
     };
     FindWidget.prototype._updateButtons = function () {
         this._findInput.setEnabled(this._isVisible);
@@ -354,10 +355,10 @@ var FindWidget = /** @class */ (function (_super) {
         this._replaceBtn.setEnabled(this._isVisible && this._isReplaceVisible && findInputIsNonEmpty);
         this._replaceAllBtn.setEnabled(this._isVisible && this._isReplaceVisible && findInputIsNonEmpty);
         dom.toggleClass(this._domNode, 'replaceToggled', this._isReplaceVisible);
-        this._toggleReplaceBtn.toggleClass('collapse', !this._isReplaceVisible);
-        this._toggleReplaceBtn.toggleClass('expand', this._isReplaceVisible);
+        this._toggleReplaceBtn.toggleClass('codicon-chevron-right', !this._isReplaceVisible);
+        this._toggleReplaceBtn.toggleClass('codicon-chevron-down', this._isReplaceVisible);
         this._toggleReplaceBtn.setExpanded(this._isReplaceVisible);
-        var canReplace = !this._codeEditor.getConfiguration().readOnly;
+        var canReplace = !this._codeEditor.getOption(68 /* readOnly */);
         this._toggleReplaceBtn.setEnabled(this._isVisible && canReplace);
     };
     FindWidget.prototype._reveal = function () {
@@ -365,12 +366,19 @@ var FindWidget = /** @class */ (function (_super) {
         if (!this._isVisible) {
             this._isVisible = true;
             var selection = this._codeEditor.getSelection();
-            var isSelection = selection ? (selection.startLineNumber !== selection.endLineNumber || selection.startColumn !== selection.endColumn) : false;
-            if (isSelection && this._codeEditor.getConfiguration().contribInfo.find.autoFindInSelection) {
-                this._toggleSelectionFind.checked = true;
-            }
-            else {
-                this._toggleSelectionFind.checked = false;
+            switch (this._codeEditor.getOption(28 /* find */).autoFindInSelection) {
+                case 'always':
+                    this._toggleSelectionFind.checked = true;
+                    break;
+                case 'never':
+                    this._toggleSelectionFind.checked = false;
+                    break;
+                case 'multiline':
+                    var isSelectionMultipleLine = !!selection && selection.startLineNumber !== selection.endLineNumber;
+                    this._toggleSelectionFind.checked = isSelectionMultipleLine;
+                    break;
+                default:
+                    break;
             }
             this._tryUpdateWidgetWidth();
             this._updateButtons();
@@ -384,7 +392,7 @@ var FindWidget = /** @class */ (function (_super) {
             }, 200);
             this._codeEditor.layoutOverlayWidget(this);
             var adjustEditorScrollTop = true;
-            if (this._codeEditor.getConfiguration().contribInfo.find.seedSearchStringFromSelection && selection) {
+            if (this._codeEditor.getOption(28 /* find */).seedSearchStringFromSelection && selection) {
                 var domNode = this._codeEditor.getDomNode();
                 if (domNode) {
                     var editorCoords = dom.getDomNodePagePosition(domNode);
@@ -426,7 +434,7 @@ var FindWidget = /** @class */ (function (_super) {
     };
     FindWidget.prototype._layoutViewZone = function () {
         var _this = this;
-        var addExtraSpaceOnTop = this._codeEditor.getConfiguration().contribInfo.find.addExtraSpaceOnTop;
+        var addExtraSpaceOnTop = this._codeEditor.getOption(28 /* find */).addExtraSpaceOnTop;
         if (!addExtraSpaceOnTop) {
             this._removeViewZone();
             return;
@@ -451,7 +459,7 @@ var FindWidget = /** @class */ (function (_super) {
         if (!this._isVisible) {
             return;
         }
-        var addExtraSpaceOnTop = this._codeEditor.getConfiguration().contribInfo.find.addExtraSpaceOnTop;
+        var addExtraSpaceOnTop = this._codeEditor.getOption(28 /* find */).addExtraSpaceOnTop;
         if (!addExtraSpaceOnTop) {
             return;
         }
@@ -516,12 +524,18 @@ var FindWidget = /** @class */ (function (_super) {
         };
         this._findInput.style(inputStyles);
         this._replaceInput.style(inputStyles);
+        this._toggleSelectionFind.style(inputStyles);
     };
     FindWidget.prototype._tryUpdateWidgetWidth = function () {
         if (!this._isVisible) {
             return;
         }
-        var editorContentWidth = this._codeEditor.getConfiguration().layoutInfo.contentWidth;
+        if (!dom.isInDOM(this._domNode)) {
+            // the widget is not in the DOM
+            return;
+        }
+        var layoutInfo = this._codeEditor.getLayoutInfo();
+        var editorContentWidth = layoutInfo.contentWidth;
         if (editorContentWidth <= 0) {
             // for example, diff view original editor
             dom.addClass(this._domNode, 'hiddenEditor');
@@ -530,8 +544,8 @@ var FindWidget = /** @class */ (function (_super) {
         else if (dom.hasClass(this._domNode, 'hiddenEditor')) {
             dom.removeClass(this._domNode, 'hiddenEditor');
         }
-        var editorWidth = this._codeEditor.getConfiguration().layoutInfo.width;
-        var minimapWidth = this._codeEditor.getConfiguration().layoutInfo.minimapWidth;
+        var editorWidth = layoutInfo.width;
+        var minimapWidth = layoutInfo.minimapWidth;
         var collapsedFindWidget = false;
         var reducedFindWidget = false;
         var narrowFindWidget = false;
@@ -562,10 +576,13 @@ var FindWidget = /** @class */ (function (_super) {
         }
         if (this._resized) {
             this._findInput.inputBox.layout();
-            var findInputWidth = this._findInput.inputBox.width;
+            var findInputWidth = this._findInput.inputBox.element.clientWidth;
             if (findInputWidth > 0) {
                 this._replaceInput.width = findInputWidth;
             }
+        }
+        else if (this._isReplaceVisible) {
+            this._replaceInput.width = dom.getTotalWidth(this._findInput.domNode);
         }
     };
     FindWidget.prototype._getHeight = function () {
@@ -632,18 +649,9 @@ var FindWidget = /** @class */ (function (_super) {
     };
     FindWidget.prototype._onFindInputKeyDown = function (e) {
         if (e.equals(ctrlKeyMod | 3 /* Enter */)) {
-            var inputElement = this._findInput.inputBox.inputElement;
-            var start = inputElement.selectionStart;
-            var end = inputElement.selectionEnd;
-            var content = inputElement.value;
-            if (start !== null && end !== null) {
-                var value = content.substr(0, start) + '\n' + content.substr(end);
-                this._findInput.inputBox.value = value;
-                inputElement.setSelectionRange(start + 1, start + 1);
-                this._findInput.inputBox.layout();
-                e.preventDefault();
-                return;
-            }
+            this._findInput.inputBox.insertAtCursor('\n');
+            e.preventDefault();
+            return;
         }
         if (e.equals(2 /* Tab */)) {
             if (this._isReplaceVisible) {
@@ -675,18 +683,9 @@ var FindWidget = /** @class */ (function (_super) {
                 this._ctrlEnterReplaceAllWarningPrompted = true;
                 this._storageService.store(ctrlEnterReplaceAllWarningPromptedKey, true, 0 /* GLOBAL */);
             }
-            var inputElement = this._replaceInput.inputBox.inputElement;
-            var start = inputElement.selectionStart;
-            var end = inputElement.selectionEnd;
-            var content = inputElement.value;
-            if (start !== null && end !== null) {
-                var value = content.substr(0, start) + '\n' + content.substr(end);
-                this._replaceInput.inputBox.value = value;
-                inputElement.setSelectionRange(start + 1, start + 1);
-                this._replaceInput.inputBox.layout();
-                e.preventDefault();
-                return;
-            }
+            this._replaceInput.inputBox.insertAtCursor('\n');
+            e.preventDefault();
+            return;
         }
         if (e.equals(2 /* Tab */)) {
             this._findInput.focusOnCaseSensitive();
@@ -745,7 +744,6 @@ var FindWidget = /** @class */ (function (_super) {
                     return null;
                 }
                 try {
-                    /* tslint:disable-next-line:no-unused-expression */
                     new RegExp(value);
                     return null;
                 }
@@ -804,7 +802,7 @@ var FindWidget = /** @class */ (function (_super) {
         // Previous button
         this._prevBtn = this._register(new SimpleButton({
             label: NLS_PREVIOUS_MATCH_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.PreviousMatchFindAction),
-            className: 'previous',
+            className: 'codicon codicon-arrow-up',
             onTrigger: function () {
                 _this._codeEditor.getAction(FIND_IDS.PreviousMatchFindAction).run().then(undefined, onUnexpectedError);
             }
@@ -812,7 +810,7 @@ var FindWidget = /** @class */ (function (_super) {
         // Next button
         this._nextBtn = this._register(new SimpleButton({
             label: NLS_NEXT_MATCH_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.NextMatchFindAction),
-            className: 'next',
+            className: 'codicon codicon-arrow-down',
             onTrigger: function () {
                 _this._codeEditor.getAction(FIND_IDS.NextMatchFindAction).run().then(undefined, onUnexpectedError);
             }
@@ -827,30 +825,32 @@ var FindWidget = /** @class */ (function (_super) {
         actionsContainer.appendChild(this._prevBtn.domNode);
         actionsContainer.appendChild(this._nextBtn.domNode);
         // Toggle selection button
-        this._toggleSelectionFind = this._register(new SimpleCheckbox({
-            parent: actionsContainer,
+        this._toggleSelectionFind = this._register(new Checkbox({
+            actionClassName: 'codicon codicon-selection',
             title: NLS_TOGGLE_SELECTION_FIND_TITLE + this._keybindingLabelFor(FIND_IDS.ToggleSearchScopeCommand),
-            onChange: function () {
-                if (_this._toggleSelectionFind.checked) {
-                    if (_this._codeEditor.hasModel()) {
-                        var selection = _this._codeEditor.getSelection();
-                        if (selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber) {
-                            selection = selection.setEndPosition(selection.endLineNumber - 1, _this._codeEditor.getModel().getLineMaxColumn(selection.endLineNumber - 1));
-                        }
-                        if (!selection.isEmpty()) {
-                            _this._state.change({ searchScope: selection }, true);
-                        }
+            isChecked: false
+        }));
+        this._register(this._toggleSelectionFind.onChange(function () {
+            if (_this._toggleSelectionFind.checked) {
+                if (_this._codeEditor.hasModel()) {
+                    var selection = _this._codeEditor.getSelection();
+                    if (selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber) {
+                        selection = selection.setEndPosition(selection.endLineNumber - 1, _this._codeEditor.getModel().getLineMaxColumn(selection.endLineNumber - 1));
+                    }
+                    if (!selection.isEmpty()) {
+                        _this._state.change({ searchScope: selection }, true);
                     }
                 }
-                else {
-                    _this._state.change({ searchScope: null }, true);
-                }
+            }
+            else {
+                _this._state.change({ searchScope: null }, true);
             }
         }));
+        actionsContainer.appendChild(this._toggleSelectionFind.domNode);
         // Close button
         this._closeBtn = this._register(new SimpleButton({
             label: NLS_CLOSE_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.CloseFindWidgetCommand),
-            className: 'close-fw',
+            className: 'codicon codicon-close',
             onTrigger: function () {
                 _this._state.change({ isRevealed: false, searchScope: null }, false);
             },
@@ -901,7 +901,7 @@ var FindWidget = /** @class */ (function (_super) {
                 else if (_this._nextBtn.isEnabled()) {
                     _this._nextBtn.focus();
                 }
-                else if (_this._toggleSelectionFind.isEnabled()) {
+                else if (_this._toggleSelectionFind.enabled) {
                     _this._toggleSelectionFind.focus();
                 }
                 else if (_this._closeBtn.isEnabled()) {
@@ -913,7 +913,7 @@ var FindWidget = /** @class */ (function (_super) {
         // Replace one button
         this._replaceBtn = this._register(new SimpleButton({
             label: NLS_REPLACE_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.ReplaceOneAction),
-            className: 'replace',
+            className: 'codicon codicon-replace',
             onTrigger: function () {
                 _this._controller.replace();
             },
@@ -927,7 +927,7 @@ var FindWidget = /** @class */ (function (_super) {
         // Replace all button
         this._replaceAllBtn = this._register(new SimpleButton({
             label: NLS_REPLACE_ALL_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.ReplaceAllAction),
-            className: 'replace-all',
+            className: 'codicon codicon-replace-all',
             onTrigger: function () {
                 _this._controller.replaceAll();
             }
@@ -943,7 +943,7 @@ var FindWidget = /** @class */ (function (_super) {
         // Toggle replace button
         this._toggleReplaceBtn = this._register(new SimpleButton({
             label: NLS_TOGGLE_REPLACE_MODE_BTN_LABEL,
-            className: 'toggle left',
+            className: 'codicon toggle left',
             onTrigger: function () {
                 _this._state.change({ isReplaceRevealed: !_this._isReplaceVisible }, false);
                 if (_this._isReplaceVisible) {
@@ -953,8 +953,8 @@ var FindWidget = /** @class */ (function (_super) {
                 _this._showViewZone();
             }
         }));
-        this._toggleReplaceBtn.toggleClass('expand', this._isReplaceVisible);
-        this._toggleReplaceBtn.toggleClass('collapse', !this._isReplaceVisible);
+        this._toggleReplaceBtn.toggleClass('codicon-chevron-down', this._isReplaceVisible);
+        this._toggleReplaceBtn.toggleClass('codicon-chevron-right', !this._isReplaceVisible);
         this._toggleReplaceBtn.setExpanded(this._isReplaceVisible);
         // Widget
         this._domNode = document.createElement('div');
@@ -978,13 +978,11 @@ var FindWidget = /** @class */ (function (_super) {
                 // narrow down the find widget should be handled by CSS.
                 return;
             }
-            var inputBoxWidth = width - FIND_ALL_CONTROLS_WIDTH;
             var maxWidth = parseFloat(dom.getComputedStyle(_this._domNode).maxWidth) || 0;
             if (width > maxWidth) {
                 return;
             }
             _this._domNode.style.width = width + "px";
-            _this._findInput.inputBox.width = inputBoxWidth;
             if (_this._isReplaceVisible) {
                 _this._replaceInput.width = dom.getTotalWidth(_this._findInput.domNode);
             }
@@ -1002,7 +1000,8 @@ var FindWidget = /** @class */ (function (_super) {
             if (!_this._resized || currentWidth === FIND_WIDGET_INITIAL_WIDTH) {
                 // 1. never resized before, double click should maximizes it
                 // 2. users resized it already but its width is the same as default
-                width = _this._codeEditor.getConfiguration().layoutInfo.width - 28 - _this._codeEditor.getConfiguration().layoutInfo.minimapWidth - 15;
+                var layoutInfo = _this._codeEditor.getLayoutInfo();
+                width = layoutInfo.width - 28 - layoutInfo.minimapWidth - 15;
                 _this._resized = true;
             }
             else {
@@ -1010,9 +1009,7 @@ var FindWidget = /** @class */ (function (_super) {
                  * no op, the find widget should be shrinked to its default size.
                  */
             }
-            var inputBoxWidth = width - FIND_ALL_CONTROLS_WIDTH;
             _this._domNode.style.width = width + "px";
-            _this._findInput.inputBox.width = inputBoxWidth;
             if (_this._isReplaceVisible) {
                 _this._replaceInput.width = dom.getTotalWidth(_this._findInput.domNode);
             }
@@ -1020,82 +1017,13 @@ var FindWidget = /** @class */ (function (_super) {
         }));
     };
     FindWidget.prototype.updateAccessibilitySupport = function () {
-        var value = this._codeEditor.getConfiguration().accessibilitySupport;
+        var value = this._codeEditor.getOption(2 /* accessibilitySupport */);
         this._findInput.setFocusInputOnOptionClick(value !== 2 /* Enabled */);
     };
     FindWidget.ID = 'editor.contrib.findWidget';
     return FindWidget;
 }(Widget));
 export { FindWidget };
-var SimpleCheckbox = /** @class */ (function (_super) {
-    __extends(SimpleCheckbox, _super);
-    function SimpleCheckbox(opts) {
-        var _this = _super.call(this) || this;
-        _this._opts = opts;
-        _this._domNode = document.createElement('div');
-        _this._domNode.className = 'monaco-checkbox';
-        _this._domNode.title = _this._opts.title;
-        _this._domNode.tabIndex = 0;
-        _this._checkbox = document.createElement('input');
-        _this._checkbox.type = 'checkbox';
-        _this._checkbox.className = 'checkbox';
-        _this._checkbox.id = 'checkbox-' + SimpleCheckbox._COUNTER++;
-        _this._checkbox.tabIndex = -1;
-        _this._label = document.createElement('label');
-        _this._label.className = 'label';
-        // Connect the label and the checkbox. Checkbox will get checked when the label receives a click.
-        _this._label.htmlFor = _this._checkbox.id;
-        _this._label.tabIndex = -1;
-        _this._domNode.appendChild(_this._checkbox);
-        _this._domNode.appendChild(_this._label);
-        _this._opts.parent.appendChild(_this._domNode);
-        _this.onchange(_this._checkbox, function () {
-            _this._opts.onChange();
-        });
-        return _this;
-    }
-    Object.defineProperty(SimpleCheckbox.prototype, "domNode", {
-        get: function () {
-            return this._domNode;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    SimpleCheckbox.prototype.isEnabled = function () {
-        return (this._domNode.tabIndex >= 0);
-    };
-    Object.defineProperty(SimpleCheckbox.prototype, "checked", {
-        get: function () {
-            return this._checkbox.checked;
-        },
-        set: function (newValue) {
-            this._checkbox.checked = newValue;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    SimpleCheckbox.prototype.focus = function () {
-        this._domNode.focus();
-    };
-    SimpleCheckbox.prototype.enable = function () {
-        this._checkbox.removeAttribute('disabled');
-    };
-    SimpleCheckbox.prototype.disable = function () {
-        this._checkbox.disabled = true;
-    };
-    SimpleCheckbox.prototype.setEnabled = function (enabled) {
-        if (enabled) {
-            this.enable();
-            this.domNode.tabIndex = 0;
-        }
-        else {
-            this.disable();
-            this.domNode.tabIndex = -1;
-        }
-    };
-    SimpleCheckbox._COUNTER = 0;
-    return SimpleCheckbox;
-}(Widget));
 var SimpleButton = /** @class */ (function (_super) {
     __extends(SimpleButton, _super);
     function SimpleButton(opts) {
@@ -1180,7 +1108,7 @@ registerThemingParticipant(function (theme, collector) {
     }
     var hcBorder = theme.getColor(contrastBorder);
     if (hcBorder) {
-        collector.addRule(".monaco-editor .find-widget { border: 2px solid " + hcBorder + "; }");
+        collector.addRule(".monaco-editor .find-widget { border: 1px solid " + hcBorder + "; }");
     }
     var foreground = theme.getColor(editorWidgetForeground);
     if (foreground) {
@@ -1200,17 +1128,9 @@ registerThemingParticipant(function (theme, collector) {
             collector.addRule(".monaco-editor .find-widget .monaco-sash { background-color: " + border + "; width: 3px !important; margin-left: -4px;}");
         }
     }
-    var inputActiveBorder = theme.getColor(inputActiveOptionBorder);
-    if (inputActiveBorder) {
-        collector.addRule(".monaco-editor .find-widget .monaco-checkbox .checkbox:checked + .label { border: 1px solid " + inputActiveBorder.toString() + "; }");
-    }
-    var inputActiveBackground = theme.getColor(inputActiveOptionBackground);
-    if (inputActiveBackground) {
-        collector.addRule(".monaco-editor .find-widget .monaco-checkbox .checkbox:checked + .label { background-color: " + inputActiveBackground.toString() + "; }");
-    }
     // This rule is used to override the outline color for synthetic-focus find input.
     var focusOutline = theme.getColor(focusBorder);
     if (focusOutline) {
-        collector.addRule(".monaco-workbench .monaco-editor .find-widget .monaco-inputbox.synthetic-focus { outline-color: " + focusOutline + "; }");
+        collector.addRule(".monaco-editor .find-widget .monaco-inputbox.synthetic-focus { outline-color: " + focusOutline + "; }");
     }
 });

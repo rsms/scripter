@@ -96,9 +96,9 @@ var ViewContentWidgets = /** @class */ (function (_super) {
         }
         this.setShouldRender();
     };
-    ViewContentWidgets.prototype.setWidgetPosition = function (widget, position, range, preference) {
+    ViewContentWidgets.prototype.setWidgetPosition = function (widget, range, preference) {
         var myWidget = this._widgets[widget.getId()];
-        myWidget.setPosition(position, range, preference);
+        myWidget.setPosition(range, preference);
         this.setShouldRender();
     };
     ViewContentWidgets.prototype.removeWidget = function (widget) {
@@ -151,13 +151,13 @@ var Widget = /** @class */ (function () {
         this.id = this._actual.getId();
         this.allowEditorOverflow = this._actual.allowEditorOverflow || false;
         this.suppressMouseDown = this._actual.suppressMouseDown || false;
-        this._fixedOverflowWidgets = this._context.configuration.editor.viewInfo.fixedOverflowWidgets;
-        this._contentWidth = this._context.configuration.editor.layoutInfo.contentWidth;
-        this._contentLeft = this._context.configuration.editor.layoutInfo.contentLeft;
-        this._lineHeight = this._context.configuration.editor.lineHeight;
-        this._position = null;
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._fixedOverflowWidgets = options.get(29 /* fixedOverflowWidgets */);
+        this._contentWidth = layoutInfo.contentWidth;
+        this._contentLeft = layoutInfo.contentLeft;
+        this._lineHeight = options.get(49 /* lineHeight */);
         this._range = null;
-        this._viewPosition = null;
         this._viewRange = null;
         this._preference = [];
         this._cachedDomNodeClientWidth = -1;
@@ -171,34 +171,27 @@ var Widget = /** @class */ (function () {
         this.domNode.setMaxWidth(this._maxWidth);
     }
     Widget.prototype.onConfigurationChanged = function (e) {
-        if (e.lineHeight) {
-            this._lineHeight = this._context.configuration.editor.lineHeight;
-        }
-        if (e.layoutInfo) {
-            this._contentLeft = this._context.configuration.editor.layoutInfo.contentLeft;
-            this._contentWidth = this._context.configuration.editor.layoutInfo.contentWidth;
+        var options = this._context.configuration.options;
+        this._lineHeight = options.get(49 /* lineHeight */);
+        if (e.hasChanged(107 /* layoutInfo */)) {
+            var layoutInfo = options.get(107 /* layoutInfo */);
+            this._contentLeft = layoutInfo.contentLeft;
+            this._contentWidth = layoutInfo.contentWidth;
             this._maxWidth = this._getMaxWidth();
         }
     };
     Widget.prototype.onLineMappingChanged = function (e) {
-        this._setPosition(this._position, this._range);
+        this._setPosition(this._range);
     };
-    Widget.prototype._setPosition = function (position, range) {
-        this._position = position;
+    Widget.prototype._setPosition = function (range) {
         this._range = range;
-        this._viewPosition = null;
         this._viewRange = null;
-        if (this._position) {
-            // Do not trust that widgets give a valid position
-            var validModelPosition = this._context.model.validateModelPosition(this._position);
-            if (this._context.model.coordinatesConverter.modelPositionIsVisible(validModelPosition)) {
-                this._viewPosition = this._context.model.coordinatesConverter.convertModelPositionToViewPosition(validModelPosition);
-            }
-        }
         if (this._range) {
             // Do not trust that widgets give a valid position
             var validModelRange = this._context.model.validateModelRange(this._range);
-            this._viewRange = this._context.model.coordinatesConverter.convertModelRangeToViewRange(validModelRange);
+            if (this._context.model.coordinatesConverter.modelPositionIsVisible(validModelRange.getStartPosition()) || this._context.model.coordinatesConverter.modelPositionIsVisible(validModelRange.getEndPosition())) {
+                this._viewRange = this._context.model.coordinatesConverter.convertModelRangeToViewRange(validModelRange);
+            }
         }
     };
     Widget.prototype._getMaxWidth = function () {
@@ -206,8 +199,8 @@ var Widget = /** @class */ (function () {
             ? window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth
             : this._contentWidth);
     };
-    Widget.prototype.setPosition = function (position, range, preference) {
-        this._setPosition(position, range);
+    Widget.prototype.setPosition = function (range, preference) {
+        this._setPosition(range);
         this._preference = preference;
         this._cachedDomNodeClientWidth = -1;
         this._cachedDomNodeClientHeight = -1;
@@ -248,51 +241,55 @@ var Widget = /** @class */ (function () {
             belowLeft: actualBelowLeft,
         };
     };
+    Widget.prototype._layoutHorizontalSegmentInPage = function (windowSize, domNodePosition, left, width) {
+        // Initially, the limits are defined as the dom node limits
+        var MIN_LIMIT = Math.max(0, domNodePosition.left - width);
+        var MAX_LIMIT = Math.min(domNodePosition.left + domNodePosition.width + width, windowSize.width);
+        var absoluteLeft = domNodePosition.left + left - dom.StandardWindow.scrollX;
+        if (absoluteLeft + width > MAX_LIMIT) {
+            var delta = absoluteLeft - (MAX_LIMIT - width);
+            absoluteLeft -= delta;
+            left -= delta;
+        }
+        if (absoluteLeft < MIN_LIMIT) {
+            var delta = absoluteLeft - MIN_LIMIT;
+            absoluteLeft -= delta;
+            left -= delta;
+        }
+        return [left, absoluteLeft];
+    };
     Widget.prototype._layoutBoxInPage = function (topLeft, bottomLeft, width, height, ctx) {
-        var aboveLeft0 = topLeft.left - ctx.scrollLeft;
-        var belowLeft0 = bottomLeft.left - ctx.scrollLeft;
         var aboveTop = topLeft.top - height;
         var belowTop = bottomLeft.top + this._lineHeight;
-        var aboveLeft = aboveLeft0 + this._contentLeft;
-        var belowLeft = belowLeft0 + this._contentLeft;
         var domNodePosition = dom.getDomNodePagePosition(this._viewDomNode.domNode);
         var absoluteAboveTop = domNodePosition.top + aboveTop - dom.StandardWindow.scrollY;
         var absoluteBelowTop = domNodePosition.top + belowTop - dom.StandardWindow.scrollY;
-        var absoluteAboveLeft = domNodePosition.left + aboveLeft - dom.StandardWindow.scrollX;
-        var absoluteBelowLeft = domNodePosition.left + belowLeft - dom.StandardWindow.scrollX;
-        var INNER_WIDTH = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-        var INNER_HEIGHT = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
-        // Leave some clearance to the bottom
+        var windowSize = dom.getClientArea(document.body);
+        var _a = this._layoutHorizontalSegmentInPage(windowSize, domNodePosition, topLeft.left - ctx.scrollLeft + this._contentLeft, width), aboveLeft = _a[0], absoluteAboveLeft = _a[1];
+        var _b = this._layoutHorizontalSegmentInPage(windowSize, domNodePosition, bottomLeft.left - ctx.scrollLeft + this._contentLeft, width), belowLeft = _b[0], absoluteBelowLeft = _b[1];
+        // Leave some clearance to the top/bottom
         var TOP_PADDING = 22;
         var BOTTOM_PADDING = 22;
-        var fitsAbove = (absoluteAboveTop >= TOP_PADDING), fitsBelow = (absoluteBelowTop + height <= INNER_HEIGHT - BOTTOM_PADDING);
-        if (absoluteAboveLeft + width + 20 > INNER_WIDTH) {
-            var delta = absoluteAboveLeft - (INNER_WIDTH - width - 20);
-            absoluteAboveLeft -= delta;
-            aboveLeft -= delta;
-        }
-        if (absoluteBelowLeft + width + 20 > INNER_WIDTH) {
-            var delta = absoluteBelowLeft - (INNER_WIDTH - width - 20);
-            absoluteBelowLeft -= delta;
-            belowLeft -= delta;
-        }
-        if (absoluteAboveLeft < 0) {
-            var delta = absoluteAboveLeft;
-            absoluteAboveLeft -= delta;
-            aboveLeft -= delta;
-        }
-        if (absoluteBelowLeft < 0) {
-            var delta = absoluteBelowLeft;
-            absoluteBelowLeft -= delta;
-            belowLeft -= delta;
-        }
+        var fitsAbove = (absoluteAboveTop >= TOP_PADDING);
+        var fitsBelow = (absoluteBelowTop + height <= windowSize.height - BOTTOM_PADDING);
         if (this._fixedOverflowWidgets) {
-            aboveTop = absoluteAboveTop;
-            belowTop = absoluteBelowTop;
-            aboveLeft = absoluteAboveLeft;
-            belowLeft = absoluteBelowLeft;
+            return {
+                fitsAbove: fitsAbove,
+                aboveTop: Math.max(absoluteAboveTop, TOP_PADDING),
+                aboveLeft: absoluteAboveLeft,
+                fitsBelow: fitsBelow,
+                belowTop: absoluteBelowTop,
+                belowLeft: absoluteBelowLeft
+            };
         }
-        return { fitsAbove: fitsAbove, aboveTop: aboveTop, aboveLeft: aboveLeft, fitsBelow: fitsBelow, belowTop: belowTop, belowLeft: belowLeft };
+        return {
+            fitsAbove: fitsAbove,
+            aboveTop: Math.max(aboveTop, TOP_PADDING),
+            aboveLeft: aboveLeft,
+            fitsBelow: fitsBelow,
+            belowTop: belowTop,
+            belowLeft: belowLeft
+        };
     };
     Widget.prototype._prepareRenderWidgetAtExactPositionOverflowing = function (topLeft) {
         return new Coordinate(topLeft.top, topLeft.left + this._contentLeft);
@@ -301,39 +298,42 @@ var Widget = /** @class */ (function () {
      * Compute `this._topLeft`
      */
     Widget.prototype._getTopAndBottomLeft = function (ctx) {
-        if (!this._viewPosition) {
+        if (!this._viewRange) {
             return [null, null];
         }
-        var visibleRangeForPosition = ctx.visibleRangeForPosition(this._viewPosition);
-        if (!visibleRangeForPosition) {
+        var visibleRangesForRange = ctx.linesVisibleRangesForRange(this._viewRange, false);
+        if (!visibleRangesForRange || visibleRangesForRange.length === 0) {
             return [null, null];
         }
-        var topForPosition = ctx.getVerticalOffsetForLineNumber(this._viewPosition.lineNumber) - ctx.scrollTop;
-        var topLeft = new Coordinate(topForPosition, visibleRangeForPosition.left);
-        var largestLineNumber = this._viewPosition.lineNumber;
-        var smallestLeft = visibleRangeForPosition.left;
-        if (this._viewRange) {
-            var visibleRangesForRange = ctx.linesVisibleRangesForRange(this._viewRange, false);
-            if (visibleRangesForRange && visibleRangesForRange.length > 0) {
-                for (var i = visibleRangesForRange.length - 1; i >= 0; i--) {
-                    var visibleRangesForLine = visibleRangesForRange[i];
-                    if (visibleRangesForLine.lineNumber >= largestLineNumber) {
-                        if (visibleRangesForLine.lineNumber > largestLineNumber) {
-                            largestLineNumber = visibleRangesForLine.lineNumber;
-                            smallestLeft = 1073741824 /* MAX_SAFE_SMALL_INTEGER */;
-                        }
-                        for (var j = 0, lenJ = visibleRangesForLine.ranges.length; j < lenJ; j++) {
-                            var visibleRange = visibleRangesForLine.ranges[j];
-                            if (visibleRange.left < smallestLeft) {
-                                smallestLeft = visibleRange.left;
-                            }
-                        }
-                    }
-                }
+        var firstLine = visibleRangesForRange[0];
+        var lastLine = visibleRangesForRange[0];
+        for (var _i = 0, visibleRangesForRange_1 = visibleRangesForRange; _i < visibleRangesForRange_1.length; _i++) {
+            var visibleRangesForLine = visibleRangesForRange_1[_i];
+            if (visibleRangesForLine.lineNumber < firstLine.lineNumber) {
+                firstLine = visibleRangesForLine;
+            }
+            if (visibleRangesForLine.lineNumber > lastLine.lineNumber) {
+                lastLine = visibleRangesForLine;
             }
         }
-        var topForBottomLine = ctx.getVerticalOffsetForLineNumber(largestLineNumber) - ctx.scrollTop;
-        var bottomLeft = new Coordinate(topForBottomLine, smallestLeft);
+        var firstLineMinLeft = 1073741824 /* MAX_SAFE_SMALL_INTEGER */; //firstLine.Constants.MAX_SAFE_SMALL_INTEGER;
+        for (var _a = 0, _b = firstLine.ranges; _a < _b.length; _a++) {
+            var visibleRange = _b[_a];
+            if (visibleRange.left < firstLineMinLeft) {
+                firstLineMinLeft = visibleRange.left;
+            }
+        }
+        var lastLineMinLeft = 1073741824 /* MAX_SAFE_SMALL_INTEGER */; //lastLine.Constants.MAX_SAFE_SMALL_INTEGER;
+        for (var _c = 0, _d = lastLine.ranges; _c < _d.length; _c++) {
+            var visibleRange = _d[_c];
+            if (visibleRange.left < lastLineMinLeft) {
+                lastLineMinLeft = visibleRange.left;
+            }
+        }
+        var topForPosition = ctx.getVerticalOffsetForLineNumber(firstLine.lineNumber) - ctx.scrollTop;
+        var topLeft = new Coordinate(topForPosition, firstLineMinLeft);
+        var topForBottomLine = ctx.getVerticalOffsetForLineNumber(lastLine.lineNumber) - ctx.scrollTop;
+        var bottomLeft = new Coordinate(topForBottomLine, lastLineMinLeft);
         return [topLeft, bottomLeft];
     };
     Widget.prototype._prepareRenderWidget = function (ctx) {
@@ -394,10 +394,10 @@ var Widget = /** @class */ (function () {
      * On this first pass, we ensure that the content widget (if it is in the viewport) has the max width set correctly.
      */
     Widget.prototype.onBeforeRender = function (viewportData) {
-        if (!this._viewPosition || !this._preference) {
+        if (!this._viewRange || !this._preference) {
             return;
         }
-        if (this._viewPosition.lineNumber < viewportData.startLineNumber || this._viewPosition.lineNumber > viewportData.endLineNumber) {
+        if (this._viewRange.endLineNumber < viewportData.startLineNumber || this._viewRange.startLineNumber > viewportData.endLineNumber) {
             // Outside of viewport
             return;
         }

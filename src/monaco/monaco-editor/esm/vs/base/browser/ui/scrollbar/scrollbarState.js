@@ -7,13 +7,13 @@
  */
 var MINIMUM_SLIDER_SIZE = 20;
 var ScrollbarState = /** @class */ (function () {
-    function ScrollbarState(arrowSize, scrollbarSize, oppositeScrollbarSize) {
+    function ScrollbarState(arrowSize, scrollbarSize, oppositeScrollbarSize, visibleSize, scrollSize, scrollPosition) {
         this._scrollbarSize = Math.round(scrollbarSize);
         this._oppositeScrollbarSize = Math.round(oppositeScrollbarSize);
         this._arrowSize = Math.round(arrowSize);
-        this._visibleSize = 0;
-        this._scrollSize = 0;
-        this._scrollPosition = 0;
+        this._visibleSize = visibleSize;
+        this._scrollSize = scrollSize;
+        this._scrollPosition = scrollPosition;
         this._computedAvailableSize = 0;
         this._computedIsNeeded = false;
         this._computedSliderSize = 0;
@@ -22,11 +22,7 @@ var ScrollbarState = /** @class */ (function () {
         this._refreshComputedValues();
     }
     ScrollbarState.prototype.clone = function () {
-        var r = new ScrollbarState(this._arrowSize, this._scrollbarSize, this._oppositeScrollbarSize);
-        r.setVisibleSize(this._visibleSize);
-        r.setScrollSize(this._scrollSize);
-        r.setScrollPosition(this._scrollPosition);
-        return r;
+        return new ScrollbarState(this._arrowSize, this._scrollbarSize, this._oppositeScrollbarSize, this._visibleSize, this._scrollSize, this._scrollPosition);
     };
     ScrollbarState.prototype.setVisibleSize = function (visibleSize) {
         var iVisibleSize = Math.round(visibleSize);

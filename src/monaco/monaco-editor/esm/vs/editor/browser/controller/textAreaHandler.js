@@ -16,6 +16,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import './textAreaHandler.css';
+import * as nls from '../../../nls.js';
 import * as browser from '../../../base/browser/browser.js';
 import { createFastDomNode } from '../../../base/browser/fastDomNode.js';
 import * as platform from '../../../base/common/platform.js';
@@ -26,6 +27,7 @@ import { PagedScreenReaderStrategy, TextAreaState } from './textAreaState.js';
 import { PartFingerprints, ViewPart } from '../view/viewPart.js';
 import { LineNumbersOverlay } from '../viewParts/lineNumbers/lineNumbers.js';
 import { Margin } from '../viewParts/margin/margin.js';
+import { EditorOptions } from '../../common/config/editorOptions.js';
 import { getMapForWordSeparators } from '../../common/controller/wordCharacterClassifier.js';
 import { Position } from '../../common/core/position.js';
 import { Range } from '../../common/core/range.js';
@@ -43,50 +45,31 @@ var VisibleTextAreaData = /** @class */ (function () {
     return VisibleTextAreaData;
 }());
 var canUseZeroSizeTextarea = (browser.isEdgeOrIE || browser.isFirefox);
-/**
- * Every time we write to the clipboard, we record a bit of extra metadata here.
- * Every time we read from the cipboard, if the text matches our last written text,
- * we can fetch the previous metadata.
- */
-var LocalClipboardMetadataManager = /** @class */ (function () {
-    function LocalClipboardMetadataManager() {
-        this._lastState = null;
-    }
-    LocalClipboardMetadataManager.prototype.set = function (state) {
-        this._lastState = state;
-    };
-    LocalClipboardMetadataManager.prototype.get = function (pastedText) {
-        if (this._lastState && this._lastState.lastCopiedValue === pastedText) {
-            // match!
-            return this._lastState;
-        }
-        this._lastState = null;
-        return null;
-    };
-    LocalClipboardMetadataManager.INSTANCE = new LocalClipboardMetadataManager();
-    return LocalClipboardMetadataManager;
-}());
 var TextAreaHandler = /** @class */ (function (_super) {
     __extends(TextAreaHandler, _super);
     function TextAreaHandler(context, viewController, viewHelper) {
         var _this = _super.call(this, context) || this;
         // --- end view API
+        _this._primaryCursorPosition = new Position(1, 1);
         _this._primaryCursorVisibleRange = null;
         _this._viewController = viewController;
         _this._viewHelper = viewHelper;
-        var conf = _this._context.configuration.editor;
-        _this._accessibilitySupport = conf.accessibilitySupport;
-        _this._contentLeft = conf.layoutInfo.contentLeft;
-        _this._contentWidth = conf.layoutInfo.contentWidth;
-        _this._contentHeight = conf.layoutInfo.contentHeight;
         _this._scrollLeft = 0;
         _this._scrollTop = 0;
-        _this._fontInfo = conf.fontInfo;
-        _this._lineHeight = conf.lineHeight;
-        _this._emptySelectionClipboard = conf.emptySelectionClipboard;
-        _this._copyWithSyntaxHighlighting = conf.copyWithSyntaxHighlighting;
+        var options = _this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        _this._setAccessibilityOptions(options);
+        _this._contentLeft = layoutInfo.contentLeft;
+        _this._contentWidth = layoutInfo.contentWidth;
+        _this._contentHeight = layoutInfo.height;
+        _this._fontInfo = options.get(34 /* fontInfo */);
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._emptySelectionClipboard = options.get(25 /* emptySelectionClipboard */);
+        _this._copyWithSyntaxHighlighting = options.get(15 /* copyWithSyntaxHighlighting */);
         _this._visibleTextArea = null;
         _this._selections = [new Selection(1, 1, 1, 1)];
+        _this._modelSelections = [new Selection(1, 1, 1, 1)];
+        _this._lastRenderPosition = null;
         // Text Area (The focus will always be in the textarea when the cursor is blinking)
         _this.textArea = createFastDomNode(document.createElement('textarea'));
         PartFingerprints.write(_this.textArea, 6 /* TextArea */);
@@ -96,11 +79,14 @@ var TextAreaHandler = /** @class */ (function (_super) {
         _this.textArea.setAttribute('autocapitalize', 'off');
         _this.textArea.setAttribute('autocomplete', 'off');
         _this.textArea.setAttribute('spellcheck', 'false');
-        _this.textArea.setAttribute('aria-label', conf.viewInfo.ariaLabel);
+        _this.textArea.setAttribute('aria-label', _this._getAriaLabel(options));
         _this.textArea.setAttribute('role', 'textbox');
         _this.textArea.setAttribute('aria-multiline', 'true');
         _this.textArea.setAttribute('aria-haspopup', 'false');
         _this.textArea.setAttribute('aria-autocomplete', 'both');
+        if (platform.isWeb && options.get(68 /* readOnly */)) {
+            _this.textArea.setAttribute('readonly', 'true');
+        }
         _this.textAreaCover = createFastDomNode(document.createElement('div'));
         _this.textAreaCover.setPosition('absolute');
         var simpleModel = {
@@ -115,32 +101,30 @@ var TextAreaHandler = /** @class */ (function (_super) {
             }
         };
         var textAreaInputHost = {
-            getPlainTextToCopy: function () {
-                var rawWhatToCopy = _this._context.model.getPlainTextToCopy(_this._selections, _this._emptySelectionClipboard, platform.isWindows);
+            getDataToCopy: function (generateHTML) {
+                var rawTextToCopy = _this._context.model.getPlainTextToCopy(_this._modelSelections, _this._emptySelectionClipboard, platform.isWindows);
                 var newLineCharacter = _this._context.model.getEOL();
-                var isFromEmptySelection = (_this._emptySelectionClipboard && _this._selections.length === 1 && _this._selections[0].isEmpty());
-                var multicursorText = (Array.isArray(rawWhatToCopy) ? rawWhatToCopy : null);
-                var whatToCopy = (Array.isArray(rawWhatToCopy) ? rawWhatToCopy.join(newLineCharacter) : rawWhatToCopy);
-                var metadata = null;
-                if (isFromEmptySelection || multicursorText) {
-                    // Only store the non-default metadata
-                    // When writing "LINE\r\n" to the clipboard and then pasting,
-                    // Firefox pastes "LINE\n", so let's work around this quirk
-                    var lastCopiedValue = (browser.isFirefox ? whatToCopy.replace(/\r\n/g, '\n') : whatToCopy);
-                    metadata = {
-                        lastCopiedValue: lastCopiedValue,
-                        isFromEmptySelection: (_this._emptySelectionClipboard && _this._selections.length === 1 && _this._selections[0].isEmpty()),
-                        multicursorText: multicursorText
-                    };
+                var isFromEmptySelection = (_this._emptySelectionClipboard && _this._modelSelections.length === 1 && _this._modelSelections[0].isEmpty());
+                var multicursorText = (Array.isArray(rawTextToCopy) ? rawTextToCopy : null);
+                var text = (Array.isArray(rawTextToCopy) ? rawTextToCopy.join(newLineCharacter) : rawTextToCopy);
+                var html = undefined;
+                var mode = null;
+                if (generateHTML) {
+                    if (CopyOptions.forceCopyWithSyntaxHighlighting || (_this._copyWithSyntaxHighlighting && text.length < 65536)) {
+                        var richText = _this._context.model.getRichTextToCopy(_this._modelSelections, _this._emptySelectionClipboard);
+                        if (richText) {
+                            html = richText.html;
+                            mode = richText.mode;
+                        }
+                    }
                 }
-                LocalClipboardMetadataManager.INSTANCE.set(metadata);
-                return whatToCopy;
-            },
-            getHTMLToCopy: function () {
-                if (!_this._copyWithSyntaxHighlighting && !CopyOptions.forceCopyWithSyntaxHighlighting) {
-                    return null;
-                }
-                return _this._context.model.getHTMLToCopy(_this._selections, _this._emptySelectionClipboard);
+                return {
+                    isFromEmptySelection: isFromEmptySelection,
+                    multicursorText: multicursorText,
+                    text: text,
+                    html: html,
+                    mode: mode
+                };
             },
             getScreenReaderContent: function (currentState) {
                 if (browser.isIPad) {
@@ -166,7 +150,7 @@ var TextAreaHandler = /** @class */ (function (_super) {
                     }
                     return TextAreaState.EMPTY;
                 }
-                return PagedScreenReaderStrategy.fromEditorSelection(currentState, simpleModel, _this._selections[0], _this._accessibilitySupport === 0 /* Unknown */);
+                return PagedScreenReaderStrategy.fromEditorSelection(currentState, simpleModel, _this._selections[0], _this._accessibilityPageSize, _this._accessibilitySupport === 0 /* Unknown */);
             },
             deduceModelPosition: function (viewAnchorPosition, deltaOffset, lineFeedCnt) {
                 return _this._context.model.deduceModelPositionRelativeToViewPosition(viewAnchorPosition, deltaOffset, lineFeedCnt);
@@ -180,14 +164,15 @@ var TextAreaHandler = /** @class */ (function (_super) {
             _this._viewController.emitKeyUp(e);
         }));
         _this._register(_this._textAreaInput.onPaste(function (e) {
-            var metadata = LocalClipboardMetadataManager.INSTANCE.get(e.text);
             var pasteOnNewLine = false;
             var multicursorText = null;
-            if (metadata) {
-                pasteOnNewLine = (_this._emptySelectionClipboard && metadata.isFromEmptySelection);
-                multicursorText = metadata.multicursorText;
+            var mode = null;
+            if (e.metadata) {
+                pasteOnNewLine = (_this._emptySelectionClipboard && !!e.metadata.isFromEmptySelection);
+                multicursorText = (typeof e.metadata.multicursorText !== 'undefined' ? e.metadata.multicursorText : null);
+                mode = e.metadata.mode;
             }
-            _this._viewController.paste('keyboard', e.text, pasteOnNewLine, multicursorText);
+            _this._viewController.paste('keyboard', e.text, pasteOnNewLine, multicursorText, mode);
         }));
         _this._register(_this._textAreaInput.onCut(function () {
             _this._viewController.cut('keyboard');
@@ -206,7 +191,7 @@ var TextAreaHandler = /** @class */ (function (_super) {
         _this._register(_this._textAreaInput.onCompositionStart(function () {
             var lineNumber = _this._selections[0].startLineNumber;
             var column = _this._selections[0].startColumn;
-            _this._context.privateViewEventBus.emit(new viewEvents.ViewRevealRangeRequestEvent(new Range(lineNumber, column, lineNumber, column), 0 /* Simple */, true, 1 /* Immediate */));
+            _this._context.privateViewEventBus.emit(new viewEvents.ViewRevealRangeRequestEvent('keyboard', new Range(lineNumber, column, lineNumber, column), 0 /* Simple */, true, 1 /* Immediate */));
             // Find range pixel position
             var visibleRange = _this._viewHelper.visibleRangeForPositionRelativeToEditor(lineNumber, column);
             if (visibleRange) {
@@ -248,7 +233,7 @@ var TextAreaHandler = /** @class */ (function (_super) {
     };
     TextAreaHandler.prototype._getWordBeforePosition = function (position) {
         var lineContent = this._context.model.getLineContent(position.lineNumber);
-        var wordSeparators = getMapForWordSeparators(this._context.configuration.editor.wordSeparators);
+        var wordSeparators = getMapForWordSeparators(this._context.configuration.options.get(96 /* wordSeparators */));
         var column = position.column;
         var distance = 0;
         while (column > 1) {
@@ -272,37 +257,54 @@ var TextAreaHandler = /** @class */ (function (_super) {
         }
         return '';
     };
+    TextAreaHandler.prototype._getAriaLabel = function (options) {
+        var accessibilitySupport = options.get(2 /* accessibilitySupport */);
+        if (accessibilitySupport === 1 /* Disabled */) {
+            return nls.localize('accessibilityOffAriaLabel', "The editor is not accessible at this time. Press Alt+F1 for options.");
+        }
+        return options.get(4 /* ariaLabel */);
+    };
+    TextAreaHandler.prototype._setAccessibilityOptions = function (options) {
+        this._accessibilitySupport = options.get(2 /* accessibilitySupport */);
+        var accessibilityPageSize = options.get(3 /* accessibilityPageSize */);
+        if (this._accessibilitySupport === 2 /* Enabled */ && accessibilityPageSize === EditorOptions.accessibilityPageSize.defaultValue) {
+            // If a screen reader is attached and the default value is not set we shuold automatically increase the page size to 160 for a better experience
+            // If we put more than 160 lines the nvda can not handle this https://github.com/microsoft/vscode/issues/89717
+            this._accessibilityPageSize = 160;
+        }
+        else {
+            this._accessibilityPageSize = accessibilityPageSize;
+        }
+    };
     // --- begin event handlers
     TextAreaHandler.prototype.onConfigurationChanged = function (e) {
-        var conf = this._context.configuration.editor;
-        if (e.fontInfo) {
-            this._fontInfo = conf.fontInfo;
+        var options = this._context.configuration.options;
+        var layoutInfo = options.get(107 /* layoutInfo */);
+        this._setAccessibilityOptions(options);
+        this._contentLeft = layoutInfo.contentLeft;
+        this._contentWidth = layoutInfo.contentWidth;
+        this._contentHeight = layoutInfo.height;
+        this._fontInfo = options.get(34 /* fontInfo */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._emptySelectionClipboard = options.get(25 /* emptySelectionClipboard */);
+        this._copyWithSyntaxHighlighting = options.get(15 /* copyWithSyntaxHighlighting */);
+        this.textArea.setAttribute('aria-label', this._getAriaLabel(options));
+        if (platform.isWeb && e.hasChanged(68 /* readOnly */)) {
+            if (options.get(68 /* readOnly */)) {
+                this.textArea.setAttribute('readonly', 'true');
+            }
+            else {
+                this.textArea.removeAttribute('readonly');
+            }
         }
-        if (e.viewInfo) {
-            this.textArea.setAttribute('aria-label', conf.viewInfo.ariaLabel);
-        }
-        if (e.layoutInfo) {
-            this._contentLeft = conf.layoutInfo.contentLeft;
-            this._contentWidth = conf.layoutInfo.contentWidth;
-            this._contentHeight = conf.layoutInfo.contentHeight;
-        }
-        if (e.lineHeight) {
-            this._lineHeight = conf.lineHeight;
-        }
-        if (e.accessibilitySupport) {
-            this._accessibilitySupport = conf.accessibilitySupport;
+        if (e.hasChanged(2 /* accessibilitySupport */)) {
             this._textAreaInput.writeScreenReaderContent('strategy changed');
-        }
-        if (e.emptySelectionClipboard) {
-            this._emptySelectionClipboard = conf.emptySelectionClipboard;
-        }
-        if (e.copyWithSyntaxHighlighting) {
-            this._copyWithSyntaxHighlighting = conf.copyWithSyntaxHighlighting;
         }
         return true;
     };
     TextAreaHandler.prototype.onCursorStateChanged = function (e) {
         this._selections = e.selections.slice(0);
+        this._modelSelections = e.modelSelections.slice(0);
         this._textAreaInput.writeScreenReaderContent('selection changed');
         return true;
     };
@@ -338,9 +340,24 @@ var TextAreaHandler = /** @class */ (function (_super) {
     TextAreaHandler.prototype.focusTextArea = function () {
         this._textAreaInput.focusTextArea();
     };
+    TextAreaHandler.prototype.getLastRenderData = function () {
+        return this._lastRenderPosition;
+    };
+    TextAreaHandler.prototype.setAriaOptions = function (options) {
+        if (options.activeDescendant) {
+            this.textArea.setAttribute('aria-haspopup', 'true');
+            this.textArea.setAttribute('aria-autocomplete', 'list');
+            this.textArea.setAttribute('aria-activedescendant', options.activeDescendant);
+        }
+        else {
+            this.textArea.setAttribute('aria-haspopup', 'false');
+            this.textArea.setAttribute('aria-autocomplete', 'both');
+            this.textArea.removeAttribute('aria-activedescendant');
+        }
+    };
     TextAreaHandler.prototype.prepareRender = function (ctx) {
-        var primaryCursorPosition = new Position(this._selections[0].positionLineNumber, this._selections[0].positionColumn);
-        this._primaryCursorVisibleRange = ctx.visibleRangeForPosition(primaryCursorPosition);
+        this._primaryCursorPosition = new Position(this._selections[0].positionLineNumber, this._selections[0].positionColumn);
+        this._primaryCursorVisibleRange = ctx.visibleRangeForPosition(this._primaryCursorPosition);
     };
     TextAreaHandler.prototype.render = function (ctx) {
         this._textAreaInput.writeScreenReaderContent('render');
@@ -349,7 +366,7 @@ var TextAreaHandler = /** @class */ (function (_super) {
     TextAreaHandler.prototype._render = function () {
         if (this._visibleTextArea) {
             // The text area is visible for composition reasons
-            this._renderInsideEditor(this._visibleTextArea.top - this._scrollTop, this._contentLeft + this._visibleTextArea.left - this._scrollLeft, this._visibleTextArea.width, this._lineHeight, true);
+            this._renderInsideEditor(null, this._visibleTextArea.top - this._scrollTop, this._contentLeft + this._visibleTextArea.left - this._scrollLeft, this._visibleTextArea.width, this._lineHeight);
             return;
         }
         if (!this._primaryCursorVisibleRange) {
@@ -370,18 +387,19 @@ var TextAreaHandler = /** @class */ (function (_super) {
             return;
         }
         // The primary cursor is in the viewport (at least vertically) => place textarea on the cursor
-        this._renderInsideEditor(top, left, canUseZeroSizeTextarea ? 0 : 1, canUseZeroSizeTextarea ? 0 : 1, false);
+        if (platform.isMacintosh) {
+            // For the popup emoji input, we will make the text area as high as the line height
+            // We will also make the fontSize and lineHeight the correct dimensions to help with the placement of these pickers
+            this._renderInsideEditor(this._primaryCursorPosition, top, left, canUseZeroSizeTextarea ? 0 : 1, this._lineHeight);
+            return;
+        }
+        this._renderInsideEditor(this._primaryCursorPosition, top, left, canUseZeroSizeTextarea ? 0 : 1, canUseZeroSizeTextarea ? 0 : 1);
     };
-    TextAreaHandler.prototype._renderInsideEditor = function (top, left, width, height, useEditorFont) {
+    TextAreaHandler.prototype._renderInsideEditor = function (renderedPosition, top, left, width, height) {
+        this._lastRenderPosition = renderedPosition;
         var ta = this.textArea;
         var tac = this.textAreaCover;
-        if (useEditorFont) {
-            Configuration.applyFontInfo(ta, this._fontInfo);
-        }
-        else {
-            ta.setFontSize(1);
-            ta.setLineHeight(this._fontInfo.lineHeight);
-        }
+        Configuration.applyFontInfo(ta, this._fontInfo);
         ta.setTop(top);
         ta.setLeft(left);
         ta.setWidth(width);
@@ -392,6 +410,7 @@ var TextAreaHandler = /** @class */ (function (_super) {
         tac.setHeight(0);
     };
     TextAreaHandler.prototype._renderAtTopLeft = function () {
+        this._lastRenderPosition = null;
         var ta = this.textArea;
         var tac = this.textAreaCover;
         Configuration.applyFontInfo(ta, this._fontInfo);
@@ -412,11 +431,12 @@ var TextAreaHandler = /** @class */ (function (_super) {
         ta.setHeight(1);
         tac.setWidth(1);
         tac.setHeight(1);
-        if (this._context.configuration.editor.viewInfo.glyphMargin) {
+        var options = this._context.configuration.options;
+        if (options.get(40 /* glyphMargin */)) {
             tac.setClassName('monaco-editor-background textAreaCover ' + Margin.OUTER_CLASS_NAME);
         }
         else {
-            if (this._context.configuration.editor.viewInfo.renderLineNumbers !== 0 /* Off */) {
+            if (options.get(50 /* lineNumbers */).renderType !== 0 /* Off */) {
                 tac.setClassName('monaco-editor-background textAreaCover ' + LineNumbersOverlay.CLASS_NAME);
             }
             else {

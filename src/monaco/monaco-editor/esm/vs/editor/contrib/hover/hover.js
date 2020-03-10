@@ -27,7 +27,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 import './hover.css';
 import * as nls from '../../../nls.js';
 import { KeyChord } from '../../../base/common/keyCodes.js';
-import { DisposableStore } from '../../../base/common/lifecycle.js';
+import { DisposableStore, MutableDisposable } from '../../../base/common/lifecycle.js';
 import { EditorAction, registerEditorAction, registerEditorContribution } from '../../browser/editorExtensions.js';
 import { Range } from '../../common/core/range.js';
 import { EditorContextKeys } from '../../common/editorContextKeys.js';
@@ -35,10 +35,11 @@ import { IModeService } from '../../common/services/modeService.js';
 import { ModesContentHoverWidget } from './modesContentHover.js';
 import { ModesGlyphHoverWidget } from './modesGlyphHover.js';
 import { IOpenerService } from '../../../platform/opener/common/opener.js';
-import { editorHoverBackground, editorHoverBorder, editorHoverHighlight, textCodeBlockBackground, textLinkForeground, editorHoverStatusBarBackground } from '../../../platform/theme/common/colorRegistry.js';
+import { editorHoverBackground, editorHoverBorder, editorHoverHighlight, textCodeBlockBackground, textLinkForeground, editorHoverStatusBarBackground, editorHoverForeground } from '../../../platform/theme/common/colorRegistry.js';
 import { IThemeService, registerThemingParticipant } from '../../../platform/theme/common/themeService.js';
 import { IMarkerDecorationsService } from '../../common/services/markersDecorationService.js';
 import { IKeybindingService } from '../../../platform/keybinding/common/keybinding.js';
+import { GotoDefinitionAtPositionEditorContribution } from '../gotoSymbol/link/goToDefinitionAtPosition.js';
 var ModesHoverController = /** @class */ (function () {
     function ModesHoverController(_editor, _openerService, _modeService, _markerDecorationsService, _keybindingService, _themeService) {
         var _this = this;
@@ -49,13 +50,13 @@ var ModesHoverController = /** @class */ (function () {
         this._keybindingService = _keybindingService;
         this._themeService = _themeService;
         this._toUnhook = new DisposableStore();
+        this._contentWidget = new MutableDisposable();
+        this._glyphWidget = new MutableDisposable();
         this._isMouseDown = false;
         this._hoverClicked = false;
-        this._contentWidget = null;
-        this._glyphWidget = null;
         this._hookEvents();
         this._didChangeConfigurationHandler = this._editor.onDidChangeConfiguration(function (e) {
-            if (e.contribInfo) {
+            if (e.hasChanged(44 /* hover */)) {
                 _this._hideWidgets();
                 _this._unhookEvents();
                 _this._hookEvents();
@@ -64,20 +65,20 @@ var ModesHoverController = /** @class */ (function () {
     }
     Object.defineProperty(ModesHoverController.prototype, "contentWidget", {
         get: function () {
-            if (!this._contentWidget) {
+            if (!this._contentWidget.value) {
                 this._createHoverWidgets();
             }
-            return this._contentWidget;
+            return this._contentWidget.value;
         },
         enumerable: true,
         configurable: true
     });
     Object.defineProperty(ModesHoverController.prototype, "glyphWidget", {
         get: function () {
-            if (!this._glyphWidget) {
+            if (!this._glyphWidget.value) {
                 this._createHoverWidgets();
             }
-            return this._glyphWidget;
+            return this._glyphWidget.value;
         },
         enumerable: true,
         configurable: true
@@ -88,7 +89,7 @@ var ModesHoverController = /** @class */ (function () {
     ModesHoverController.prototype._hookEvents = function () {
         var _this = this;
         var hideWidgetsEventHandler = function () { return _this._hideWidgets(); };
-        var hoverOpts = this._editor.getConfiguration().contribInfo.hover;
+        var hoverOpts = this._editor.getOption(44 /* hover */);
         this._isHoverEnabled = hoverOpts.enabled;
         this._isHoverSticky = hoverOpts.sticky;
         if (this._isHoverEnabled) {
@@ -138,7 +139,6 @@ var ModesHoverController = /** @class */ (function () {
         this._isMouseDown = false;
     };
     ModesHoverController.prototype._onEditorMouseMove = function (mouseEvent) {
-        // const this._editor.getConfiguration().contribInfo.hover.sticky;
         var targetType = mouseEvent.target.type;
         if (this._isMouseDown && this._hoverClicked && this.contentWidget.isColorPickerVisible()) {
             return;
@@ -152,7 +152,7 @@ var ModesHoverController = /** @class */ (function () {
             return;
         }
         if (targetType === 7 /* CONTENT_EMPTY */) {
-            var epsilon = this._editor.getConfiguration().fontInfo.typicalHalfwidthCharacterWidth / 2;
+            var epsilon = this._editor.getOption(34 /* fontInfo */).typicalHalfwidthCharacterWidth / 2;
             var data = mouseEvent.target.detail;
             if (data && !data.isAfterLines && typeof data.horizontalDistanceToText === 'number' && data.horizontalDistanceToText < epsilon) {
                 // Let hover kick in even when the mouse is technically in the empty area after a line, given the distance is small enough
@@ -182,32 +182,25 @@ var ModesHoverController = /** @class */ (function () {
         }
     };
     ModesHoverController.prototype._hideWidgets = function () {
-        if (!this._glyphWidget || !this._contentWidget || (this._isMouseDown && this._hoverClicked && this._contentWidget.isColorPickerVisible())) {
+        if (!this._glyphWidget.value || !this._contentWidget.value || (this._isMouseDown && this._hoverClicked && this._contentWidget.value.isColorPickerVisible())) {
             return;
         }
-        this._glyphWidget.hide();
-        this._contentWidget.hide();
+        this._glyphWidget.value.hide();
+        this._contentWidget.value.hide();
     };
     ModesHoverController.prototype._createHoverWidgets = function () {
-        this._contentWidget = new ModesContentHoverWidget(this._editor, this._markerDecorationsService, this._themeService, this._keybindingService, this._modeService, this._openerService);
-        this._glyphWidget = new ModesGlyphHoverWidget(this._editor, this._modeService, this._openerService);
+        this._contentWidget.value = new ModesContentHoverWidget(this._editor, this._markerDecorationsService, this._themeService, this._keybindingService, this._modeService, this._openerService);
+        this._glyphWidget.value = new ModesGlyphHoverWidget(this._editor, this._modeService, this._openerService);
     };
     ModesHoverController.prototype.showContentHover = function (range, mode, focus) {
         this.contentWidget.startShowingAt(range, mode, focus);
-    };
-    ModesHoverController.prototype.getId = function () {
-        return ModesHoverController.ID;
     };
     ModesHoverController.prototype.dispose = function () {
         this._unhookEvents();
         this._toUnhook.dispose();
         this._didChangeConfigurationHandler.dispose();
-        if (this._glyphWidget) {
-            this._glyphWidget.dispose();
-        }
-        if (this._contentWidget) {
-            this._contentWidget.dispose();
-        }
+        this._glyphWidget.dispose();
+        this._contentWidget.dispose();
     };
     ModesHoverController.ID = 'editor.contrib.hover';
     ModesHoverController = __decorate([
@@ -251,13 +244,53 @@ var ShowHoverAction = /** @class */ (function (_super) {
         }
         var position = editor.getPosition();
         var range = new Range(position.lineNumber, position.column, position.lineNumber, position.column);
-        var focus = editor.getConfiguration().accessibilitySupport === 2 /* Enabled */;
+        var focus = editor.getOption(2 /* accessibilitySupport */) === 2 /* Enabled */;
         controller.showContentHover(range, 1 /* Immediate */, focus);
     };
     return ShowHoverAction;
 }(EditorAction));
-registerEditorContribution(ModesHoverController);
+var ShowDefinitionPreviewHoverAction = /** @class */ (function (_super) {
+    __extends(ShowDefinitionPreviewHoverAction, _super);
+    function ShowDefinitionPreviewHoverAction() {
+        return _super.call(this, {
+            id: 'editor.action.showDefinitionPreviewHover',
+            label: nls.localize({
+                key: 'showDefinitionPreviewHover',
+                comment: [
+                    'Label for action that will trigger the showing of definition preview hover in the editor.',
+                    'This allows for users to show the definition preview hover without using the mouse.'
+                ]
+            }, "Show Definition Preview Hover"),
+            alias: 'Show Definition Preview Hover',
+            precondition: undefined
+        }) || this;
+    }
+    ShowDefinitionPreviewHoverAction.prototype.run = function (accessor, editor) {
+        var controller = ModesHoverController.get(editor);
+        if (!controller) {
+            return;
+        }
+        var position = editor.getPosition();
+        if (!position) {
+            return;
+        }
+        var range = new Range(position.lineNumber, position.column, position.lineNumber, position.column);
+        var goto = GotoDefinitionAtPositionEditorContribution.get(editor);
+        var promise = goto.startFindDefinitionFromCursor(position);
+        if (promise) {
+            promise.then(function () {
+                controller.showContentHover(range, 1 /* Immediate */, true);
+            });
+        }
+        else {
+            controller.showContentHover(range, 1 /* Immediate */, true);
+        }
+    };
+    return ShowDefinitionPreviewHoverAction;
+}(EditorAction));
+registerEditorContribution(ModesHoverController.ID, ModesHoverController);
 registerEditorAction(ShowHoverAction);
+registerEditorAction(ShowDefinitionPreviewHoverAction);
 // theming
 registerThemingParticipant(function (theme, collector) {
     var editorHoverHighlightColor = theme.getColor(editorHoverHighlight);
@@ -278,6 +311,10 @@ registerThemingParticipant(function (theme, collector) {
     var link = theme.getColor(textLinkForeground);
     if (link) {
         collector.addRule(".monaco-editor .monaco-editor-hover a { color: " + link + "; }");
+    }
+    var hoverForeground = theme.getColor(editorHoverForeground);
+    if (hoverForeground) {
+        collector.addRule(".monaco-editor .monaco-editor-hover { color: " + hoverForeground + "; }");
     }
     var actionsBackground = theme.getColor(editorHoverStatusBarBackground);
     if (actionsBackground) {

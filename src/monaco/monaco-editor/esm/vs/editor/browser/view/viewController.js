@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { CoreNavigationCommands } from '../controller/coreCommands.js';
 import { Position } from '../../common/core/position.js';
+import * as platform from '../../../base/common/platform.js';
 var ViewController = /** @class */ (function () {
     function ViewController(configuration, viewModel, outgoingEvents, commandDelegate) {
         this.configuration = configuration;
@@ -15,8 +16,8 @@ var ViewController = /** @class */ (function () {
         args.source = 'mouse';
         this.commandDelegate.executeEditorCommand(editorCommand, args);
     };
-    ViewController.prototype.paste = function (source, text, pasteOnNewLine, multicursorText) {
-        this.commandDelegate.paste(source, text, pasteOnNewLine, multicursorText);
+    ViewController.prototype.paste = function (source, text, pasteOnNewLine, multicursorText, mode) {
+        this.commandDelegate.paste(source, text, pasteOnNewLine, multicursorText, mode);
     };
     ViewController.prototype.type = function (source, text) {
         this.commandDelegate.type(source, text);
@@ -47,7 +48,7 @@ var ViewController = /** @class */ (function () {
         return viewPosition;
     };
     ViewController.prototype._hasMulticursorModifier = function (data) {
-        switch (this.configuration.editor.multiCursorModifier) {
+        switch (this.configuration.options.get(59 /* multiCursorModifier */)) {
             case 'altKey':
                 return data.altKey;
             case 'ctrlKey':
@@ -58,7 +59,7 @@ var ViewController = /** @class */ (function () {
         return false;
     };
     ViewController.prototype._hasNonMulticursorModifier = function (data) {
-        switch (this.configuration.editor.multiCursorModifier) {
+        switch (this.configuration.options.get(59 /* multiCursorModifier */)) {
             case 'altKey':
                 return data.ctrlKey || data.metaKey;
             case 'ctrlKey':
@@ -69,13 +70,9 @@ var ViewController = /** @class */ (function () {
         return false;
     };
     ViewController.prototype.dispatchMouse = function (data) {
-        if (data.middleButton) {
-            if (data.inSelectionMode) {
-                this._columnSelect(data.position, data.mouseColumn, true);
-            }
-            else {
-                this.moveTo(data.position);
-            }
+        var selectionClipboardIsOn = (platform.isLinux && this.configuration.options.get(81 /* selectionClipboard */));
+        if (data.middleButton && !selectionClipboardIsOn) {
+            this._columnSelect(data.position, data.mouseColumn, data.inSelectionMode);
         }
         else if (data.startedOnLineNumbers) {
             // If the dragging started on the gutter, then have operations work on the entire line
@@ -134,7 +131,7 @@ var ViewController = /** @class */ (function () {
             if (this._hasMulticursorModifier(data)) {
                 if (!this._hasNonMulticursorModifier(data)) {
                     if (data.shiftKey) {
-                        this._columnSelect(data.position, data.mouseColumn, false);
+                        this._columnSelect(data.position, data.mouseColumn, true);
                     }
                     else {
                         // Do multi-cursor operations only when purely alt is pressed
@@ -175,13 +172,13 @@ var ViewController = /** @class */ (function () {
     ViewController.prototype._moveToSelect = function (viewPosition) {
         this._execMouseCommand(CoreNavigationCommands.MoveToSelect, this._usualArgs(viewPosition));
     };
-    ViewController.prototype._columnSelect = function (viewPosition, mouseColumn, setAnchorIfNotSet) {
+    ViewController.prototype._columnSelect = function (viewPosition, mouseColumn, doColumnSelect) {
         viewPosition = this._validateViewColumn(viewPosition);
         this._execMouseCommand(CoreNavigationCommands.ColumnSelect, {
             position: this._convertViewToModelPosition(viewPosition),
             viewPosition: viewPosition,
             mouseColumn: mouseColumn,
-            setAnchorIfNotSet: setAnchorIfNotSet
+            doColumnSelect: doColumnSelect
         });
     };
     ViewController.prototype._createCursor = function (viewPosition, wholeLine) {

@@ -2,11 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { onUnexpectedError } from '../../../base/common/errors.js';
 import { Emitter } from '../../../base/common/event.js';
 import { toDisposable } from '../../../base/common/lifecycle.js';
 import * as strings from '../../../base/common/strings.js';
-import { Range } from '../core/range.js';
 import { DEFAULT_WORD_REGEXP, ensureValidWordDefinition } from '../model/wordHelper.js';
 import { IndentAction } from './languageConfiguration.js';
 import { createScopedLineTokens } from './supports.js';
@@ -25,7 +23,7 @@ var RichEditSupport = /** @class */ (function () {
             prev = previous._conf;
         }
         this._conf = RichEditSupport._mergeConf(prev, rawConf);
-        this.onEnter = RichEditSupport._handleOnEnter(this._conf);
+        this._onEnterSupport = (this._conf.brackets || this._conf.indentationRules || this._conf.onEnterRules ? new OnEnterSupport(this._conf) : null);
         this.comments = RichEditSupport._handleComments(this._conf);
         this.characterPair = new CharacterPairSupport(this._conf);
         this.wordDefinition = this._conf.wordPattern || DEFAULT_WORD_REGEXP;
@@ -58,6 +56,12 @@ var RichEditSupport = /** @class */ (function () {
         enumerable: true,
         configurable: true
     });
+    RichEditSupport.prototype.onEnter = function (autoIndent, oneLineAboveText, beforeEnterText, afterEnterText) {
+        if (!this._onEnterSupport) {
+            return null;
+        }
+        return this._onEnterSupport.onEnter(autoIndent, oneLineAboveText, beforeEnterText, afterEnterText);
+    };
     RichEditSupport._mergeConf = function (prev, current) {
         return {
             comments: (prev ? current.comments || prev.comments : current.comments),
@@ -71,26 +75,6 @@ var RichEditSupport = /** @class */ (function () {
             folding: (prev ? current.folding || prev.folding : current.folding),
             __electricCharacterSupport: (prev ? current.__electricCharacterSupport || prev.__electricCharacterSupport : current.__electricCharacterSupport),
         };
-    };
-    RichEditSupport._handleOnEnter = function (conf) {
-        // on enter
-        var onEnter = {};
-        var empty = true;
-        if (conf.brackets) {
-            empty = false;
-            onEnter.brackets = conf.brackets;
-        }
-        if (conf.indentationRules) {
-            empty = false;
-        }
-        if (conf.onEnterRules) {
-            empty = false;
-            onEnter.regExpRules = conf.onEnterRules;
-        }
-        if (!empty) {
-            return new OnEnterSupport(onEnter);
-        }
-        return null;
     };
     RichEditSupport._handleComments = function (conf) {
         var commentRule = conf.comments;
@@ -269,8 +253,11 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
      *
      * This function only return the inherited indent based on above lines, it doesn't check whether current line should decrease or not.
      */
-    LanguageConfigurationRegistryImpl.prototype.getInheritIndentForLine = function (model, lineNumber, honorIntentialIndent) {
+    LanguageConfigurationRegistryImpl.prototype.getInheritIndentForLine = function (autoIndent, model, lineNumber, honorIntentialIndent) {
         if (honorIntentialIndent === void 0) { honorIntentialIndent = true; }
+        if (autoIndent < 4 /* Full */) {
+            return null;
+        }
         var indentRulesSupport = this.getIndentRulesSupport(model.getLanguageIdentifier().id);
         if (!indentRulesSupport) {
             return null;
@@ -386,26 +373,24 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
             }
         }
     };
-    LanguageConfigurationRegistryImpl.prototype.getGoodIndentForLine = function (virtualModel, languageId, lineNumber, indentConverter) {
+    LanguageConfigurationRegistryImpl.prototype.getGoodIndentForLine = function (autoIndent, virtualModel, languageId, lineNumber, indentConverter) {
+        if (autoIndent < 4 /* Full */) {
+            return null;
+        }
+        var richEditSupport = this._getRichEditSupport(languageId);
+        if (!richEditSupport) {
+            return null;
+        }
         var indentRulesSupport = this.getIndentRulesSupport(languageId);
         if (!indentRulesSupport) {
             return null;
         }
-        var indent = this.getInheritIndentForLine(virtualModel, lineNumber);
+        var indent = this.getInheritIndentForLine(autoIndent, virtualModel, lineNumber);
         var lineContent = virtualModel.getLineContent(lineNumber);
         if (indent) {
             var inheritLine = indent.line;
             if (inheritLine !== undefined) {
-                var onEnterSupport = this._getOnEnterSupport(languageId);
-                var enterResult = null;
-                try {
-                    if (onEnterSupport) {
-                        enterResult = onEnterSupport.onEnter('', virtualModel.getLineContent(inheritLine), '');
-                    }
-                }
-                catch (e) {
-                    onUnexpectedError(e);
-                }
+                var enterResult = richEditSupport.onEnter(autoIndent, '', virtualModel.getLineContent(inheritLine), '');
                 if (enterResult) {
                     var indentation = strings.getLeadingWhitespace(virtualModel.getLineContent(inheritLine));
                     if (enterResult.removeText) {
@@ -446,14 +431,16 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         }
         return null;
     };
-    LanguageConfigurationRegistryImpl.prototype.getIndentForEnter = function (model, range, indentConverter, autoIndent) {
+    LanguageConfigurationRegistryImpl.prototype.getIndentForEnter = function (autoIndent, model, range, indentConverter) {
+        if (autoIndent < 4 /* Full */) {
+            return null;
+        }
         model.forceTokenization(range.startLineNumber);
         var lineTokens = model.getLineTokens(range.startLineNumber);
-        var beforeEnterText;
-        var afterEnterText;
         var scopedLineTokens = createScopedLineTokens(lineTokens, range.startColumn - 1);
         var scopedLineText = scopedLineTokens.getLineContent();
         var embeddedLanguage = false;
+        var beforeEnterText;
         if (scopedLineTokens.firstCharOffset > 0 && lineTokens.getLanguageId(0) !== scopedLineTokens.languageId) {
             // we are in the embeded language content
             embeddedLanguage = true; // if embeddedLanguage is true, then we don't touch the indentation of current line
@@ -462,6 +449,7 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         else {
             beforeEnterText = lineTokens.getLineContent().substring(0, range.startColumn - 1);
         }
+        var afterEnterText;
         if (range.isEmpty()) {
             afterEnterText = scopedLineText.substr(range.startColumn - 1 - scopedLineTokens.firstCharOffset);
         }
@@ -475,18 +463,6 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         }
         var beforeEnterResult = beforeEnterText;
         var beforeEnterIndent = strings.getLeadingWhitespace(beforeEnterText);
-        if (!autoIndent && !embeddedLanguage) {
-            var beforeEnterIndentAction = this.getInheritIndentForLine(model, range.startLineNumber);
-            if (indentRulesSupport.shouldDecrease(beforeEnterText)) {
-                if (beforeEnterIndentAction) {
-                    beforeEnterIndent = beforeEnterIndentAction.indentation;
-                    if (beforeEnterIndentAction.action !== IndentAction.Indent) {
-                        beforeEnterIndent = indentConverter.unshiftIndent(beforeEnterIndent);
-                    }
-                }
-            }
-            beforeEnterResult = beforeEnterIndent + strings.ltrim(strings.ltrim(beforeEnterText, ' '), '\t');
-        }
         var virtualModel = {
             getLineTokens: function (lineNumber) {
                 return model.getLineTokens(lineNumber);
@@ -507,7 +483,7 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
             }
         };
         var currentLineIndent = strings.getLeadingWhitespace(lineTokens.getLineContent());
-        var afterEnterAction = this.getInheritIndentForLine(virtualModel, range.startLineNumber + 1);
+        var afterEnterAction = this.getInheritIndentForLine(autoIndent, virtualModel, range.startLineNumber + 1);
         if (!afterEnterAction) {
             var beforeEnter = embeddedLanguage ? currentLineIndent : beforeEnterIndent;
             return {
@@ -531,7 +507,10 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
      * We should always allow intentional indentation. It means, if users change the indentation of `lineNumber` and the content of
      * this line doesn't match decreaseIndentPattern, we should not adjust the indentation.
      */
-    LanguageConfigurationRegistryImpl.prototype.getIndentActionForType = function (model, range, ch, indentConverter) {
+    LanguageConfigurationRegistryImpl.prototype.getIndentActionForType = function (autoIndent, model, range, ch, indentConverter) {
+        if (autoIndent < 4 /* Full */) {
+            return null;
+        }
         var scopedLineTokens = this.getScopedLineTokens(model, range.startLineNumber, range.startColumn);
         var indentRulesSupport = this.getIndentRulesSupport(scopedLineTokens.languageId);
         if (!indentRulesSupport) {
@@ -539,8 +518,8 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         }
         var scopedLineText = scopedLineTokens.getLineContent();
         var beforeTypeText = scopedLineText.substr(0, range.startColumn - 1 - scopedLineTokens.firstCharOffset);
-        var afterTypeText;
         // selection support
+        var afterTypeText;
         if (range.isEmpty()) {
             afterTypeText = scopedLineText.substr(range.startColumn - 1 - scopedLineTokens.firstCharOffset);
         }
@@ -553,7 +532,7 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         if (!indentRulesSupport.shouldDecrease(beforeTypeText + afterTypeText) && indentRulesSupport.shouldDecrease(beforeTypeText + ch + afterTypeText)) {
             // after typing `ch`, the content matches decreaseIndentPattern, we should adjust the indent to a good manner.
             // 1. Get inherited indent action
-            var r = this.getInheritIndentForLine(model, range.startLineNumber, false);
+            var r = this.getInheritIndentForLine(autoIndent, model, range.startLineNumber, false);
             if (!r) {
                 return null;
             }
@@ -577,28 +556,16 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
     };
     // end Indent Rules
     // begin onEnter
-    LanguageConfigurationRegistryImpl.prototype._getOnEnterSupport = function (languageId) {
-        var value = this._getRichEditSupport(languageId);
-        if (!value) {
-            return null;
-        }
-        return value.onEnter || null;
-    };
-    LanguageConfigurationRegistryImpl.prototype.getRawEnterActionAtPosition = function (model, lineNumber, column) {
-        var r = this.getEnterAction(model, new Range(lineNumber, column, lineNumber, column));
-        return r ? r.enterAction : null;
-    };
-    LanguageConfigurationRegistryImpl.prototype.getEnterAction = function (model, range) {
-        var indentation = this.getIndentationAtPosition(model, range.startLineNumber, range.startColumn);
+    LanguageConfigurationRegistryImpl.prototype.getEnterAction = function (autoIndent, model, range) {
         var scopedLineTokens = this.getScopedLineTokens(model, range.startLineNumber, range.startColumn);
-        var onEnterSupport = this._getOnEnterSupport(scopedLineTokens.languageId);
-        if (!onEnterSupport) {
+        var richEditSupport = this._getRichEditSupport(scopedLineTokens.languageId);
+        if (!richEditSupport) {
             return null;
         }
         var scopedLineText = scopedLineTokens.getLineContent();
         var beforeEnterText = scopedLineText.substr(0, range.startColumn - 1 - scopedLineTokens.firstCharOffset);
-        var afterEnterText;
         // selection support
+        var afterEnterText;
         if (range.isEmpty()) {
             afterEnterText = scopedLineText.substr(range.startColumn - 1 - scopedLineTokens.firstCharOffset);
         }
@@ -606,44 +573,41 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
             var endScopedLineTokens = this.getScopedLineTokens(model, range.endLineNumber, range.endColumn);
             afterEnterText = endScopedLineTokens.getLineContent().substr(range.endColumn - 1 - scopedLineTokens.firstCharOffset);
         }
-        var lineNumber = range.startLineNumber;
         var oneLineAboveText = '';
-        if (lineNumber > 1 && scopedLineTokens.firstCharOffset === 0) {
+        if (range.startLineNumber > 1 && scopedLineTokens.firstCharOffset === 0) {
             // This is not the first line and the entire line belongs to this mode
-            var oneLineAboveScopedLineTokens = this.getScopedLineTokens(model, lineNumber - 1);
+            var oneLineAboveScopedLineTokens = this.getScopedLineTokens(model, range.startLineNumber - 1);
             if (oneLineAboveScopedLineTokens.languageId === scopedLineTokens.languageId) {
                 // The line above ends with text belonging to the same mode
                 oneLineAboveText = oneLineAboveScopedLineTokens.getLineContent();
             }
         }
-        var enterResult = null;
-        try {
-            enterResult = onEnterSupport.onEnter(oneLineAboveText, beforeEnterText, afterEnterText);
-        }
-        catch (e) {
-            onUnexpectedError(e);
-        }
+        var enterResult = richEditSupport.onEnter(autoIndent, oneLineAboveText, beforeEnterText, afterEnterText);
         if (!enterResult) {
             return null;
         }
-        else {
-            // Here we add `\t` to appendText first because enterAction is leveraging appendText and removeText to change indentation.
-            if (!enterResult.appendText) {
-                if ((enterResult.indentAction === IndentAction.Indent) ||
-                    (enterResult.indentAction === IndentAction.IndentOutdent)) {
-                    enterResult.appendText = '\t';
-                }
-                else {
-                    enterResult.appendText = '';
-                }
+        var indentAction = enterResult.indentAction;
+        var appendText = enterResult.appendText;
+        var removeText = enterResult.removeText || 0;
+        // Here we add `\t` to appendText first because enterAction is leveraging appendText and removeText to change indentation.
+        if (!appendText) {
+            if ((indentAction === IndentAction.Indent) ||
+                (indentAction === IndentAction.IndentOutdent)) {
+                appendText = '\t';
+            }
+            else {
+                appendText = '';
             }
         }
-        if (enterResult.removeText) {
-            indentation = indentation.substring(0, indentation.length - enterResult.removeText);
+        var indentation = this.getIndentationAtPosition(model, range.startLineNumber, range.startColumn);
+        if (removeText) {
+            indentation = indentation.substring(0, indentation.length - removeText);
         }
         return {
-            enterAction: enterResult,
-            indentation: indentation,
+            indentAction: indentAction,
+            appendText: appendText,
+            removeText: removeText,
+            indentation: indentation
         };
     };
     LanguageConfigurationRegistryImpl.prototype.getIndentationAtPosition = function (model, lineNumber, column) {
@@ -658,8 +622,7 @@ var LanguageConfigurationRegistryImpl = /** @class */ (function () {
         model.forceTokenization(lineNumber);
         var lineTokens = model.getLineTokens(lineNumber);
         var column = (typeof columnNumber === 'undefined' ? model.getLineMaxColumn(lineNumber) - 1 : columnNumber - 1);
-        var scopedLineTokens = createScopedLineTokens(lineTokens, column);
-        return scopedLineTokens;
+        return createScopedLineTokens(lineTokens, column);
     };
     // end onEnter
     LanguageConfigurationRegistryImpl.prototype.getBracketsSupport = function (languageId) {

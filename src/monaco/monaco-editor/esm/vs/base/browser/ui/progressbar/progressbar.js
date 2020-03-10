@@ -102,7 +102,7 @@ var ProgressBar = /** @class */ (function (_super) {
     };
     ProgressBar.prototype.applyStyles = function () {
         if (this.bit) {
-            var background = this.progressBarBackground ? this.progressBarBackground.toString() : null;
+            var background = this.progressBarBackground ? this.progressBarBackground.toString() : '';
             this.bit.style.backgroundColor = background;
         }
     };

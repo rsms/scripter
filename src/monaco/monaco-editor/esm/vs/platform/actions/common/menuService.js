@@ -2,19 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -25,7 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 import { Emitter, Event } from '../../../base/common/event.js';
-import { Disposable } from '../../../base/common/lifecycle.js';
+import { DisposableStore } from '../../../base/common/lifecycle.js';
 import { isIMenuItem, MenuItemAction, MenuRegistry, SubmenuItemAction } from './actions.js';
 import { ICommandService } from '../../commands/common/commands.js';
 import { IContextKeyService } from '../../contextkey/common/contextkey.js';
@@ -43,27 +30,32 @@ var MenuService = /** @class */ (function () {
     return MenuService;
 }());
 export { MenuService };
-var Menu = /** @class */ (function (_super) {
-    __extends(Menu, _super);
+var Menu = /** @class */ (function () {
     function Menu(_id, _commandService, _contextKeyService) {
-        var _this = _super.call(this) || this;
-        _this._id = _id;
-        _this._commandService = _commandService;
-        _this._contextKeyService = _contextKeyService;
-        _this._onDidChange = _this._register(new Emitter());
-        _this._build();
-        // rebuild this menu whenever the menu registry reports an
-        // event for this MenuId
-        _this._register(Event.debounce(Event.filter(MenuRegistry.onDidChangeMenu, function (menuId) { return menuId === _this._id; }), function () { }, 50)(_this._build, _this));
-        // when context keys change we need to check if the menu also
-        // has changed
-        _this._register(Event.debounce(_this._contextKeyService.onDidChangeContext, function (last, event) { return last || event.affectsSome(_this._contextKeys); }, 50)(function (e) { return e && _this._onDidChange.fire(undefined); }, _this));
-        return _this;
-    }
-    Menu.prototype._build = function () {
-        // reset
+        var _this = this;
+        this._id = _id;
+        this._commandService = _commandService;
+        this._contextKeyService = _contextKeyService;
+        this._onDidChange = new Emitter();
+        this._dispoables = new DisposableStore();
         this._menuGroups = [];
         this._contextKeys = new Set();
+        this._build();
+        // rebuild this menu whenever the menu registry reports an
+        // event for this MenuId
+        this._dispoables.add(Event.debounce(Event.filter(MenuRegistry.onDidChangeMenu, function (menuId) { return menuId === _this._id; }), function () { }, 50)(this._build, this));
+        // when context keys change we need to check if the menu also
+        // has changed
+        this._dispoables.add(Event.debounce(this._contextKeyService.onDidChangeContext, function (last, event) { return last || event.affectsSome(_this._contextKeys); }, 50)(function (e) { return e && _this._onDidChange.fire(undefined); }, this));
+    }
+    Menu.prototype.dispose = function () {
+        this._dispoables.dispose();
+        this._onDidChange.dispose();
+    };
+    Menu.prototype._build = function () {
+        // reset
+        this._menuGroups.length = 0;
+        this._contextKeys.clear();
         var menuItems = MenuRegistry.getMenuItems(this._id);
         var group;
         menuItems.sort(Menu._compareMenuItems);
@@ -98,7 +90,9 @@ var Menu = /** @class */ (function (_super) {
             for (var _b = 0, items_1 = items; _b < items_1.length; _b++) {
                 var item = items_1[_b];
                 if (this._contextKeyService.contextMatchesRules(item.when)) {
-                    var action = isIMenuItem(item) ? new MenuItemAction(item.command, item.alt, options, this._contextKeyService, this._commandService) : new SubmenuItemAction(item);
+                    var action = isIMenuItem(item)
+                        ? new MenuItemAction(item.command, item.alt, options, this._contextKeyService, this._commandService)
+                        : new SubmenuItemAction(item);
                     activeActions.push(action);
                 }
             }
@@ -150,13 +144,16 @@ var Menu = /** @class */ (function (_super) {
             return 1;
         }
         // sort on titles
-        var aTitle = typeof a.command.title === 'string' ? a.command.title : a.command.title.value;
-        var bTitle = typeof b.command.title === 'string' ? b.command.title : b.command.title.value;
-        return aTitle.localeCompare(bTitle);
+        return Menu._compareTitles(isIMenuItem(a) ? a.command.title : a.title, isIMenuItem(b) ? b.command.title : b.title);
+    };
+    Menu._compareTitles = function (a, b) {
+        var aStr = typeof a === 'string' ? a : a.value;
+        var bStr = typeof b === 'string' ? b : b.value;
+        return aStr.localeCompare(bStr);
     };
     Menu = __decorate([
         __param(1, ICommandService),
         __param(2, IContextKeyService)
     ], Menu);
     return Menu;
-}(Disposable));
+}());

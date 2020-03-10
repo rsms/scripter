@@ -339,7 +339,81 @@ var PieceTreeBase = /** @class */ (function () {
         return ret;
     };
     PieceTreeBase.prototype.getLinesContent = function () {
-        return this.getContentOfSubTree(this.root).split(/\r\n|\r|\n/);
+        var _this = this;
+        var lines = [];
+        var linesLength = 0;
+        var currentLine = '';
+        var danglingCR = false;
+        this.iterate(this.root, function (node) {
+            if (node === SENTINEL) {
+                return true;
+            }
+            var piece = node.piece;
+            var pieceLength = piece.length;
+            if (pieceLength === 0) {
+                return true;
+            }
+            var buffer = _this._buffers[piece.bufferIndex].buffer;
+            var lineStarts = _this._buffers[piece.bufferIndex].lineStarts;
+            var pieceStartLine = piece.start.line;
+            var pieceEndLine = piece.end.line;
+            var pieceStartOffset = lineStarts[pieceStartLine] + piece.start.column;
+            if (danglingCR) {
+                if (buffer.charCodeAt(pieceStartOffset) === 10 /* LineFeed */) {
+                    // pretend the \n was in the previous piece..
+                    pieceStartOffset++;
+                    pieceLength--;
+                }
+                lines[linesLength++] = currentLine;
+                currentLine = '';
+                danglingCR = false;
+                if (pieceLength === 0) {
+                    return true;
+                }
+            }
+            if (pieceStartLine === pieceEndLine) {
+                // this piece has no new lines
+                if (!_this._EOLNormalized && buffer.charCodeAt(pieceStartOffset + pieceLength - 1) === 13 /* CarriageReturn */) {
+                    danglingCR = true;
+                    currentLine += buffer.substr(pieceStartOffset, pieceLength - 1);
+                }
+                else {
+                    currentLine += buffer.substr(pieceStartOffset, pieceLength);
+                }
+                return true;
+            }
+            // add the text before the first line start in this piece
+            currentLine += (_this._EOLNormalized
+                ? buffer.substring(pieceStartOffset, Math.max(pieceStartOffset, lineStarts[pieceStartLine + 1] - _this._EOLLength))
+                : buffer.substring(pieceStartOffset, lineStarts[pieceStartLine + 1]).replace(/(\r\n|\r|\n)$/, ''));
+            lines[linesLength++] = currentLine;
+            for (var line = pieceStartLine + 1; line < pieceEndLine; line++) {
+                currentLine = (_this._EOLNormalized
+                    ? buffer.substring(lineStarts[line], lineStarts[line + 1] - _this._EOLLength)
+                    : buffer.substring(lineStarts[line], lineStarts[line + 1]).replace(/(\r\n|\r|\n)$/, ''));
+                lines[linesLength++] = currentLine;
+            }
+            if (!_this._EOLNormalized && buffer.charCodeAt(lineStarts[pieceEndLine] + piece.end.column - 1) === 13 /* CarriageReturn */) {
+                danglingCR = true;
+                if (piece.end.column === 0) {
+                    // The last line ended with a \r, let's undo the push, it will be pushed by next iteration
+                    linesLength--;
+                }
+                else {
+                    currentLine = buffer.substr(lineStarts[pieceEndLine], piece.end.column - 1);
+                }
+            }
+            else {
+                currentLine = buffer.substr(lineStarts[pieceEndLine], piece.end.column);
+            }
+            return true;
+        });
+        if (danglingCR) {
+            lines[linesLength++] = currentLine;
+            currentLine = '';
+        }
+        lines[linesLength++] = currentLine;
+        return lines;
     };
     PieceTreeBase.prototype.getLength = function () {
         return this._length;
@@ -396,20 +470,31 @@ var PieceTreeBase = /** @class */ (function () {
         var end = this.offsetInBuffer(node.piece.bufferIndex, endCursor);
         var m;
         // Reset regex to search from the beginning
-        searcher.reset(start);
         var ret = { line: 0, column: 0 };
+        var searchText;
+        var offsetInBuffer;
+        if (searcher._wordSeparators) {
+            searchText = buffer.buffer.substring(start, end);
+            offsetInBuffer = function (offset) { return offset + start; };
+            searcher.reset(-1);
+        }
+        else {
+            searchText = buffer.buffer;
+            offsetInBuffer = function (offset) { return offset; };
+            searcher.reset(start);
+        }
         do {
-            m = searcher.next(buffer.buffer);
+            m = searcher.next(searchText);
             if (m) {
-                if (m.index >= end) {
+                if (offsetInBuffer(m.index) >= end) {
                     return resultLen;
                 }
-                this.positionInBuffer(node, m.index - startOffsetInBuffer, ret);
+                this.positionInBuffer(node, offsetInBuffer(m.index) - startOffsetInBuffer, ret);
                 var lineFeedCnt = this.getLineFeedCnt(node.piece.bufferIndex, startCursor, ret);
                 var retStartColumn = ret.line === startCursor.line ? ret.column - startCursor.column + startColumn : ret.column + 1;
                 var retEndColumn = retStartColumn + m[0].length;
                 result[resultLen++] = createFindMatch(new Range(startLineNumber + lineFeedCnt, retStartColumn, startLineNumber + lineFeedCnt, retEndColumn), m, captureMatches);
-                if (m.index + m[0].length >= end) {
+                if (offsetInBuffer(m.index) + m[0].length >= end) {
                     return resultLen;
                 }
                 if (resultLen >= limitResultCount) {
@@ -1323,15 +1408,6 @@ var PieceTreeBase = /** @class */ (function () {
         }
         fixInsert(this, z);
         return z;
-    };
-    PieceTreeBase.prototype.getContentOfSubTree = function (node) {
-        var _this = this;
-        var str = '';
-        this.iterate(node, function (node) {
-            str += _this.getNodeContent(node);
-            return true;
-        });
-        return str;
     };
     return PieceTreeBase;
 }());

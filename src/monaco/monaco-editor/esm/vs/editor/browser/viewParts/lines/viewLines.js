@@ -23,7 +23,7 @@ import { PartFingerprints, ViewPart } from '../../view/viewPart.js';
 import { DomReadingContext, ViewLine, ViewLineOptions } from './viewLine.js';
 import { Position } from '../../../common/core/position.js';
 import { Range } from '../../../common/core/range.js';
-import { LineVisibleRanges } from '../../../common/view/renderingContext.js';
+import { LineVisibleRanges, HorizontalPosition } from '../../../common/view/renderingContext.js';
 var LastRenderedData = /** @class */ (function () {
     function LastRenderedData() {
         this._currentVisibleRange = new Range(1, 1, 1, 1);
@@ -56,16 +56,20 @@ var ViewLines = /** @class */ (function (_super) {
         _this._visibleLines = new VisibleLinesCollection(_this);
         _this.domNode = _this._visibleLines.domNode;
         var conf = _this._context.configuration;
-        _this._lineHeight = conf.editor.lineHeight;
-        _this._typicalHalfwidthCharacterWidth = conf.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        _this._isViewportWrapping = conf.editor.wrappingInfo.isViewportWrapping;
-        _this._revealHorizontalRightPadding = conf.editor.viewInfo.revealHorizontalRightPadding;
-        _this._scrollOff = conf.editor.viewInfo.cursorSurroundingLines;
-        _this._canUseLayerHinting = conf.editor.canUseLayerHinting;
+        var options = _this._context.configuration.options;
+        var fontInfo = options.get(34 /* fontInfo */);
+        var wrappingInfo = options.get(108 /* wrappingInfo */);
+        _this._lineHeight = options.get(49 /* lineHeight */);
+        _this._typicalHalfwidthCharacterWidth = fontInfo.typicalHalfwidthCharacterWidth;
+        _this._isViewportWrapping = wrappingInfo.isViewportWrapping;
+        _this._revealHorizontalRightPadding = options.get(75 /* revealHorizontalRightPadding */);
+        _this._cursorSurroundingLines = options.get(19 /* cursorSurroundingLines */);
+        _this._cursorSurroundingLinesStyle = options.get(20 /* cursorSurroundingLinesStyle */);
+        _this._canUseLayerHinting = !options.get(22 /* disableLayerHinting */);
         _this._viewLineOptions = new ViewLineOptions(conf, _this._context.theme.type);
         PartFingerprints.write(_this.domNode, 7 /* ViewLines */);
         _this.domNode.setClassName('view-lines');
-        Configuration.applyFontInfo(_this.domNode, conf.editor.fontInfo);
+        Configuration.applyFontInfo(_this.domNode, fontInfo);
         // --- width & height
         _this._maxLineWidth = 0;
         _this._asyncUpdateLineWidths = new RunOnceScheduler(function () {
@@ -90,31 +94,22 @@ var ViewLines = /** @class */ (function (_super) {
     // ---- begin view event handlers
     ViewLines.prototype.onConfigurationChanged = function (e) {
         this._visibleLines.onConfigurationChanged(e);
-        if (e.wrappingInfo) {
+        if (e.hasChanged(108 /* wrappingInfo */)) {
             this._maxLineWidth = 0;
         }
-        var conf = this._context.configuration;
-        if (e.lineHeight) {
-            this._lineHeight = conf.editor.lineHeight;
-        }
-        if (e.fontInfo) {
-            this._typicalHalfwidthCharacterWidth = conf.editor.fontInfo.typicalHalfwidthCharacterWidth;
-        }
-        if (e.wrappingInfo) {
-            this._isViewportWrapping = conf.editor.wrappingInfo.isViewportWrapping;
-        }
-        if (e.viewInfo) {
-            this._revealHorizontalRightPadding = conf.editor.viewInfo.revealHorizontalRightPadding;
-            this._scrollOff = conf.editor.viewInfo.cursorSurroundingLines;
-        }
-        if (e.canUseLayerHinting) {
-            this._canUseLayerHinting = conf.editor.canUseLayerHinting;
-        }
-        if (e.fontInfo) {
-            Configuration.applyFontInfo(this.domNode, conf.editor.fontInfo);
-        }
+        var options = this._context.configuration.options;
+        var fontInfo = options.get(34 /* fontInfo */);
+        var wrappingInfo = options.get(108 /* wrappingInfo */);
+        this._lineHeight = options.get(49 /* lineHeight */);
+        this._typicalHalfwidthCharacterWidth = fontInfo.typicalHalfwidthCharacterWidth;
+        this._isViewportWrapping = wrappingInfo.isViewportWrapping;
+        this._revealHorizontalRightPadding = options.get(75 /* revealHorizontalRightPadding */);
+        this._cursorSurroundingLines = options.get(19 /* cursorSurroundingLines */);
+        this._cursorSurroundingLinesStyle = options.get(20 /* cursorSurroundingLinesStyle */);
+        this._canUseLayerHinting = !options.get(22 /* disableLayerHinting */);
+        Configuration.applyFontInfo(this.domNode, fontInfo);
         this._onOptionsMaybeChanged();
-        if (e.layoutInfo) {
+        if (e.hasChanged(107 /* layoutInfo */)) {
             this._maxLineWidth = 0;
         }
         return true;
@@ -170,7 +165,7 @@ var ViewLines = /** @class */ (function (_super) {
     ViewLines.prototype.onRevealRangeRequest = function (e) {
         // Using the future viewport here in order to handle multiple
         // incoming reveal range requests that might all desire to be animated
-        var desiredScrollTop = this._computeScrollTopToRevealRange(this._context.viewLayout.getFutureViewport(), e.range, e.verticalType);
+        var desiredScrollTop = this._computeScrollTopToRevealRange(this._context.viewLayout.getFutureViewport(), e.source, e.range, e.verticalType);
         // validate the new desired scroll top
         var newScrollPosition = this._context.viewLayout.validateScrollPosition({ scrollTop: desiredScrollTop });
         if (e.revealHorizontal) {
@@ -316,60 +311,40 @@ var ViewLines = /** @class */ (function (_super) {
             var startColumn = lineNumber === range.startLineNumber ? range.startColumn : 1;
             var endColumn = lineNumber === range.endLineNumber ? range.endColumn : this._context.model.getLineMaxColumn(lineNumber);
             var visibleRangesForLine = this._visibleLines.getVisibleLine(lineNumber).getVisibleRangesForRange(startColumn, endColumn, domReadingContext);
-            if (!visibleRangesForLine || visibleRangesForLine.length === 0) {
+            if (!visibleRangesForLine) {
                 continue;
             }
             if (includeNewLines && lineNumber < originalEndLineNumber) {
                 var currentLineModelLineNumber = nextLineModelLineNumber;
                 nextLineModelLineNumber = this._context.model.coordinatesConverter.convertViewPositionToModelPosition(new Position(lineNumber + 1, 1)).lineNumber;
                 if (currentLineModelLineNumber !== nextLineModelLineNumber) {
-                    visibleRangesForLine[visibleRangesForLine.length - 1].width += this._typicalHalfwidthCharacterWidth;
+                    visibleRangesForLine.ranges[visibleRangesForLine.ranges.length - 1].width += this._typicalHalfwidthCharacterWidth;
                 }
             }
-            visibleRanges[visibleRangesLen++] = new LineVisibleRanges(lineNumber, visibleRangesForLine);
+            visibleRanges[visibleRangesLen++] = new LineVisibleRanges(visibleRangesForLine.outsideRenderedLine, lineNumber, visibleRangesForLine.ranges);
         }
         if (visibleRangesLen === 0) {
             return null;
         }
         return visibleRanges;
     };
-    ViewLines.prototype.visibleRangesForRange2 = function (_range) {
+    ViewLines.prototype._visibleRangesForLineRange = function (lineNumber, startColumn, endColumn) {
         if (this.shouldRender()) {
             // Cannot read from the DOM because it is dirty
             // i.e. the model & the dom are out of sync, so I'd be reading something stale
             return null;
         }
-        var range = Range.intersectRanges(_range, this._lastRenderedData.getCurrentVisibleRange());
-        if (!range) {
+        if (lineNumber < this._visibleLines.getStartLineNumber() || lineNumber > this._visibleLines.getEndLineNumber()) {
             return null;
         }
-        var result = [];
-        var domReadingContext = new DomReadingContext(this.domNode.domNode, this._textRangeRestingSpot);
-        var rendStartLineNumber = this._visibleLines.getStartLineNumber();
-        var rendEndLineNumber = this._visibleLines.getEndLineNumber();
-        for (var lineNumber = range.startLineNumber; lineNumber <= range.endLineNumber; lineNumber++) {
-            if (lineNumber < rendStartLineNumber || lineNumber > rendEndLineNumber) {
-                continue;
-            }
-            var startColumn = lineNumber === range.startLineNumber ? range.startColumn : 1;
-            var endColumn = lineNumber === range.endLineNumber ? range.endColumn : this._context.model.getLineMaxColumn(lineNumber);
-            var visibleRangesForLine = this._visibleLines.getVisibleLine(lineNumber).getVisibleRangesForRange(startColumn, endColumn, domReadingContext);
-            if (!visibleRangesForLine || visibleRangesForLine.length === 0) {
-                continue;
-            }
-            result = result.concat(visibleRangesForLine);
-        }
-        if (result.length === 0) {
-            return null;
-        }
-        return result;
+        return this._visibleLines.getVisibleLine(lineNumber).getVisibleRangesForRange(startColumn, endColumn, new DomReadingContext(this.domNode.domNode, this._textRangeRestingSpot));
     };
     ViewLines.prototype.visibleRangeForPosition = function (position) {
-        var visibleRanges = this.visibleRangesForRange2(new Range(position.lineNumber, position.column, position.lineNumber, position.column));
+        var visibleRanges = this._visibleRangesForLineRange(position.lineNumber, position.column, position.column);
         if (!visibleRanges) {
             return null;
         }
-        return visibleRanges[0];
+        return new HorizontalPosition(visibleRanges.outsideRenderedLine, visibleRanges.ranges[0].left);
     };
     // --- implementation
     ViewLines.prototype.updateLineWidths = function () {
@@ -459,6 +434,7 @@ var ViewLines = /** @class */ (function (_super) {
         }
         // (3) handle scrolling
         this._linesContent.setLayerHinting(this._canUseLayerHinting);
+        this._linesContent.setContain('strict');
         var adjustedScrollTop = this._context.viewLayout.getCurrentScrollTop() - viewportData.bigNumbersDelta;
         this._linesContent.setTop(-adjustedScrollTop);
         this._linesContent.setLeft(-this._context.viewLayout.getCurrentScrollLeft());
@@ -471,7 +447,7 @@ var ViewLines = /** @class */ (function (_super) {
             this._context.viewLayout.onMaxLineWidthChanged(this._maxLineWidth);
         }
     };
-    ViewLines.prototype._computeScrollTopToRevealRange = function (viewport, range, verticalType) {
+    ViewLines.prototype._computeScrollTopToRevealRange = function (viewport, source, range, verticalType) {
         var viewportStartY = viewport.top;
         var viewportHeight = viewport.height;
         var viewportEndY = viewportStartY + viewportHeight;
@@ -480,15 +456,22 @@ var ViewLines = /** @class */ (function (_super) {
         // Have a box that includes one extra line height (for the horizontal scrollbar)
         boxStartY = this._context.viewLayout.getVerticalOffsetForLineNumber(range.startLineNumber);
         boxEndY = this._context.viewLayout.getVerticalOffsetForLineNumber(range.endLineNumber) + this._lineHeight;
-        var context = Math.min((viewportHeight / this._lineHeight) / 2, this._scrollOff);
-        boxStartY -= context * this._lineHeight;
-        boxEndY += Math.max(0, (context - 1)) * this._lineHeight;
+        var shouldIgnoreScrollOff = source === 'mouse' && this._cursorSurroundingLinesStyle === 'default';
+        if (!shouldIgnoreScrollOff) {
+            var context = Math.min((viewportHeight / this._lineHeight) / 2, this._cursorSurroundingLines);
+            boxStartY -= context * this._lineHeight;
+            boxEndY += Math.max(0, (context - 1)) * this._lineHeight;
+        }
         if (verticalType === 0 /* Simple */ || verticalType === 4 /* Bottom */) {
             // Reveal one line more when the last line would be covered by the scrollbar - arrow down case or revealing a line explicitly at bottom
             boxEndY += this._lineHeight;
         }
         var newScrollTop;
-        if (verticalType === 1 /* Center */ || verticalType === 2 /* CenterIfOutsideViewport */) {
+        if (boxEndY - boxStartY > viewportHeight) {
+            // the box is larger than the viewport ... scroll to its top
+            newScrollTop = boxStartY;
+        }
+        else if (verticalType === 1 /* Center */ || verticalType === 2 /* CenterIfOutsideViewport */) {
             if (verticalType === 2 /* CenterIfOutsideViewport */ && viewportStartY <= boxStartY && boxEndY <= viewportEndY) {
                 // Box is already in the viewport... do nothing
                 newScrollTop = viewportStartY;
@@ -509,8 +492,8 @@ var ViewLines = /** @class */ (function (_super) {
         var viewport = this._context.viewLayout.getCurrentViewport();
         var viewportStartX = viewport.left;
         var viewportEndX = viewportStartX + viewport.width;
-        var visibleRanges = this.visibleRangesForRange2(new Range(lineNumber, startColumn, lineNumber, endColumn));
-        var boxStartX = Number.MAX_VALUE;
+        var visibleRanges = this._visibleRangesForLineRange(lineNumber, startColumn, endColumn);
+        var boxStartX = 1073741824 /* MAX_SAFE_SMALL_INTEGER */;
         var boxEndX = 0;
         if (!visibleRanges) {
             // Unknown
@@ -519,8 +502,8 @@ var ViewLines = /** @class */ (function (_super) {
                 maxHorizontalOffset: maxHorizontalOffset
             };
         }
-        for (var _i = 0, visibleRanges_1 = visibleRanges; _i < visibleRanges_1.length; _i++) {
-            var visibleRange = visibleRanges_1[_i];
+        for (var _i = 0, _a = visibleRanges.ranges; _i < _a.length; _i++) {
+            var visibleRange = _a[_i];
             if (visibleRange.left < boxStartX) {
                 boxStartX = visibleRange.left;
             }

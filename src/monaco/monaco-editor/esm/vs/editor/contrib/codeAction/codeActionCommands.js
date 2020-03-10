@@ -25,10 +25,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -59,67 +60,102 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
+import { Lazy } from '../../../base/common/lazy.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { escapeRegExpCharacters } from '../../../base/common/strings.js';
 import { EditorAction, EditorCommand } from '../../browser/editorExtensions.js';
 import { IBulkEditService } from '../../browser/services/bulkEditService.js';
 import { EditorContextKeys } from '../../common/editorContextKeys.js';
+import { codeActionCommandId, fixAllCommandId, organizeImportsCommandId, refactorCommandId, sourceActionCommandId } from './codeAction.js';
 import { CodeActionUi } from './codeActionUi.js';
 import { MessageController } from '../message/messageController.js';
 import * as nls from '../../../nls.js';
 import { ICommandService } from '../../../platform/commands/common/commands.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../platform/contextkey/common/contextkey.js';
-import { IContextMenuService } from '../../../platform/contextview/browser/contextView.js';
-import { IKeybindingService } from '../../../platform/keybinding/common/keybinding.js';
+import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
 import { IMarkerService } from '../../../platform/markers/common/markers.js';
+import { INotificationService } from '../../../platform/notification/common/notification.js';
 import { IEditorProgressService } from '../../../platform/progress/common/progress.js';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry.js';
 import { CodeActionModel, SUPPORTED_CODE_ACTIONS } from './codeActionModel.js';
-import { CodeActionKind } from './codeActionTrigger.js';
+import { CodeActionCommandArgs, CodeActionKind } from './types.js';
 function contextKeyForSupportedActions(kind) {
     return ContextKeyExpr.regex(SUPPORTED_CODE_ACTIONS.keys()[0], new RegExp('(\\s|^)' + escapeRegExpCharacters(kind.value) + '\\b'));
 }
+var argsSchema = {
+    type: 'object',
+    required: ['kind'],
+    defaultSnippets: [{ body: { kind: '' } }],
+    properties: {
+        'kind': {
+            type: 'string',
+            description: nls.localize('args.schema.kind', "Kind of the code action to run."),
+        },
+        'apply': {
+            type: 'string',
+            description: nls.localize('args.schema.apply', "Controls when the returned actions are applied."),
+            default: "ifSingle" /* IfSingle */,
+            enum: ["first" /* First */, "ifSingle" /* IfSingle */, "never" /* Never */],
+            enumDescriptions: [
+                nls.localize('args.schema.apply.first', "Always apply the first returned code action."),
+                nls.localize('args.schema.apply.ifSingle', "Apply the first returned code action if it is the only one."),
+                nls.localize('args.schema.apply.never', "Do not apply the returned code actions."),
+            ]
+        },
+        'preferred': {
+            type: 'boolean',
+            default: false,
+            description: nls.localize('args.schema.preferred', "Controls if only preferred code actions should be returned."),
+        }
+    }
+};
 var QuickFixController = /** @class */ (function (_super) {
     __extends(QuickFixController, _super);
-    function QuickFixController(editor, markerService, contextKeyService, progressService, contextMenuService, keybindingService, _commandService, _bulkEditService) {
+    function QuickFixController(editor, markerService, contextKeyService, progressService, _instantiationService) {
         var _this = _super.call(this) || this;
-        _this._commandService = _commandService;
-        _this._bulkEditService = _bulkEditService;
+        _this._instantiationService = _instantiationService;
         _this._editor = editor;
         _this._model = _this._register(new CodeActionModel(_this._editor, markerService, contextKeyService, progressService));
         _this._register(_this._model.onDidChangeState(function (newState) { return _this.update(newState); }));
-        _this._ui = _this._register(new CodeActionUi(editor, QuickFixAction.Id, {
-            applyCodeAction: function (action, retrigger) { return __awaiter(_this, void 0, void 0, function () {
-                return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            _a.trys.push([0, , 2, 3]);
-                            return [4 /*yield*/, this._applyCodeAction(action)];
-                        case 1:
-                            _a.sent();
-                            return [3 /*break*/, 3];
-                        case 2:
-                            if (retrigger) {
-                                this._trigger({ type: 'auto', filter: {} });
-                            }
-                            return [7 /*endfinally*/];
-                        case 3: return [2 /*return*/];
-                    }
-                });
-            }); }
-        }, contextMenuService, keybindingService));
+        _this._ui = new Lazy(function () {
+            return _this._register(new CodeActionUi(editor, QuickFixAction.Id, AutoFixAction.Id, {
+                applyCodeAction: function (action, retrigger) { return __awaiter(_this, void 0, void 0, function () {
+                    return __generator(this, function (_a) {
+                        switch (_a.label) {
+                            case 0:
+                                _a.trys.push([0, , 2, 3]);
+                                return [4 /*yield*/, this._applyCodeAction(action)];
+                            case 1:
+                                _a.sent();
+                                return [3 /*break*/, 3];
+                            case 2:
+                                if (retrigger) {
+                                    this._trigger({ type: 1 /* Auto */, filter: {} });
+                                }
+                                return [7 /*endfinally*/];
+                            case 3: return [2 /*return*/];
+                        }
+                    });
+                }); }
+            }, _this._instantiationService));
+        });
         return _this;
     }
     QuickFixController.get = function (editor) {
         return editor.getContribution(QuickFixController.ID);
     };
     QuickFixController.prototype.update = function (newState) {
-        this._ui.update(newState);
+        this._ui.getValue().update(newState);
     };
-    QuickFixController.prototype.showCodeActions = function (actions, at) {
-        return this._ui.showCodeActionList(actions, at);
-    };
-    QuickFixController.prototype.getId = function () {
-        return QuickFixController.ID;
+    QuickFixController.prototype.showCodeActions = function (trigger, actions, at) {
+        return this._ui.getValue().showCodeActionList(trigger, actions, at, { includeDisabledActions: false });
     };
     QuickFixController.prototype.manualTriggerAtCurrentPosition = function (notAvailableMessage, filter, autoApply) {
         if (!this._editor.hasModel()) {
@@ -127,47 +163,75 @@ var QuickFixController = /** @class */ (function (_super) {
         }
         MessageController.get(this._editor).closeMessage();
         var triggerPosition = this._editor.getPosition();
-        this._trigger({ type: 'manual', filter: filter, autoApply: autoApply, context: { notAvailableMessage: notAvailableMessage, position: triggerPosition } });
+        this._trigger({ type: 2 /* Manual */, filter: filter, autoApply: autoApply, context: { notAvailableMessage: notAvailableMessage, position: triggerPosition } });
     };
     QuickFixController.prototype._trigger = function (trigger) {
         return this._model.trigger(trigger);
     };
     QuickFixController.prototype._applyCodeAction = function (action) {
-        return applyCodeAction(action, this._bulkEditService, this._commandService, this._editor);
+        return this._instantiationService.invokeFunction(applyCodeAction, action, this._editor);
     };
     QuickFixController.ID = 'editor.contrib.quickFixController';
     QuickFixController = __decorate([
         __param(1, IMarkerService),
         __param(2, IContextKeyService),
         __param(3, IEditorProgressService),
-        __param(4, IContextMenuService),
-        __param(5, IKeybindingService),
-        __param(6, ICommandService),
-        __param(7, IBulkEditService)
+        __param(4, IInstantiationService)
     ], QuickFixController);
     return QuickFixController;
 }(Disposable));
 export { QuickFixController };
-export function applyCodeAction(action, bulkEditService, commandService, editor) {
+export function applyCodeAction(accessor, action, editor) {
     return __awaiter(this, void 0, void 0, function () {
+        var bulkEditService, commandService, telemetryService, notificationService, err_1, message;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
+                    bulkEditService = accessor.get(IBulkEditService);
+                    commandService = accessor.get(ICommandService);
+                    telemetryService = accessor.get(ITelemetryService);
+                    notificationService = accessor.get(INotificationService);
+                    telemetryService.publicLog2('codeAction.applyCodeAction', {
+                        codeActionTitle: action.title,
+                        codeActionKind: action.kind,
+                        codeActionIsPreferred: !!action.isPreferred,
+                    });
                     if (!action.edit) return [3 /*break*/, 2];
                     return [4 /*yield*/, bulkEditService.apply(action.edit, { editor: editor })];
                 case 1:
                     _a.sent();
                     _a.label = 2;
                 case 2:
-                    if (!action.command) return [3 /*break*/, 4];
-                    return [4 /*yield*/, commandService.executeCommand.apply(commandService, [action.command.id].concat((action.command.arguments || [])))];
+                    if (!action.command) return [3 /*break*/, 6];
+                    _a.label = 3;
                 case 3:
+                    _a.trys.push([3, 5, , 6]);
+                    return [4 /*yield*/, commandService.executeCommand.apply(commandService, __spreadArrays([action.command.id], (action.command.arguments || [])))];
+                case 4:
                     _a.sent();
-                    _a.label = 4;
-                case 4: return [2 /*return*/];
+                    return [3 /*break*/, 6];
+                case 5:
+                    err_1 = _a.sent();
+                    message = asMessage(err_1);
+                    notificationService.error(typeof message === 'string'
+                        ? message
+                        : nls.localize('applyCodeActionFailed', "An unknown error occurred while applying the code action"));
+                    return [3 /*break*/, 6];
+                case 6: return [2 /*return*/];
             }
         });
     });
+}
+function asMessage(err) {
+    if (typeof err === 'string') {
+        return err;
+    }
+    else if (err instanceof Error && typeof err.message === 'string') {
+        return err.message;
+    }
+    else {
+        return undefined;
+    }
 }
 function triggerCodeActionsForEditorSelection(editor, notAvailableMessage, filter, autoApply) {
     if (editor.hasModel()) {
@@ -199,78 +263,35 @@ var QuickFixAction = /** @class */ (function (_super) {
     return QuickFixAction;
 }(EditorAction));
 export { QuickFixAction };
-var CodeActionCommandArgs = /** @class */ (function () {
-    function CodeActionCommandArgs(kind, apply, preferred) {
-        this.kind = kind;
-        this.apply = apply;
-        this.preferred = preferred;
-    }
-    CodeActionCommandArgs.fromUser = function (arg, defaults) {
-        if (!arg || typeof arg !== 'object') {
-            return new CodeActionCommandArgs(defaults.kind, defaults.apply, false);
-        }
-        return new CodeActionCommandArgs(CodeActionCommandArgs.getKindFromUser(arg, defaults.kind), CodeActionCommandArgs.getApplyFromUser(arg, defaults.apply), CodeActionCommandArgs.getPreferredUser(arg));
-    };
-    CodeActionCommandArgs.getApplyFromUser = function (arg, defaultAutoApply) {
-        switch (typeof arg.apply === 'string' ? arg.apply.toLowerCase() : '') {
-            case 'first': return 1 /* First */;
-            case 'never': return 2 /* Never */;
-            case 'ifsingle': return 0 /* IfSingle */;
-            default: return defaultAutoApply;
-        }
-    };
-    CodeActionCommandArgs.getKindFromUser = function (arg, defaultKind) {
-        return typeof arg.kind === 'string'
-            ? new CodeActionKind(arg.kind)
-            : defaultKind;
-    };
-    CodeActionCommandArgs.getPreferredUser = function (arg) {
-        return typeof arg.preferred === 'boolean'
-            ? arg.preferred
-            : false;
-    };
-    return CodeActionCommandArgs;
-}());
 var CodeActionCommand = /** @class */ (function (_super) {
     __extends(CodeActionCommand, _super);
     function CodeActionCommand() {
         return _super.call(this, {
-            id: CodeActionCommand.Id,
+            id: codeActionCommandId,
             precondition: ContextKeyExpr.and(EditorContextKeys.writable, EditorContextKeys.hasCodeActionsProvider),
             description: {
-                description: "Trigger a code action",
-                args: [{
-                        name: 'args',
-                        schema: {
-                            'type': 'object',
-                            'required': ['kind'],
-                            'properties': {
-                                'kind': {
-                                    'type': 'string'
-                                },
-                                'apply': {
-                                    'type': 'string',
-                                    'default': 'ifSingle',
-                                    'enum': ['first', 'ifSingle', 'never']
-                                }
-                            }
-                        }
-                    }]
+                description: 'Trigger a code action',
+                args: [{ name: 'args', schema: argsSchema, }]
             }
         }) || this;
     }
-    CodeActionCommand.prototype.runEditorCommand = function (_accessor, editor, userArg) {
-        var args = CodeActionCommandArgs.fromUser(userArg, {
+    CodeActionCommand.prototype.runEditorCommand = function (_accessor, editor, userArgs) {
+        var args = CodeActionCommandArgs.fromUser(userArgs, {
             kind: CodeActionKind.Empty,
-            apply: 0 /* IfSingle */,
+            apply: "ifSingle" /* IfSingle */,
         });
-        return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.quickFix.noneMessage', "No code actions available"), {
-            kind: args.kind,
+        return triggerCodeActionsForEditorSelection(editor, typeof (userArgs === null || userArgs === void 0 ? void 0 : userArgs.kind) === 'string'
+            ? args.preferred
+                ? nls.localize('editor.action.codeAction.noneMessage.preferred.kind', "No preferred code actions for '{0}' available", userArgs.kind)
+                : nls.localize('editor.action.codeAction.noneMessage.kind', "No code actions for '{0}' available", userArgs.kind)
+            : args.preferred
+                ? nls.localize('editor.action.codeAction.noneMessage.preferred', "No preferred code actions available")
+                : nls.localize('editor.action.codeAction.noneMessage', "No code actions available"), {
+            include: args.kind,
             includeSourceActions: true,
             onlyIncludePreferredActions: args.preferred,
         }, args.apply);
     };
-    CodeActionCommand.Id = 'editor.action.codeAction';
     return CodeActionCommand;
 }(EditorCommand));
 export { CodeActionCommand };
@@ -278,7 +299,7 @@ var RefactorAction = /** @class */ (function (_super) {
     __extends(RefactorAction, _super);
     function RefactorAction() {
         return _super.call(this, {
-            id: RefactorAction.Id,
+            id: refactorCommandId,
             label: nls.localize('refactor.label', "Refactor..."),
             alias: 'Refactor...',
             precondition: ContextKeyExpr.and(EditorContextKeys.writable, EditorContextKeys.hasCodeActionsProvider),
@@ -290,43 +311,33 @@ var RefactorAction = /** @class */ (function (_super) {
                 },
                 weight: 100 /* EditorContrib */
             },
-            menuOpts: {
+            contextMenuOpts: {
                 group: '1_modification',
                 order: 2,
                 when: ContextKeyExpr.and(EditorContextKeys.writable, contextKeyForSupportedActions(CodeActionKind.Refactor)),
             },
             description: {
                 description: 'Refactor...',
-                args: [{
-                        name: 'args',
-                        schema: {
-                            'type': 'object',
-                            'properties': {
-                                'kind': {
-                                    'type': 'string'
-                                },
-                                'apply': {
-                                    'type': 'string',
-                                    'default': 'never',
-                                    'enum': ['first', 'ifSingle', 'never']
-                                }
-                            }
-                        }
-                    }]
+                args: [{ name: 'args', schema: argsSchema }]
             }
         }) || this;
     }
-    RefactorAction.prototype.run = function (_accessor, editor, userArg) {
-        var args = CodeActionCommandArgs.fromUser(userArg, {
+    RefactorAction.prototype.run = function (_accessor, editor, userArgs) {
+        var args = CodeActionCommandArgs.fromUser(userArgs, {
             kind: CodeActionKind.Refactor,
-            apply: 2 /* Never */
+            apply: "never" /* Never */
         });
-        return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.refactor.noneMessage', "No refactorings available"), {
-            kind: CodeActionKind.Refactor.contains(args.kind) ? args.kind : CodeActionKind.Empty,
+        return triggerCodeActionsForEditorSelection(editor, typeof (userArgs === null || userArgs === void 0 ? void 0 : userArgs.kind) === 'string'
+            ? args.preferred
+                ? nls.localize('editor.action.refactor.noneMessage.preferred.kind', "No preferred refactorings for '{0}' available", userArgs.kind)
+                : nls.localize('editor.action.refactor.noneMessage.kind', "No refactorings for '{0}' available", userArgs.kind)
+            : args.preferred
+                ? nls.localize('editor.action.refactor.noneMessage.preferred', "No preferred refactorings available")
+                : nls.localize('editor.action.refactor.noneMessage', "No refactorings available"), {
+            include: CodeActionKind.Refactor.contains(args.kind) ? args.kind : CodeActionKind.None,
             onlyIncludePreferredActions: args.preferred,
         }, args.apply);
     };
-    RefactorAction.Id = 'editor.action.refactor';
     return RefactorAction;
 }(EditorAction));
 export { RefactorAction };
@@ -334,48 +345,38 @@ var SourceAction = /** @class */ (function (_super) {
     __extends(SourceAction, _super);
     function SourceAction() {
         return _super.call(this, {
-            id: SourceAction.Id,
+            id: sourceActionCommandId,
             label: nls.localize('source.label', "Source Action..."),
             alias: 'Source Action...',
             precondition: ContextKeyExpr.and(EditorContextKeys.writable, EditorContextKeys.hasCodeActionsProvider),
-            menuOpts: {
+            contextMenuOpts: {
                 group: '1_modification',
                 order: 2.1,
                 when: ContextKeyExpr.and(EditorContextKeys.writable, contextKeyForSupportedActions(CodeActionKind.Source)),
             },
             description: {
                 description: 'Source Action...',
-                args: [{
-                        name: 'args',
-                        schema: {
-                            'type': 'object',
-                            'properties': {
-                                'kind': {
-                                    'type': 'string'
-                                },
-                                'apply': {
-                                    'type': 'string',
-                                    'default': 'never',
-                                    'enum': ['first', 'ifSingle', 'never']
-                                }
-                            }
-                        }
-                    }]
+                args: [{ name: 'args', schema: argsSchema }]
             }
         }) || this;
     }
-    SourceAction.prototype.run = function (_accessor, editor, userArg) {
-        var args = CodeActionCommandArgs.fromUser(userArg, {
+    SourceAction.prototype.run = function (_accessor, editor, userArgs) {
+        var args = CodeActionCommandArgs.fromUser(userArgs, {
             kind: CodeActionKind.Source,
-            apply: 2 /* Never */
+            apply: "never" /* Never */
         });
-        return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.source.noneMessage', "No source actions available"), {
-            kind: CodeActionKind.Source.contains(args.kind) ? args.kind : CodeActionKind.Empty,
+        return triggerCodeActionsForEditorSelection(editor, typeof (userArgs === null || userArgs === void 0 ? void 0 : userArgs.kind) === 'string'
+            ? args.preferred
+                ? nls.localize('editor.action.source.noneMessage.preferred.kind', "No preferred source actions for '{0}' available", userArgs.kind)
+                : nls.localize('editor.action.source.noneMessage.kind', "No source actions for '{0}' available", userArgs.kind)
+            : args.preferred
+                ? nls.localize('editor.action.source.noneMessage.preferred', "No preferred source actions available")
+                : nls.localize('editor.action.source.noneMessage', "No source actions available"), {
+            include: CodeActionKind.Source.contains(args.kind) ? args.kind : CodeActionKind.None,
             includeSourceActions: true,
             onlyIncludePreferredActions: args.preferred,
         }, args.apply);
     };
-    SourceAction.Id = 'editor.action.sourceAction';
     return SourceAction;
 }(EditorAction));
 export { SourceAction };
@@ -383,7 +384,7 @@ var OrganizeImportsAction = /** @class */ (function (_super) {
     __extends(OrganizeImportsAction, _super);
     function OrganizeImportsAction() {
         return _super.call(this, {
-            id: OrganizeImportsAction.Id,
+            id: organizeImportsCommandId,
             label: nls.localize('organizeImports.label', "Organize Imports"),
             alias: 'Organize Imports',
             precondition: ContextKeyExpr.and(EditorContextKeys.writable, contextKeyForSupportedActions(CodeActionKind.SourceOrganizeImports)),
@@ -391,13 +392,12 @@ var OrganizeImportsAction = /** @class */ (function (_super) {
                 kbExpr: EditorContextKeys.editorTextFocus,
                 primary: 1024 /* Shift */ | 512 /* Alt */ | 45 /* KEY_O */,
                 weight: 100 /* EditorContrib */
-            }
+            },
         }) || this;
     }
     OrganizeImportsAction.prototype.run = function (_accessor, editor) {
-        return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.organize.noneMessage', "No organize imports action available"), { kind: CodeActionKind.SourceOrganizeImports, includeSourceActions: true }, 0 /* IfSingle */);
+        return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.organize.noneMessage', "No organize imports action available"), { include: CodeActionKind.SourceOrganizeImports, includeSourceActions: true }, "ifSingle" /* IfSingle */);
     };
-    OrganizeImportsAction.Id = 'editor.action.organizeImports';
     return OrganizeImportsAction;
 }(EditorAction));
 export { OrganizeImportsAction };
@@ -405,16 +405,15 @@ var FixAllAction = /** @class */ (function (_super) {
     __extends(FixAllAction, _super);
     function FixAllAction() {
         return _super.call(this, {
-            id: FixAllAction.Id,
+            id: fixAllCommandId,
             label: nls.localize('fixAll.label', "Fix All"),
             alias: 'Fix All',
             precondition: ContextKeyExpr.and(EditorContextKeys.writable, contextKeyForSupportedActions(CodeActionKind.SourceFixAll))
         }) || this;
     }
     FixAllAction.prototype.run = function (_accessor, editor) {
-        return triggerCodeActionsForEditorSelection(editor, nls.localize('fixAll.noneMessage', "No fix all action available"), { kind: CodeActionKind.SourceFixAll, includeSourceActions: true }, 0 /* IfSingle */);
+        return triggerCodeActionsForEditorSelection(editor, nls.localize('fixAll.noneMessage', "No fix all action available"), { include: CodeActionKind.SourceFixAll, includeSourceActions: true }, "ifSingle" /* IfSingle */);
     };
-    FixAllAction.Id = 'editor.action.fixAll';
     return FixAllAction;
 }(EditorAction));
 export { FixAllAction };
@@ -438,9 +437,9 @@ var AutoFixAction = /** @class */ (function (_super) {
     }
     AutoFixAction.prototype.run = function (_accessor, editor) {
         return triggerCodeActionsForEditorSelection(editor, nls.localize('editor.action.autoFix.noneMessage', "No auto fixes available"), {
-            kind: CodeActionKind.QuickFix,
+            include: CodeActionKind.QuickFix,
             onlyIncludePreferredActions: true
-        }, 0 /* IfSingle */);
+        }, "ifSingle" /* IfSingle */);
     };
     AutoFixAction.Id = 'editor.action.autoFix';
     return AutoFixAction;

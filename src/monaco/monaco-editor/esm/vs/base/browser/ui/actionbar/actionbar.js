@@ -25,6 +25,8 @@ import * as types from '../../../common/types.js';
 import { EventType, Gesture } from '../../touch.js';
 import { StandardKeyboardEvent } from '../../keyboardEvent.js';
 import { Emitter } from '../../../common/event.js';
+import { DataTransfers } from '../../dnd.js';
+import { isFirefox } from '../../browser.js';
 var BaseActionViewItem = /** @class */ (function (_super) {
     __extends(BaseActionViewItem, _super);
     function BaseActionViewItem(context, action, options) {
@@ -64,6 +66,9 @@ var BaseActionViewItem = /** @class */ (function (_super) {
     };
     Object.defineProperty(BaseActionViewItem.prototype, "actionRunner", {
         get: function () {
+            if (!this._actionRunner) {
+                this._actionRunner = this._register(new ActionRunner());
+            }
             return this._actionRunner;
         },
         set: function (actionRunner) {
@@ -83,22 +88,26 @@ var BaseActionViewItem = /** @class */ (function (_super) {
     };
     BaseActionViewItem.prototype.render = function (container) {
         var _this = this;
-        this.element = container;
-        Gesture.addTarget(container);
+        var element = this.element = container;
+        this._register(Gesture.addTarget(container));
         var enableDragging = this.options && this.options.draggable;
         if (enableDragging) {
             container.draggable = true;
+            if (isFirefox) {
+                // Firefox: requires to set a text data transfer to get going
+                this._register(DOM.addDisposableListener(container, DOM.EventType.DRAG_START, function (e) { var _a; return (_a = e.dataTransfer) === null || _a === void 0 ? void 0 : _a.setData(DataTransfers.TEXT, _this._action.label); }));
+            }
         }
-        this._register(DOM.addDisposableListener(this.element, EventType.Tap, function (e) { return _this.onClick(e); }));
-        this._register(DOM.addDisposableListener(this.element, DOM.EventType.MOUSE_DOWN, function (e) {
+        this._register(DOM.addDisposableListener(element, EventType.Tap, function (e) { return _this.onClick(e); }));
+        this._register(DOM.addDisposableListener(element, DOM.EventType.MOUSE_DOWN, function (e) {
             if (!enableDragging) {
                 DOM.EventHelper.stop(e, true); // do not run when dragging is on because that would disable it
             }
-            if (_this._action.enabled && e.button === 0 && _this.element) {
-                DOM.addClass(_this.element, 'active');
+            if (_this._action.enabled && e.button === 0) {
+                DOM.addClass(element, 'active');
             }
         }));
-        this._register(DOM.addDisposableListener(this.element, DOM.EventType.CLICK, function (e) {
+        this._register(DOM.addDisposableListener(element, DOM.EventType.CLICK, function (e) {
             DOM.EventHelper.stop(e, true);
             // See https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Interact_with_the_clipboard
             // > Writing to the clipboard
@@ -114,13 +123,13 @@ var BaseActionViewItem = /** @class */ (function (_super) {
                 platform.setImmediate(function () { return _this.onClick(e); });
             }
         }));
-        this._register(DOM.addDisposableListener(this.element, DOM.EventType.DBLCLICK, function (e) {
+        this._register(DOM.addDisposableListener(element, DOM.EventType.DBLCLICK, function (e) {
             DOM.EventHelper.stop(e, true);
         }));
         [DOM.EventType.MOUSE_UP, DOM.EventType.MOUSE_OUT].forEach(function (event) {
-            _this._register(DOM.addDisposableListener(_this.element, event, function (e) {
+            _this._register(DOM.addDisposableListener(element, event, function (e) {
                 DOM.EventHelper.stop(e);
-                DOM.removeClass(_this.element, 'active');
+                DOM.removeClass(element, 'active');
             }));
         });
     };
@@ -136,7 +145,7 @@ var BaseActionViewItem = /** @class */ (function (_super) {
                 context.event = event;
             }
         }
-        this._actionRunner.run(this._action, context);
+        this.actionRunner.run(this._action, context);
     };
     BaseActionViewItem.prototype.focus = function () {
         if (this.element) {
@@ -180,7 +189,6 @@ var Separator = /** @class */ (function (_super) {
     function Separator(label) {
         var _this = _super.call(this, Separator.ID, label, label ? 'separator text' : 'separator') || this;
         _this.checked = false;
-        _this.radio = false;
         _this.enabled = false;
         return _this;
     }
@@ -204,15 +212,17 @@ var ActionViewItem = /** @class */ (function (_super) {
         if (this.element) {
             this.label = DOM.append(this.element, DOM.$('a.action-label'));
         }
-        if (this._action.id === Separator.ID) {
-            this.label.setAttribute('role', 'presentation'); // A separator is a presentation item
-        }
-        else {
-            if (this.options.isMenu) {
-                this.label.setAttribute('role', 'menuitem');
+        if (this.label) {
+            if (this._action.id === Separator.ID) {
+                this.label.setAttribute('role', 'presentation'); // A separator is a presentation item
             }
             else {
-                this.label.setAttribute('role', 'button');
+                if (this.options.isMenu) {
+                    this.label.setAttribute('role', 'menuitem');
+                }
+                else {
+                    this.label.setAttribute('role', 'button');
+                }
             }
         }
         if (this.options.label && this.options.keybinding && this.element) {
@@ -226,10 +236,12 @@ var ActionViewItem = /** @class */ (function (_super) {
     };
     ActionViewItem.prototype.focus = function () {
         _super.prototype.focus.call(this);
-        this.label.focus();
+        if (this.label) {
+            this.label.focus();
+        }
     };
     ActionViewItem.prototype.updateLabel = function () {
-        if (this.options.label) {
+        if (this.options.label && this.label) {
             this.label.textContent = this.getAction().label;
         }
     };
@@ -244,50 +256,60 @@ var ActionViewItem = /** @class */ (function (_super) {
                 title = nls.localize({ key: 'titleLabel', comment: ['action title', 'action keybinding'] }, "{0} ({1})", title, this.options.keybinding);
             }
         }
-        if (title) {
+        if (title && this.label) {
             this.label.title = title;
         }
     };
     ActionViewItem.prototype.updateClass = function () {
-        if (this.cssClass) {
+        if (this.cssClass && this.label) {
             DOM.removeClasses(this.label, this.cssClass);
         }
         if (this.options.icon) {
             this.cssClass = this.getAction().class;
-            DOM.addClass(this.label, 'icon');
-            if (this.cssClass) {
-                DOM.addClasses(this.label, this.cssClass);
+            if (this.label) {
+                DOM.addClass(this.label, 'codicon');
+                if (this.cssClass) {
+                    DOM.addClasses(this.label, this.cssClass);
+                }
             }
             this.updateEnabled();
         }
         else {
-            DOM.removeClass(this.label, 'icon');
+            if (this.label) {
+                DOM.removeClass(this.label, 'codicon');
+            }
         }
     };
     ActionViewItem.prototype.updateEnabled = function () {
         if (this.getAction().enabled) {
-            this.label.removeAttribute('aria-disabled');
+            if (this.label) {
+                this.label.removeAttribute('aria-disabled');
+                DOM.removeClass(this.label, 'disabled');
+                this.label.tabIndex = 0;
+            }
             if (this.element) {
                 DOM.removeClass(this.element, 'disabled');
             }
-            DOM.removeClass(this.label, 'disabled');
-            this.label.tabIndex = 0;
         }
         else {
-            this.label.setAttribute('aria-disabled', 'true');
+            if (this.label) {
+                this.label.setAttribute('aria-disabled', 'true');
+                DOM.addClass(this.label, 'disabled');
+                DOM.removeTabIndexAndUpdateFocus(this.label);
+            }
             if (this.element) {
                 DOM.addClass(this.element, 'disabled');
             }
-            DOM.addClass(this.label, 'disabled');
-            DOM.removeTabIndexAndUpdateFocus(this.label);
         }
     };
     ActionViewItem.prototype.updateChecked = function () {
-        if (this.getAction().checked) {
-            DOM.addClass(this.label, 'checked');
-        }
-        else {
-            DOM.removeClass(this.label, 'checked');
+        if (this.label) {
+            if (this.getAction().checked) {
+                DOM.addClass(this.label, 'checked');
+            }
+            else {
+                DOM.removeClass(this.label, 'checked');
+            }
         }
     };
     return ActionViewItem;
@@ -548,9 +570,9 @@ var ActionBar = /** @class */ (function (_super) {
         }
         this.updateFocus(true);
     };
-    ActionBar.prototype.updateFocus = function (fromRight) {
+    ActionBar.prototype.updateFocus = function (fromRight, preventScroll) {
         if (typeof this.focusedItem === 'undefined') {
-            this.actionsList.focus();
+            this.actionsList.focus({ preventScroll: preventScroll });
         }
         for (var i = 0; i < this.viewItems.length; i++) {
             var item = this.viewItems[i];
@@ -561,7 +583,7 @@ var ActionBar = /** @class */ (function (_super) {
                         actionViewItem.focus(fromRight);
                     }
                     else {
-                        this.actionsList.focus();
+                        this.actionsList.focus({ preventScroll: preventScroll });
                     }
                 }
             }

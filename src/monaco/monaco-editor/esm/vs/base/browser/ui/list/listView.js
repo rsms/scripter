@@ -8,8 +8,15 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import { getOrDefault } from '../../../common/objects.js';
-import { dispose, Disposable, toDisposable } from '../../../common/lifecycle.js';
+import { dispose, Disposable, toDisposable, DisposableStore } from '../../../common/lifecycle.js';
 import { Gesture, EventType as TouchEventType } from '../../touch.js';
 import * as DOM from '../../dom.js';
 import { Event, Emitter } from '../../../common/event.js';
@@ -17,13 +24,12 @@ import { domEvent } from '../../event.js';
 import { ScrollableElement } from '../scrollbar/scrollableElement.js';
 import { RangeMap, shift } from './rangeMap.js';
 import { RowCache } from './rowCache.js';
-import { isWindows } from '../../../common/platform.js';
-import * as browser from '../../browser.js';
 import { memoize } from '../../../common/decorators.js';
 import { Range } from '../../../common/range.js';
 import { equals, distinct } from '../../../common/arrays.js';
 import { DataTransfers, StaticDND } from '../../dnd.js';
 import { disposableTimeout, Delayer } from '../../../common/async.js';
+import { isFirefox } from '../../browser.js';
 var DefaultOptions = {
     useShadows: true,
     verticalScrollMode: 1 /* Auto */,
@@ -68,7 +74,7 @@ var DesktopDragAndDropData = /** @class */ (function () {
     DesktopDragAndDropData.prototype.update = function (dataTransfer) {
         var _a;
         if (dataTransfer.types) {
-            (_a = this.types).splice.apply(_a, [0, this.types.length].concat(dataTransfer.types));
+            (_a = this.types).splice.apply(_a, __spreadArrays([0, this.types.length], dataTransfer.types));
         }
         if (dataTransfer.files) {
             this.files.splice(0, this.files.length);
@@ -109,10 +115,10 @@ var ListView = /** @class */ (function () {
         this.splicing = false;
         this.dragOverAnimationStopDisposable = Disposable.None;
         this.dragOverMouseY = 0;
-        this.canUseTranslate3d = undefined;
         this.canDrop = false;
         this.currentDragFeedbackDisposable = Disposable.None;
         this.onDragLeaveTimeout = Disposable.None;
+        this.disposables = new DisposableStore();
         this._onDidChangeContentHeight = new Emitter();
         if (options.horizontalScrolling && options.supportDynamicHeights) {
             throw new Error('Horizontal scrolling and dynamic heights not supported simultaneously');
@@ -124,7 +130,7 @@ var ListView = /** @class */ (function () {
             var renderer = renderers_1[_i];
             this.renderers.set(renderer.templateId, renderer);
         }
-        this.cache = new RowCache(this.renderers);
+        this.cache = this.disposables.add(new RowCache(this.renderers));
         this.lastRenderTop = 0;
         this.lastRenderHeight = 0;
         this.domNode = document.createElement('div');
@@ -138,16 +144,16 @@ var ListView = /** @class */ (function () {
         this.ariaProvider = options.ariaProvider || { getSetSize: function (e, i, length) { return length; }, getPosInSet: function (_, index) { return index + 1; } };
         this.rowsContainer = document.createElement('div');
         this.rowsContainer.className = 'monaco-list-rows';
-        Gesture.addTarget(this.rowsContainer);
-        this.scrollableElement = new ScrollableElement(this.rowsContainer, {
+        this.rowsContainer.style.transform = 'translate3d(0px, 0px, 0px)';
+        this.disposables.add(Gesture.addTarget(this.rowsContainer));
+        this.scrollableElement = this.disposables.add(new ScrollableElement(this.rowsContainer, {
             alwaysConsumeMouseWheel: true,
             horizontal: this.horizontalScrolling ? 1 /* Auto */ : 2 /* Hidden */,
             vertical: getOrDefault(options, function (o) { return o.verticalScrollMode; }, DefaultOptions.verticalScrollMode),
             useShadows: getOrDefault(options, function (o) { return o.useShadows; }, DefaultOptions.useShadows)
-        });
+        }));
         this.domNode.appendChild(this.scrollableElement.getDomNode());
         container.appendChild(this.domNode);
-        this.disposables = [this.rangeMap, this.scrollableElement, this.cache];
         this.scrollableElement.onScroll(this.onScroll, this, this.disposables);
         domEvent(this.rowsContainer, TouchEventType.Change)(this.onTouchChange, this, this.disposables);
         // Prevent the monaco-scrollable-element from scrolling
@@ -217,7 +223,7 @@ var ListView = /** @class */ (function () {
         }
         else {
             this.rangeMap.splice(start, deleteCount, inserted);
-            deleted = (_a = this.items).splice.apply(_a, [start, deleteCount].concat(inserted));
+            deleted = (_a = this.items).splice.apply(_a, __spreadArrays([start, deleteCount], inserted));
         }
         var delta = elements.length - deleteCount;
         var renderRange = this.getRenderRange(this.lastRenderTop, this.lastRenderHeight);
@@ -235,7 +241,7 @@ var ListView = /** @class */ (function () {
         }
         var unrenderedRestRanges = previousUnrenderedRestRanges.map(function (r) { return shift(r, delta); });
         var elementsRange = { start: start, end: start + elements.length };
-        var insertRanges = [elementsRange].concat(unrenderedRestRanges).map(function (r) { return Range.intersect(renderRange, r); });
+        var insertRanges = __spreadArrays([elementsRange], unrenderedRestRanges).map(function (r) { return Range.intersect(renderRange, r); });
         var beforeElement = this.getNextToLastElement(insertRanges);
         for (var _b = 0, insertRanges_1 = insertRanges; _b < insertRanges_1.length; _b++) {
             var range = insertRanges_1[_b];
@@ -370,28 +376,11 @@ var ListView = /** @class */ (function () {
                 this.removeItemFromDOM(i);
             }
         }
-        var canUseTranslate3d = !isWindows && !browser.isFirefox && browser.getZoomLevel() === 0;
-        if (canUseTranslate3d) {
-            var transform = "translate3d(-" + renderLeft + "px, -" + renderTop + "px, 0px)";
-            this.rowsContainer.style.transform = transform;
-            this.rowsContainer.style.webkitTransform = transform;
-            if (canUseTranslate3d !== this.canUseTranslate3d) {
-                this.rowsContainer.style.left = '0';
-                this.rowsContainer.style.top = '0';
-            }
-        }
-        else {
-            this.rowsContainer.style.left = "-" + renderLeft + "px";
-            this.rowsContainer.style.top = "-" + renderTop + "px";
-            if (canUseTranslate3d !== this.canUseTranslate3d) {
-                this.rowsContainer.style.transform = '';
-                this.rowsContainer.style.webkitTransform = '';
-            }
-        }
+        this.rowsContainer.style.left = "-" + renderLeft + "px";
+        this.rowsContainer.style.top = "-" + renderTop + "px";
         if (this.horizontalScrolling) {
             this.rowsContainer.style.width = Math.max(scrollWidth, this.renderWidth) + "px";
         }
-        this.canUseTranslate3d = canUseTranslate3d;
         this.lastRenderTop = renderTop;
         this.lastRenderHeight = renderHeight;
     };
@@ -440,7 +429,7 @@ var ListView = /** @class */ (function () {
         if (!item.row || !item.row.domNode) {
             return;
         }
-        item.row.domNode.style.width = 'fit-content';
+        item.row.domNode.style.width = isFirefox ? '-moz-fit-content' : 'fit-content';
         item.width = DOM.getContentWidth(item.row.domNode);
         var style = window.getComputedStyle(item.row.domNode);
         if (style.paddingLeft) {
@@ -615,7 +604,7 @@ var ListView = /** @class */ (function () {
         if (event.dataTransfer.setDragImage) {
             var label = void 0;
             if (this.dnd.getDragLabel) {
-                label = this.dnd.getDragLabel(elements);
+                label = this.dnd.getDragLabel(elements, event);
             }
             if (typeof label === 'undefined') {
                 label = String(elements.length);
@@ -678,11 +667,8 @@ var ListView = /** @class */ (function () {
             }
         }
         // sanitize feedback list
-        feedback = distinct(feedback).filter(function (i) { return i >= -1 && i < _this.length; }).sort();
+        feedback = distinct(feedback).filter(function (i) { return i >= -1 && i < _this.length; }).sort(function (a, b) { return a - b; });
         feedback = feedback[0] === -1 ? [-1] : feedback;
-        if (feedback.length === 0) {
-            throw new Error('Invalid empty feedback list');
-        }
         if (equalsDragFeedback(this.currentDragFeedback, feedback)) {
             return true;
         }
@@ -690,7 +676,11 @@ var ListView = /** @class */ (function () {
         this.currentDragFeedbackDisposable.dispose();
         if (feedback[0] === -1) { // entire list feedback
             DOM.addClass(this.domNode, 'drop-target');
-            this.currentDragFeedbackDisposable = toDisposable(function () { return DOM.removeClass(_this.domNode, 'drop-target'); });
+            DOM.addClass(this.rowsContainer, 'drop-target');
+            this.currentDragFeedbackDisposable = toDisposable(function () {
+                DOM.removeClass(_this.domNode, 'drop-target');
+                DOM.removeClass(_this.rowsContainer, 'drop-target');
+            });
         }
         else {
             for (var _i = 0, feedback_1 = feedback; _i < feedback_1.length; _i++) {
@@ -735,12 +725,15 @@ var ListView = /** @class */ (function () {
         dragData.update(event.browserEvent.dataTransfer);
         this.dnd.drop(dragData, event.element, event.index, event.browserEvent);
     };
-    ListView.prototype.onDragEnd = function () {
+    ListView.prototype.onDragEnd = function (event) {
         this.canDrop = false;
         this.teardownDragAndDropScrollTopAnimation();
         this.clearDragOverFeedback();
         this.currentDragData = undefined;
         StaticDND.CurrentDragAndDropData = undefined;
+        if (this.dnd.onDragEnd) {
+            this.dnd.onDragEnd(event);
+        }
     };
     ListView.prototype.clearDragOverFeedback = function () {
         this.currentDragFeedback = undefined;
@@ -929,7 +922,7 @@ var ListView = /** @class */ (function () {
         if (this.domNode && this.domNode.parentNode) {
             this.domNode.parentNode.removeChild(this.domNode);
         }
-        this.disposables = dispose(this.disposables);
+        dispose(this.disposables);
     };
     ListView.InstanceCount = 0;
     __decorate([

@@ -21,6 +21,7 @@ var ViewOutgoingEvents = /** @class */ (function (_super) {
     __extends(ViewOutgoingEvents, _super);
     function ViewOutgoingEvents(viewModel) {
         var _this = _super.call(this) || this;
+        _this.onDidContentSizeChange = null;
         _this.onDidScroll = null;
         _this.onDidGainFocus = null;
         _this.onDidLoseFocus = null;
@@ -37,6 +38,11 @@ var ViewOutgoingEvents = /** @class */ (function (_super) {
         _this._viewModel = viewModel;
         return _this;
     }
+    ViewOutgoingEvents.prototype.emitContentSizeChange = function (e) {
+        if (this.onDidContentSizeChange) {
+            this.onDidContentSizeChange(e);
+        }
+    };
     ViewOutgoingEvents.prototype.emitScrollChanged = function (e) {
         if (this.onDidScroll) {
             this.onDidScroll(e);
@@ -112,13 +118,10 @@ var ViewOutgoingEvents = /** @class */ (function (_super) {
         return e;
     };
     ViewOutgoingEvents.prototype._convertViewToModelMouseTarget = function (target) {
-        return new ExternalMouseTarget(target.element, target.type, target.mouseColumn, target.position ? this._convertViewToModelPosition(target.position) : null, target.range ? this._convertViewToModelRange(target.range) : null, target.detail);
+        return ViewOutgoingEvents.convertViewToModelMouseTarget(target, this._viewModel.coordinatesConverter);
     };
-    ViewOutgoingEvents.prototype._convertViewToModelPosition = function (viewPosition) {
-        return this._viewModel.coordinatesConverter.convertViewPositionToModelPosition(viewPosition);
-    };
-    ViewOutgoingEvents.prototype._convertViewToModelRange = function (viewRange) {
-        return this._viewModel.coordinatesConverter.convertViewRangeToModelRange(viewRange);
+    ViewOutgoingEvents.convertViewToModelMouseTarget = function (target, coordinatesConverter) {
+        return new ExternalMouseTarget(target.element, target.type, target.mouseColumn, target.position ? coordinatesConverter.convertViewPositionToModelPosition(target.position) : null, target.range ? coordinatesConverter.convertViewRangeToModelRange(target.range) : null, target.detail);
     };
     return ViewOutgoingEvents;
 }(Disposable));

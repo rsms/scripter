@@ -38,74 +38,90 @@ var CursorState = /** @class */ (function () {
     };
     return CursorState;
 }());
-var CursorUndoController = /** @class */ (function (_super) {
-    __extends(CursorUndoController, _super);
-    function CursorUndoController(editor) {
+var StackElement = /** @class */ (function () {
+    function StackElement(cursorState, scrollTop, scrollLeft) {
+        this.cursorState = cursorState;
+        this.scrollTop = scrollTop;
+        this.scrollLeft = scrollLeft;
+    }
+    return StackElement;
+}());
+var CursorUndoRedoController = /** @class */ (function (_super) {
+    __extends(CursorUndoRedoController, _super);
+    function CursorUndoRedoController(editor) {
         var _this = _super.call(this) || this;
         _this._editor = editor;
-        _this._isCursorUndo = false;
+        _this._isCursorUndoRedo = false;
         _this._undoStack = [];
-        _this._prevState = _this._readState();
+        _this._redoStack = [];
         _this._register(editor.onDidChangeModel(function (e) {
             _this._undoStack = [];
-            _this._prevState = null;
+            _this._redoStack = [];
         }));
         _this._register(editor.onDidChangeModelContent(function (e) {
             _this._undoStack = [];
-            _this._prevState = null;
+            _this._redoStack = [];
         }));
         _this._register(editor.onDidChangeCursorSelection(function (e) {
-            if (!_this._isCursorUndo && _this._prevState) {
-                _this._undoStack.push(_this._prevState);
+            if (_this._isCursorUndoRedo) {
+                return;
+            }
+            if (!e.oldSelections) {
+                return;
+            }
+            if (e.oldModelVersionId !== e.modelVersionId) {
+                return;
+            }
+            var prevState = new CursorState(e.oldSelections);
+            var isEqualToLastUndoStack = (_this._undoStack.length > 0 && _this._undoStack[_this._undoStack.length - 1].cursorState.equals(prevState));
+            if (!isEqualToLastUndoStack) {
+                _this._undoStack.push(new StackElement(prevState, editor.getScrollTop(), editor.getScrollLeft()));
+                _this._redoStack = [];
                 if (_this._undoStack.length > 50) {
                     // keep the cursor undo stack bounded
                     _this._undoStack.shift();
                 }
             }
-            _this._prevState = _this._readState();
         }));
         return _this;
     }
-    CursorUndoController.get = function (editor) {
-        return editor.getContribution(CursorUndoController.ID);
+    CursorUndoRedoController.get = function (editor) {
+        return editor.getContribution(CursorUndoRedoController.ID);
     };
-    CursorUndoController.prototype._readState = function () {
-        if (!this._editor.hasModel()) {
-            // no model => no state
-            return null;
-        }
-        return new CursorState(this._editor.getSelections());
-    };
-    CursorUndoController.prototype.getId = function () {
-        return CursorUndoController.ID;
-    };
-    CursorUndoController.prototype.cursorUndo = function () {
-        if (!this._editor.hasModel()) {
+    CursorUndoRedoController.prototype.cursorUndo = function () {
+        if (!this._editor.hasModel() || this._undoStack.length === 0) {
             return;
         }
-        var currState = new CursorState(this._editor.getSelections());
-        while (this._undoStack.length > 0) {
-            var prevState = this._undoStack.pop();
-            if (!prevState.equals(currState)) {
-                this._isCursorUndo = true;
-                this._editor.setSelections(prevState.selections);
-                this._editor.revealRangeInCenterIfOutsideViewport(prevState.selections[0], 0 /* Smooth */);
-                this._isCursorUndo = false;
-                return;
-            }
-        }
+        this._redoStack.push(new StackElement(new CursorState(this._editor.getSelections()), this._editor.getScrollTop(), this._editor.getScrollLeft()));
+        this._applyState(this._undoStack.pop());
     };
-    CursorUndoController.ID = 'editor.contrib.cursorUndoController';
-    return CursorUndoController;
+    CursorUndoRedoController.prototype.cursorRedo = function () {
+        if (!this._editor.hasModel() || this._redoStack.length === 0) {
+            return;
+        }
+        this._undoStack.push(new StackElement(new CursorState(this._editor.getSelections()), this._editor.getScrollTop(), this._editor.getScrollLeft()));
+        this._applyState(this._redoStack.pop());
+    };
+    CursorUndoRedoController.prototype._applyState = function (stackElement) {
+        this._isCursorUndoRedo = true;
+        this._editor.setSelections(stackElement.cursorState.selections);
+        this._editor.setScrollPosition({
+            scrollTop: stackElement.scrollTop,
+            scrollLeft: stackElement.scrollLeft
+        });
+        this._isCursorUndoRedo = false;
+    };
+    CursorUndoRedoController.ID = 'editor.contrib.cursorUndoRedoController';
+    return CursorUndoRedoController;
 }(Disposable));
-export { CursorUndoController };
+export { CursorUndoRedoController };
 var CursorUndo = /** @class */ (function (_super) {
     __extends(CursorUndo, _super);
     function CursorUndo() {
         return _super.call(this, {
             id: 'cursorUndo',
-            label: nls.localize('cursor.undo', "Soft Undo"),
-            alias: 'Soft Undo',
+            label: nls.localize('cursor.undo', "Cursor Undo"),
+            alias: 'Cursor Undo',
             precondition: undefined,
             kbOpts: {
                 kbExpr: EditorContextKeys.textInputFocus,
@@ -115,10 +131,27 @@ var CursorUndo = /** @class */ (function (_super) {
         }) || this;
     }
     CursorUndo.prototype.run = function (accessor, editor, args) {
-        CursorUndoController.get(editor).cursorUndo();
+        CursorUndoRedoController.get(editor).cursorUndo();
     };
     return CursorUndo;
 }(EditorAction));
 export { CursorUndo };
-registerEditorContribution(CursorUndoController);
+var CursorRedo = /** @class */ (function (_super) {
+    __extends(CursorRedo, _super);
+    function CursorRedo() {
+        return _super.call(this, {
+            id: 'cursorRedo',
+            label: nls.localize('cursor.redo', "Cursor Redo"),
+            alias: 'Cursor Redo',
+            precondition: undefined
+        }) || this;
+    }
+    CursorRedo.prototype.run = function (accessor, editor, args) {
+        CursorUndoRedoController.get(editor).cursorRedo();
+    };
+    return CursorRedo;
+}(EditorAction));
+export { CursorRedo };
+registerEditorContribution(CursorUndoRedoController.ID, CursorUndoRedoController);
 registerEditorAction(CursorUndo);
+registerEditorAction(CursorRedo);

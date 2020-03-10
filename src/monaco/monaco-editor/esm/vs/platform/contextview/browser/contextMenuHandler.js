@@ -17,6 +17,8 @@ var ContextMenuHandler = /** @class */ (function () {
         this.notificationService = notificationService;
         this.keybindingService = keybindingService;
         this.themeService = themeService;
+        this.focusToReturn = null;
+        this.block = null;
         this.options = { blockMouse: true };
     }
     ContextMenuHandler.prototype.configure = function (options) {

@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { toUint8 } from './uint.js';
+import { toUint8 } from '../../../base/common/uint.js';
 /**
  * A fast character classifier that uses a compact array for ASCII values.
  */

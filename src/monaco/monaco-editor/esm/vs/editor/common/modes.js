@@ -184,38 +184,84 @@ export function isLocationLink(thing) {
 /**
  * @internal
  */
-export var symbolKindToCssClass = (function () {
-    var _fromMapping = Object.create(null);
-    _fromMapping[0 /* File */] = 'file';
-    _fromMapping[1 /* Module */] = 'module';
-    _fromMapping[2 /* Namespace */] = 'namespace';
-    _fromMapping[3 /* Package */] = 'package';
-    _fromMapping[4 /* Class */] = 'class';
-    _fromMapping[5 /* Method */] = 'method';
-    _fromMapping[6 /* Property */] = 'property';
-    _fromMapping[7 /* Field */] = 'field';
-    _fromMapping[8 /* Constructor */] = 'constructor';
-    _fromMapping[9 /* Enum */] = 'enum';
-    _fromMapping[10 /* Interface */] = 'interface';
-    _fromMapping[11 /* Function */] = 'function';
-    _fromMapping[12 /* Variable */] = 'variable';
-    _fromMapping[13 /* Constant */] = 'constant';
-    _fromMapping[14 /* String */] = 'string';
-    _fromMapping[15 /* Number */] = 'number';
-    _fromMapping[16 /* Boolean */] = 'boolean';
-    _fromMapping[17 /* Array */] = 'array';
-    _fromMapping[18 /* Object */] = 'object';
-    _fromMapping[19 /* Key */] = 'key';
-    _fromMapping[20 /* Null */] = 'null';
-    _fromMapping[21 /* EnumMember */] = 'enum-member';
-    _fromMapping[22 /* Struct */] = 'struct';
-    _fromMapping[23 /* Event */] = 'event';
-    _fromMapping[24 /* Operator */] = 'operator';
-    _fromMapping[25 /* TypeParameter */] = 'type-parameter';
-    return function toCssClassName(kind, inline) {
-        return "symbol-icon " + (inline ? 'inline' : 'block') + " " + (_fromMapping[kind] || 'property');
-    };
-})();
+export var SymbolKinds;
+(function (SymbolKinds) {
+    var byName = new Map();
+    byName.set('file', 0 /* File */);
+    byName.set('module', 1 /* Module */);
+    byName.set('namespace', 2 /* Namespace */);
+    byName.set('package', 3 /* Package */);
+    byName.set('class', 4 /* Class */);
+    byName.set('method', 5 /* Method */);
+    byName.set('property', 6 /* Property */);
+    byName.set('field', 7 /* Field */);
+    byName.set('constructor', 8 /* Constructor */);
+    byName.set('enum', 9 /* Enum */);
+    byName.set('interface', 10 /* Interface */);
+    byName.set('function', 11 /* Function */);
+    byName.set('variable', 12 /* Variable */);
+    byName.set('constant', 13 /* Constant */);
+    byName.set('string', 14 /* String */);
+    byName.set('number', 15 /* Number */);
+    byName.set('boolean', 16 /* Boolean */);
+    byName.set('array', 17 /* Array */);
+    byName.set('object', 18 /* Object */);
+    byName.set('key', 19 /* Key */);
+    byName.set('null', 20 /* Null */);
+    byName.set('enum-member', 21 /* EnumMember */);
+    byName.set('struct', 22 /* Struct */);
+    byName.set('event', 23 /* Event */);
+    byName.set('operator', 24 /* Operator */);
+    byName.set('type-parameter', 25 /* TypeParameter */);
+    var byKind = new Map();
+    byKind.set(0 /* File */, 'file');
+    byKind.set(1 /* Module */, 'module');
+    byKind.set(2 /* Namespace */, 'namespace');
+    byKind.set(3 /* Package */, 'package');
+    byKind.set(4 /* Class */, 'class');
+    byKind.set(5 /* Method */, 'method');
+    byKind.set(6 /* Property */, 'property');
+    byKind.set(7 /* Field */, 'field');
+    byKind.set(8 /* Constructor */, 'constructor');
+    byKind.set(9 /* Enum */, 'enum');
+    byKind.set(10 /* Interface */, 'interface');
+    byKind.set(11 /* Function */, 'function');
+    byKind.set(12 /* Variable */, 'variable');
+    byKind.set(13 /* Constant */, 'constant');
+    byKind.set(14 /* String */, 'string');
+    byKind.set(15 /* Number */, 'number');
+    byKind.set(16 /* Boolean */, 'boolean');
+    byKind.set(17 /* Array */, 'array');
+    byKind.set(18 /* Object */, 'object');
+    byKind.set(19 /* Key */, 'key');
+    byKind.set(20 /* Null */, 'null');
+    byKind.set(21 /* EnumMember */, 'enum-member');
+    byKind.set(22 /* Struct */, 'struct');
+    byKind.set(23 /* Event */, 'event');
+    byKind.set(24 /* Operator */, 'operator');
+    byKind.set(25 /* TypeParameter */, 'type-parameter');
+    /**
+     * @internal
+     */
+    function fromString(value) {
+        return byName.get(value);
+    }
+    SymbolKinds.fromString = fromString;
+    /**
+     * @internal
+     */
+    function toString(kind) {
+        return byKind.get(kind);
+    }
+    SymbolKinds.toString = toString;
+    /**
+     * @internal
+     */
+    function toCssClassName(kind, inline) {
+        return "codicon " + (inline ? 'inline' : 'block') + " codicon-symbol-" + (byKind.get(kind) || 'property');
+    }
+    SymbolKinds.toCssClassName = toCssClassName;
+})(SymbolKinds || (SymbolKinds = {}));
 var FoldingRangeKind = /** @class */ (function () {
     /**
      * Creates a new [FoldingRangeKind](#FoldingRangeKind).
@@ -244,9 +290,29 @@ export { FoldingRangeKind };
 /**
  * @internal
  */
-export function isResourceTextEdit(thing) {
-    return isObject(thing) && thing.resource && Array.isArray(thing.edits);
-}
+export var WorkspaceFileEdit;
+(function (WorkspaceFileEdit) {
+    /**
+     * @internal
+     */
+    function is(thing) {
+        return isObject(thing) && (Boolean(thing.newUri) || Boolean(thing.oldUri));
+    }
+    WorkspaceFileEdit.is = is;
+})(WorkspaceFileEdit || (WorkspaceFileEdit = {}));
+/**
+ * @internal
+ */
+export var WorkspaceTextEdit;
+(function (WorkspaceTextEdit) {
+    /**
+     * @internal
+     */
+    function is(thing) {
+        return isObject(thing) && URI.isUri(thing.resource) && isObject(thing.edit);
+    }
+    WorkspaceTextEdit.is = is;
+})(WorkspaceTextEdit || (WorkspaceTextEdit = {}));
 // --- feature registries ------
 /**
  * @internal
@@ -328,6 +394,14 @@ export var SelectionRangeRegistry = new LanguageFeatureRegistry();
  * @internal
  */
 export var FoldingRangeProviderRegistry = new LanguageFeatureRegistry();
+/**
+ * @internal
+ */
+export var DocumentSemanticTokensProviderRegistry = new LanguageFeatureRegistry();
+/**
+ * @internal
+ */
+export var DocumentRangeSemanticTokensProviderRegistry = new LanguageFeatureRegistry();
 /**
  * @internal
  */

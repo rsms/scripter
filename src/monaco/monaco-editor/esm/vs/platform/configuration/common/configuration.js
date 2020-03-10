@@ -94,13 +94,13 @@ export function overrideIdentifierFromKey(key) {
 export function getMigratedSettingValue(configurationService, currentSettingName, legacySettingName) {
     var setting = configurationService.inspect(currentSettingName);
     var legacySetting = configurationService.inspect(legacySettingName);
-    if (typeof setting.user !== 'undefined' || typeof setting.workspace !== 'undefined' || typeof setting.workspaceFolder !== 'undefined') {
+    if (typeof setting.userValue !== 'undefined' || typeof setting.workspaceValue !== 'undefined' || typeof setting.workspaceFolderValue !== 'undefined') {
         return setting.value;
     }
-    else if (typeof legacySetting.user !== 'undefined' || typeof legacySetting.workspace !== 'undefined' || typeof legacySetting.workspaceFolder !== 'undefined') {
+    else if (typeof legacySetting.userValue !== 'undefined' || typeof legacySetting.workspaceValue !== 'undefined' || typeof legacySetting.workspaceFolderValue !== 'undefined') {
         return legacySetting.value;
     }
     else {
-        return setting.default;
+        return setting.defaultValue;
     }
 }

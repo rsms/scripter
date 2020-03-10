@@ -43,6 +43,9 @@ var AbstractKeybindingService = /** @class */ (function (_super) {
     AbstractKeybindingService.prototype.dispose = function () {
         _super.prototype.dispose.call(this);
     };
+    AbstractKeybindingService.prototype.getKeybindings = function () {
+        return this._getResolver().getKeybindings();
+    };
     AbstractKeybindingService.prototype.lookupKeybinding = function (commandId) {
         var result = this._getResolver().lookupPrimaryKeybinding(commandId);
         if (!result) {

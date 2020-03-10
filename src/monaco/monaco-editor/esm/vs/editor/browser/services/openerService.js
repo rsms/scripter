@@ -2,19 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = function (d, b) {
-        extendStatics = Object.setPrototypeOf ||
-            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-            function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-        return extendStatics(d, b);
-    };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -25,10 +12,11 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
@@ -59,41 +47,160 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArrays = (this && this.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
 import * as dom from '../../../base/browser/dom.js';
-import { Disposable } from '../../../base/common/lifecycle.js';
 import { LinkedList } from '../../../base/common/linkedList.js';
 import { parse } from '../../../base/common/marshalling.js';
 import { Schemas } from '../../../base/common/network.js';
-import * as resources from '../../../base/common/resources.js';
-import { equalsIgnoreCase } from '../../../base/common/strings.js';
+import { normalizePath } from '../../../base/common/resources.js';
+import { URI } from '../../../base/common/uri.js';
 import { ICodeEditorService } from './codeEditorService.js';
 import { CommandsRegistry, ICommandService } from '../../../platform/commands/common/commands.js';
-var OpenerService = /** @class */ (function (_super) {
-    __extends(OpenerService, _super);
-    function OpenerService(_editorService, _commandService) {
-        var _this = _super.call(this) || this;
-        _this._editorService = _editorService;
-        _this._commandService = _commandService;
-        _this._openers = new LinkedList();
-        _this._validators = new LinkedList();
-        return _this;
+import { matchesScheme } from '../../../platform/opener/common/opener.js';
+import { EditorOpenContext } from '../../../platform/editor/common/editor.js';
+var CommandOpener = /** @class */ (function () {
+    function CommandOpener(_commandService) {
+        this._commandService = _commandService;
     }
-    OpenerService.prototype.open = function (resource, options) {
+    CommandOpener.prototype.open = function (target) {
+        return __awaiter(this, void 0, void 0, function () {
+            var args;
+            var _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        if (!matchesScheme(target, Schemas.command)) {
+                            return [2 /*return*/, false];
+                        }
+                        // run command or bail out if command isn't known
+                        if (typeof target === 'string') {
+                            target = URI.parse(target);
+                        }
+                        if (!CommandsRegistry.getCommand(target.path)) {
+                            throw new Error("command '" + target.path + "' NOT known");
+                        }
+                        args = [];
+                        try {
+                            args = parse(decodeURIComponent(target.query));
+                        }
+                        catch (_c) {
+                            // ignore and retry
+                            try {
+                                args = parse(target.query);
+                            }
+                            catch (_d) {
+                                // ignore error
+                            }
+                        }
+                        if (!Array.isArray(args)) {
+                            args = [args];
+                        }
+                        return [4 /*yield*/, (_a = this._commandService).executeCommand.apply(_a, __spreadArrays([target.path], args))];
+                    case 1:
+                        _b.sent();
+                        return [2 /*return*/, true];
+                }
+            });
+        });
+    };
+    CommandOpener = __decorate([
+        __param(0, ICommandService)
+    ], CommandOpener);
+    return CommandOpener;
+}());
+var EditorOpener = /** @class */ (function () {
+    function EditorOpener(_editorService) {
+        this._editorService = _editorService;
+    }
+    EditorOpener.prototype.open = function (target, options) {
+        return __awaiter(this, void 0, void 0, function () {
+            var selection, match;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (typeof target === 'string') {
+                            target = URI.parse(target);
+                        }
+                        selection = undefined;
+                        match = /^L?(\d+)(?:,(\d+))?/.exec(target.fragment);
+                        if (match) {
+                            // support file:///some/file.js#73,84
+                            // support file:///some/file.js#L73
+                            selection = {
+                                startLineNumber: parseInt(match[1]),
+                                startColumn: match[2] ? parseInt(match[2]) : 1
+                            };
+                            // remove fragment
+                            target = target.with({ fragment: '' });
+                        }
+                        if (target.scheme === Schemas.file) {
+                            target = normalizePath(target); // workaround for non-normalized paths (https://github.com/Microsoft/vscode/issues/12954)
+                        }
+                        return [4 /*yield*/, this._editorService.openCodeEditor({ resource: target, options: { selection: selection, context: (options === null || options === void 0 ? void 0 : options.fromUserGesture) ? EditorOpenContext.USER : EditorOpenContext.API } }, this._editorService.getFocusedCodeEditor(), options === null || options === void 0 ? void 0 : options.openToSide)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, true];
+                }
+            });
+        });
+    };
+    EditorOpener = __decorate([
+        __param(0, ICodeEditorService)
+    ], EditorOpener);
+    return EditorOpener;
+}());
+var OpenerService = /** @class */ (function () {
+    function OpenerService(editorService, commandService) {
+        var _this = this;
+        this._openers = new LinkedList();
+        this._validators = new LinkedList();
+        this._resolvers = new LinkedList();
+        // Default external opener is going through window.open()
+        this._externalOpener = {
+            openExternal: function (href) {
+                dom.windowOpenNoOpener(href);
+                return Promise.resolve(true);
+            }
+        };
+        // Default opener: maito, http(s), command, and catch-all-editors
+        this._openers.push({
+            open: function (target, options) { return __awaiter(_this, void 0, void 0, function () {
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (!((options === null || options === void 0 ? void 0 : options.openExternal) || matchesScheme(target, Schemas.mailto) || matchesScheme(target, Schemas.http) || matchesScheme(target, Schemas.https))) return [3 /*break*/, 2];
+                            // open externally
+                            return [4 /*yield*/, this._doOpenExternal(target, options)];
+                        case 1:
+                            // open externally
+                            _a.sent();
+                            return [2 /*return*/, true];
+                        case 2: return [2 /*return*/, false];
+                    }
+                });
+            }); }
+        });
+        this._openers.push(new CommandOpener(commandService));
+        this._openers.push(new EditorOpener(editorService));
+    }
+    OpenerService.prototype.open = function (target, options) {
         return __awaiter(this, void 0, void 0, function () {
             var _i, _a, validator, _b, _c, opener_1, handled;
             return __generator(this, function (_d) {
                 switch (_d.label) {
                     case 0:
-                        // no scheme ?!?
-                        if (!resource.scheme) {
-                            return [2 /*return*/, Promise.resolve(false)];
-                        }
                         _i = 0, _a = this._validators.toArray();
                         _d.label = 1;
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         validator = _a[_i];
-                        return [4 /*yield*/, validator.shouldOpen(resource)];
+                        return [4 /*yield*/, validator.shouldOpen(target)];
                     case 2:
                         if (!(_d.sent())) {
                             return [2 /*return*/, false];
@@ -108,7 +215,7 @@ var OpenerService = /** @class */ (function (_super) {
                     case 5:
                         if (!(_b < _c.length)) return [3 /*break*/, 8];
                         opener_1 = _c[_b];
-                        return [4 /*yield*/, opener_1.open(resource, options)];
+                        return [4 /*yield*/, opener_1.open(target, options)];
                     case 6:
                         handled = _d.sent();
                         if (handled) {
@@ -118,64 +225,59 @@ var OpenerService = /** @class */ (function (_super) {
                     case 7:
                         _b++;
                         return [3 /*break*/, 5];
-                    case 8: 
-                    // use default openers
-                    return [2 /*return*/, this._doOpen(resource, options)];
+                    case 8: return [2 /*return*/, false];
                 }
             });
         });
     };
-    OpenerService.prototype._doOpen = function (resource, options) {
-        var _a;
-        var scheme = resource.scheme, path = resource.path, query = resource.query, fragment = resource.fragment;
-        if (equalsIgnoreCase(scheme, Schemas.mailto) || (options && options.openExternal)) {
-            // open default mail application
-            return this._doOpenExternal(resource);
-        }
-        if (equalsIgnoreCase(scheme, Schemas.http) || equalsIgnoreCase(scheme, Schemas.https)) {
-            // open link in default browser
-            return this._doOpenExternal(resource);
-        }
-        else if (equalsIgnoreCase(scheme, Schemas.command)) {
-            // run command or bail out if command isn't known
-            if (!CommandsRegistry.getCommand(path)) {
-                return Promise.reject("command '" + path + "' NOT known");
-            }
-            // execute as command
-            var args = [];
-            try {
-                args = parse(query);
-                if (!Array.isArray(args)) {
-                    args = [args];
+    OpenerService.prototype.resolveExternalUri = function (resource, options) {
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, resolver, result;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _i = 0, _a = this._resolvers.toArray();
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 4];
+                        resolver = _a[_i];
+                        return [4 /*yield*/, resolver.resolveExternalUri(resource, options)];
+                    case 2:
+                        result = _b.sent();
+                        if (result) {
+                            return [2 /*return*/, result];
+                        }
+                        _b.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4: return [2 /*return*/, { resolved: resource, dispose: function () { } }];
                 }
-            }
-            catch (e) {
-                //
-            }
-            return (_a = this._commandService).executeCommand.apply(_a, [path].concat(args)).then(function () { return true; });
-        }
-        else {
-            var selection = undefined;
-            var match = /^L?(\d+)(?:,(\d+))?/.exec(fragment);
-            if (match) {
-                // support file:///some/file.js#73,84
-                // support file:///some/file.js#L73
-                selection = {
-                    startLineNumber: parseInt(match[1]),
-                    startColumn: match[2] ? parseInt(match[2]) : 1
-                };
-                // remove fragment
-                resource = resource.with({ fragment: '' });
-            }
-            if (resource.scheme === Schemas.file) {
-                resource = resources.normalizePath(resource); // workaround for non-normalized paths (https://github.com/Microsoft/vscode/issues/12954)
-            }
-            return this._editorService.openCodeEditor({ resource: resource, options: { selection: selection, } }, this._editorService.getFocusedCodeEditor(), options && options.openToSide).then(function () { return true; });
-        }
+            });
+        });
     };
-    OpenerService.prototype._doOpenExternal = function (resource) {
-        dom.windowOpenNoOpener(encodeURI(resource.toString(true)));
-        return Promise.resolve(true);
+    OpenerService.prototype._doOpenExternal = function (resource, options) {
+        return __awaiter(this, void 0, void 0, function () {
+            var uri, resolved;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        uri = typeof resource === 'string' ? URI.parse(resource) : resource;
+                        return [4 /*yield*/, this.resolveExternalUri(uri, options)];
+                    case 1:
+                        resolved = (_a.sent()).resolved;
+                        if (typeof resource === 'string' && uri.toString() === resolved.toString()) {
+                            // open the url-string AS IS
+                            return [2 /*return*/, this._externalOpener.openExternal(resource)];
+                        }
+                        else {
+                            // open URI using the toString(noEncode)+encodeURI-trick
+                            return [2 /*return*/, this._externalOpener.openExternal(encodeURI(resolved.toString(true)))];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
     };
     OpenerService.prototype.dispose = function () {
         this._validators.clear();
@@ -185,5 +287,5 @@ var OpenerService = /** @class */ (function (_super) {
         __param(1, ICommandService)
     ], OpenerService);
     return OpenerService;
-}(Disposable));
+}());
 export { OpenerService };

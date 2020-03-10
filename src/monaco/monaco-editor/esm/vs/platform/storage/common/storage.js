@@ -16,7 +16,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 import { createDecorator } from '../../instantiation/common/instantiation.js';
-import { Event, Emitter } from '../../../base/common/event.js';
+import { Emitter } from '../../../base/common/event.js';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { isUndefinedOrNull } from '../../../base/common/types.js';
 export var IStorageService = createDecorator('storageService');
@@ -29,10 +29,10 @@ var InMemoryStorageService = /** @class */ (function (_super) {
     __extends(InMemoryStorageService, _super);
     function InMemoryStorageService() {
         var _this = _super !== null && _super.apply(this, arguments) || this;
-        _this._serviceBrand = null;
         _this._onDidChangeStorage = _this._register(new Emitter());
         _this.onDidChangeStorage = _this._onDidChangeStorage.event;
-        _this.onWillSaveState = Event.None;
+        _this._onWillSaveState = _this._register(new Emitter());
+        _this.onWillSaveState = _this._onWillSaveState.event;
         _this.globalCache = new Map();
         _this.workspaceCache = new Map();
         return _this;

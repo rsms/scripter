@@ -17,12 +17,13 @@ var __extends = (this && this.__extends) || (function () {
 })();
 import { onUnexpectedError } from '../../../base/common/errors.js';
 import * as strings from '../../../base/common/strings.js';
-import { ReplaceCommand, ReplaceCommandWithOffsetCursorState, ReplaceCommandWithoutChangingPosition } from '../commands/replaceCommand.js';
+import { ReplaceCommand, ReplaceCommandWithOffsetCursorState, ReplaceCommandWithoutChangingPosition, ReplaceCommandThatPreservesSelection } from '../commands/replaceCommand.js';
 import { ShiftCommand } from '../commands/shiftCommand.js';
 import { SurroundSelectionCommand } from '../commands/surroundSelectionCommand.js';
 import { CursorColumns, EditOperationResult, isQuote } from './cursorCommon.js';
 import { getMapForWordSeparators } from './wordCharacterClassifier.js';
 import { Range } from '../core/range.js';
+import { Selection } from '../core/selection.js';
 import { IndentAction } from '../modes/languageConfiguration.js';
 import { LanguageConfigurationRegistry } from '../modes/languageConfigurationRegistry.js';
 var TypeOperations = /** @class */ (function () {
@@ -39,7 +40,8 @@ var TypeOperations = /** @class */ (function () {
                 tabSize: config.tabSize,
                 indentSize: config.indentSize,
                 insertSpaces: config.insertSpaces,
-                useTabStops: config.useTabStops
+                useTabStops: config.useTabStops,
+                autoIndent: config.autoIndent
             });
         }
         return commands;
@@ -52,7 +54,8 @@ var TypeOperations = /** @class */ (function () {
                 tabSize: config.tabSize,
                 indentSize: config.indentSize,
                 insertSpaces: config.insertSpaces,
-                useTabStops: config.useTabStops
+                useTabStops: config.useTabStops,
+                autoIndent: config.autoIndent
             });
         }
         return commands;
@@ -80,19 +83,16 @@ var TypeOperations = /** @class */ (function () {
         for (var i = 0, len = selections.length; i < len; i++) {
             var selection = selections[i];
             var position = selection.getPosition();
+            if (pasteOnNewLine && !selection.isEmpty()) {
+                pasteOnNewLine = false;
+            }
             if (pasteOnNewLine && text.indexOf('\n') !== text.length - 1) {
-                pasteOnNewLine = false;
-            }
-            if (pasteOnNewLine && selection.startLineNumber !== selection.endLineNumber) {
-                pasteOnNewLine = false;
-            }
-            if (pasteOnNewLine && selection.startColumn === model.getLineMinColumn(selection.startLineNumber) && selection.endColumn === model.getLineMaxColumn(selection.startLineNumber)) {
                 pasteOnNewLine = false;
             }
             if (pasteOnNewLine) {
                 // Paste entire line at the beginning of line
                 var typeSelection = new Range(position.lineNumber, 1, position.lineNumber, 1);
-                commands[i] = new ReplaceCommand(typeSelection, text);
+                commands[i] = new ReplaceCommandThatPreservesSelection(typeSelection, text, selection, true);
             }
             else {
                 commands[i] = new ReplaceCommand(selection, text);
@@ -103,7 +103,7 @@ var TypeOperations = /** @class */ (function () {
             shouldPushStackElementAfter: true
         });
     };
-    TypeOperations._distributePasteToCursors = function (selections, text, pasteOnNewLine, multicursorText) {
+    TypeOperations._distributePasteToCursors = function (config, selections, text, pasteOnNewLine, multicursorText) {
         if (pasteOnNewLine) {
             return null;
         }
@@ -113,18 +113,25 @@ var TypeOperations = /** @class */ (function () {
         if (multicursorText && multicursorText.length === selections.length) {
             return multicursorText;
         }
-        // Remove trailing \n if present
-        if (text.charCodeAt(text.length - 1) === 10 /* LineFeed */) {
-            text = text.substr(0, text.length - 1);
-        }
-        var lines = text.split(/\r\n|\r|\n/);
-        if (lines.length === selections.length) {
-            return lines;
+        if (config.multiCursorPaste === 'spread') {
+            // Try to spread the pasted text in case the line count matches the cursor count
+            // Remove trailing \n if present
+            if (text.charCodeAt(text.length - 1) === 10 /* LineFeed */) {
+                text = text.substr(0, text.length - 1);
+            }
+            // Remove trailing \r if present
+            if (text.charCodeAt(text.length - 1) === 13 /* CarriageReturn */) {
+                text = text.substr(0, text.length - 1);
+            }
+            var lines = text.split(/\r\n|\r|\n/);
+            if (lines.length === selections.length) {
+                return lines;
+            }
         }
         return null;
     };
     TypeOperations.paste = function (config, model, selections, text, pasteOnNewLine, multicursorText) {
-        var distributedPaste = this._distributePasteToCursors(selections, text, pasteOnNewLine, multicursorText);
+        var distributedPaste = this._distributePasteToCursors(config, selections, text, pasteOnNewLine, multicursorText);
         if (distributedPaste) {
             selections = selections.sort(Range.compareRangesUsingStarts);
             return this._distributedPaste(config, model, selections, distributedPaste);
@@ -136,7 +143,7 @@ var TypeOperations = /** @class */ (function () {
     TypeOperations._goodIndentForLine = function (config, model, lineNumber) {
         var action = null;
         var indentation = '';
-        var expectedIndentAction = config.autoIndent ? LanguageConfigurationRegistry.getInheritIndentForLine(model, lineNumber, false) : null;
+        var expectedIndentAction = LanguageConfigurationRegistry.getInheritIndentForLine(config.autoIndent, model, lineNumber, false);
         if (expectedIndentAction) {
             action = expectedIndentAction.action;
             indentation = expectedIndentAction.indentation;
@@ -155,13 +162,9 @@ var TypeOperations = /** @class */ (function () {
                 return null;
             }
             var maxColumn = model.getLineMaxColumn(lastLineNumber);
-            var expectedEnterAction = LanguageConfigurationRegistry.getEnterAction(model, new Range(lastLineNumber, maxColumn, lastLineNumber, maxColumn));
+            var expectedEnterAction = LanguageConfigurationRegistry.getEnterAction(config.autoIndent, model, new Range(lastLineNumber, maxColumn, lastLineNumber, maxColumn));
             if (expectedEnterAction) {
-                indentation = expectedEnterAction.indentation;
-                action = expectedEnterAction.enterAction;
-                if (action) {
-                    indentation += action.appendText;
-                }
+                indentation = expectedEnterAction.indentation + expectedEnterAction.appendText;
             }
         }
         if (action) {
@@ -225,7 +228,8 @@ var TypeOperations = /** @class */ (function () {
                     tabSize: config.tabSize,
                     indentSize: config.indentSize,
                     insertSpaces: config.insertSpaces,
-                    useTabStops: config.useTabStops
+                    useTabStops: config.useTabStops,
+                    autoIndent: config.autoIndent
                 });
             }
         }
@@ -261,27 +265,28 @@ var TypeOperations = /** @class */ (function () {
         }
     };
     TypeOperations._enter = function (config, model, keepPosition, range) {
-        if (!model.isCheapToTokenize(range.getStartPosition().lineNumber)) {
+        if (config.autoIndent === 0 /* None */) {
+            return TypeOperations._typeCommand(range, '\n', keepPosition);
+        }
+        if (!model.isCheapToTokenize(range.getStartPosition().lineNumber) || config.autoIndent === 1 /* Keep */) {
             var lineText_1 = model.getLineContent(range.startLineNumber);
             var indentation_1 = strings.getLeadingWhitespace(lineText_1).substring(0, range.startColumn - 1);
             return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation_1), keepPosition);
         }
-        var r = LanguageConfigurationRegistry.getEnterAction(model, range);
+        var r = LanguageConfigurationRegistry.getEnterAction(config.autoIndent, model, range);
         if (r) {
-            var enterAction = r.enterAction;
-            var indentation_2 = r.indentation;
-            if (enterAction.indentAction === IndentAction.None) {
+            if (r.indentAction === IndentAction.None) {
                 // Nothing special
-                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation_2 + enterAction.appendText), keepPosition);
+                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(r.indentation + r.appendText), keepPosition);
             }
-            else if (enterAction.indentAction === IndentAction.Indent) {
+            else if (r.indentAction === IndentAction.Indent) {
                 // Indent once
-                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation_2 + enterAction.appendText), keepPosition);
+                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(r.indentation + r.appendText), keepPosition);
             }
-            else if (enterAction.indentAction === IndentAction.IndentOutdent) {
+            else if (r.indentAction === IndentAction.IndentOutdent) {
                 // Ultra special
-                var normalIndent = config.normalizeIndentation(indentation_2);
-                var increasedIndent = config.normalizeIndentation(indentation_2 + enterAction.appendText);
+                var normalIndent = config.normalizeIndentation(r.indentation);
+                var increasedIndent = config.normalizeIndentation(r.indentation + r.appendText);
                 var typeText = '\n' + increasedIndent + '\n' + normalIndent;
                 if (keepPosition) {
                     return new ReplaceCommandWithoutChangingPosition(range, typeText, true);
@@ -290,67 +295,60 @@ var TypeOperations = /** @class */ (function () {
                     return new ReplaceCommandWithOffsetCursorState(range, typeText, -1, increasedIndent.length - normalIndent.length, true);
                 }
             }
-            else if (enterAction.indentAction === IndentAction.Outdent) {
-                var actualIndentation = TypeOperations.unshiftIndent(config, indentation_2);
-                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(actualIndentation + enterAction.appendText), keepPosition);
+            else if (r.indentAction === IndentAction.Outdent) {
+                var actualIndentation = TypeOperations.unshiftIndent(config, r.indentation);
+                return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(actualIndentation + r.appendText), keepPosition);
             }
         }
-        // no enter rules applied, we should check indentation rules then.
-        if (!config.autoIndent) {
-            // Nothing special
-            var lineText_2 = model.getLineContent(range.startLineNumber);
-            var indentation_3 = strings.getLeadingWhitespace(lineText_2).substring(0, range.startColumn - 1);
-            return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation_3), keepPosition);
-        }
-        var ir = LanguageConfigurationRegistry.getIndentForEnter(model, range, {
-            unshiftIndent: function (indent) {
-                return TypeOperations.unshiftIndent(config, indent);
-            },
-            shiftIndent: function (indent) {
-                return TypeOperations.shiftIndent(config, indent);
-            },
-            normalizeIndentation: function (indent) {
-                return config.normalizeIndentation(indent);
-            }
-        }, config.autoIndent);
         var lineText = model.getLineContent(range.startLineNumber);
         var indentation = strings.getLeadingWhitespace(lineText).substring(0, range.startColumn - 1);
-        if (ir) {
-            var oldEndViewColumn = CursorColumns.visibleColumnFromColumn2(config, model, range.getEndPosition());
-            var oldEndColumn = range.endColumn;
-            var beforeText = '\n';
-            if (indentation !== config.normalizeIndentation(ir.beforeEnter)) {
-                beforeText = config.normalizeIndentation(ir.beforeEnter) + lineText.substring(indentation.length, range.startColumn - 1) + '\n';
-                range = new Range(range.startLineNumber, 1, range.endLineNumber, range.endColumn);
-            }
-            var newLineContent = model.getLineContent(range.endLineNumber);
-            var firstNonWhitespace = strings.firstNonWhitespaceIndex(newLineContent);
-            if (firstNonWhitespace >= 0) {
-                range = range.setEndPosition(range.endLineNumber, Math.max(range.endColumn, firstNonWhitespace + 1));
-            }
-            else {
-                range = range.setEndPosition(range.endLineNumber, model.getLineMaxColumn(range.endLineNumber));
-            }
-            if (keepPosition) {
-                return new ReplaceCommandWithoutChangingPosition(range, beforeText + config.normalizeIndentation(ir.afterEnter), true);
-            }
-            else {
-                var offset = 0;
-                if (oldEndColumn <= firstNonWhitespace + 1) {
-                    if (!config.insertSpaces) {
-                        oldEndViewColumn = Math.ceil(oldEndViewColumn / config.indentSize);
-                    }
-                    offset = Math.min(oldEndViewColumn + 1 - config.normalizeIndentation(ir.afterEnter).length - 1, 0);
+        if (config.autoIndent >= 4 /* Full */) {
+            var ir = LanguageConfigurationRegistry.getIndentForEnter(config.autoIndent, model, range, {
+                unshiftIndent: function (indent) {
+                    return TypeOperations.unshiftIndent(config, indent);
+                },
+                shiftIndent: function (indent) {
+                    return TypeOperations.shiftIndent(config, indent);
+                },
+                normalizeIndentation: function (indent) {
+                    return config.normalizeIndentation(indent);
                 }
-                return new ReplaceCommandWithOffsetCursorState(range, beforeText + config.normalizeIndentation(ir.afterEnter), 0, offset, true);
+            });
+            if (ir) {
+                var oldEndViewColumn = CursorColumns.visibleColumnFromColumn2(config, model, range.getEndPosition());
+                var oldEndColumn = range.endColumn;
+                var beforeText = '\n';
+                if (indentation !== config.normalizeIndentation(ir.beforeEnter)) {
+                    beforeText = config.normalizeIndentation(ir.beforeEnter) + lineText.substring(indentation.length, range.startColumn - 1) + '\n';
+                    range = new Range(range.startLineNumber, 1, range.endLineNumber, range.endColumn);
+                }
+                var newLineContent = model.getLineContent(range.endLineNumber);
+                var firstNonWhitespace = strings.firstNonWhitespaceIndex(newLineContent);
+                if (firstNonWhitespace >= 0) {
+                    range = range.setEndPosition(range.endLineNumber, Math.max(range.endColumn, firstNonWhitespace + 1));
+                }
+                else {
+                    range = range.setEndPosition(range.endLineNumber, model.getLineMaxColumn(range.endLineNumber));
+                }
+                if (keepPosition) {
+                    return new ReplaceCommandWithoutChangingPosition(range, beforeText + config.normalizeIndentation(ir.afterEnter), true);
+                }
+                else {
+                    var offset = 0;
+                    if (oldEndColumn <= firstNonWhitespace + 1) {
+                        if (!config.insertSpaces) {
+                            oldEndViewColumn = Math.ceil(oldEndViewColumn / config.indentSize);
+                        }
+                        offset = Math.min(oldEndViewColumn + 1 - config.normalizeIndentation(ir.afterEnter).length - 1, 0);
+                    }
+                    return new ReplaceCommandWithOffsetCursorState(range, beforeText + config.normalizeIndentation(ir.afterEnter), 0, offset, true);
+                }
             }
         }
-        else {
-            return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation), keepPosition);
-        }
+        return TypeOperations._typeCommand(range, '\n' + config.normalizeIndentation(indentation), keepPosition);
     };
     TypeOperations._isAutoIndentType = function (config, model, selections) {
-        if (!config.autoIndent) {
+        if (config.autoIndent < 4 /* Full */) {
             return false;
         }
         for (var i = 0, len = selections.length; i < len; i++) {
@@ -362,7 +360,7 @@ var TypeOperations = /** @class */ (function () {
     };
     TypeOperations._runAutoIndentType = function (config, model, range, ch) {
         var currentIndentation = LanguageConfigurationRegistry.getIndentationAtPosition(model, range.startLineNumber, range.startColumn);
-        var actualIndentation = LanguageConfigurationRegistry.getIndentActionForType(model, range, ch, {
+        var actualIndentation = LanguageConfigurationRegistry.getIndentActionForType(config.autoIndent, model, range, ch, {
             shiftIndent: function (indentation) {
                 return TypeOperations.shiftIndent(config, indentation);
             },
@@ -403,6 +401,12 @@ var TypeOperations = /** @class */ (function () {
             if (afterCharacter !== ch) {
                 return false;
             }
+            // Do not over-type quotes after a backslash
+            var chIsQuote = isQuote(ch);
+            var beforeCharacter = position.column > 2 ? lineText.charCodeAt(position.column - 2) : 0 /* Null */;
+            if (beforeCharacter === 92 /* Backslash */ && chIsQuote) {
+                return false;
+            }
             // Must over-type a closing character typed by the editor
             if (config.autoClosingOvertype === 'auto') {
                 var found = false;
@@ -433,15 +437,19 @@ var TypeOperations = /** @class */ (function () {
             shouldPushStackElementAfter: false
         });
     };
+    TypeOperations._autoClosingPairIsSymmetric = function (autoClosingPair) {
+        var open = autoClosingPair.open, close = autoClosingPair.close;
+        return (open.indexOf(close) >= 0 || close.indexOf(open) >= 0);
+    };
     TypeOperations._isBeforeClosingBrace = function (config, autoClosingPair, characterAfter) {
         var otherAutoClosingPairs = config.autoClosingPairsClose2.get(characterAfter);
         if (!otherAutoClosingPairs) {
             return false;
         }
-        var thisBraceIsSymmetric = (autoClosingPair.open === autoClosingPair.close);
+        var thisBraceIsSymmetric = TypeOperations._autoClosingPairIsSymmetric(autoClosingPair);
         for (var _i = 0, otherAutoClosingPairs_1 = otherAutoClosingPairs; _i < otherAutoClosingPairs_1.length; _i++) {
             var otherAutoClosingPair = otherAutoClosingPairs_1[_i];
-            var otherBraceIsSymmetric = (otherAutoClosingPair.open === otherAutoClosingPair.close);
+            var otherBraceIsSymmetric = TypeOperations._autoClosingPairIsSymmetric(otherAutoClosingPair);
             if (!thisBraceIsSymmetric && otherBraceIsSymmetric) {
                 continue;
             }
@@ -653,7 +661,11 @@ var TypeOperations = /** @class */ (function () {
     /**
      * This is very similar with typing, but the character is already in the text buffer!
      */
-    TypeOperations.compositionEndWithInterceptors = function (prevEditOperationType, config, model, selections, autoClosedCharacters) {
+    TypeOperations.compositionEndWithInterceptors = function (prevEditOperationType, config, model, selectionsWhenCompositionStarted, selections, autoClosedCharacters) {
+        if (!selectionsWhenCompositionStarted || Selection.selectionsArrEqual(selectionsWhenCompositionStarted, selections)) {
+            // no content was typed
+            return null;
+        }
         var ch = null;
         // extract last typed character
         for (var _i = 0, selections_1 = selections; _i < selections_1.length; _i++) {
