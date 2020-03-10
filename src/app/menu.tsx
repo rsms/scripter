@@ -352,14 +352,20 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       editor.openScript(s.id)
       scrollIntoView(ev.target as HTMLElement)
     }
-    function onDoubleClick() {
-      setIsEditing(true)
-    }
     attrs.onMouseDown = onMouseDown
     if (!s.readOnly && s.id >= 0) {
       // allow renaming of editable files which are either unsaved (id==0) or saved (id>0).
       // however, do not allow renaming of editable example files (id<0).
-      attrs.onDoubleClick = onDoubleClick
+      attrs.onDoubleClick = ev => {
+        setIsEditing(true)
+        ev.preventDefault()
+        ev.stopPropagation()
+      }
+      attrs.onContextMenu = ev => {
+        setIsEditing(true)
+        ev.preventDefault()
+        ev.stopPropagation()
+      }
       attrs.title = `Last modified ${s.modifiedAt.toLocaleString()}`
     }
   }
