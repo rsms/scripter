@@ -1,8 +1,11 @@
 import { db } from "./data"
 import { EventEmitter } from "./event"
 import * as monaco from "../monaco/monaco"
-
-const print = console.log.bind(console)
+import * as guid from "./guid"
+import savedScripts from "./saved-scripts"
+import { SaveScriptMsg } from "../common/messages"
+import * as figma from "./figma-plugin-bridge"
+import { print, dlog } from "./util"
 
 // const defaultScriptBody = `
 //   for (let n of figma.currentPage.selection) {
@@ -21,6 +24,7 @@ type EditorViewState = monaco.editor.ICodeEditorViewState
 
 export interface ScriptMeta {
   id         :number  // <=0 for memory-only, >0 when saved in database.
+  guid       :string
   name       :string
   tags       :string[]
   createdAt  :Date
@@ -28,9 +32,10 @@ export interface ScriptMeta {
 }
 
 function createScriptMeta(meta :Partial<ScriptMeta>) :ScriptMeta {
-  return {
+  let m :ScriptMeta = {
     // defaults
     id:         0,
+    guid:       "",
     name:       "Untitled",
     tags:       [],
     createdAt:  new Date(),
@@ -39,6 +44,7 @@ function createScriptMeta(meta :Partial<ScriptMeta>) :ScriptMeta {
     // custom
     ...meta
   }
+  return m
 }
 
 
@@ -72,14 +78,20 @@ export class Script extends EventEmitter<ScriptEventMap> {
   }
 
   get id() :number { return this.meta.id }
+  get guid() :string { return this.meta.guid }
 
   get createdAt() :Date { return this.meta.createdAt }
   get modifiedAt() :Date { return this.meta.modifiedAt }
+
+  get modelVersion() :number { return this._currModelVersion }
+
+  get isUserScript() :bool { return !this.readOnly && this.id >= 0 }
 
   get body() :string { return this._body }
   set body(v :string) {
     this._body = v
     this._bodyDirty = true
+    this._currModelVersion = 0
     this.scheduleSave()
   }
 
@@ -114,14 +126,25 @@ export class Script extends EventEmitter<ScriptEventMap> {
     )
   }
 
+  isSavedInFigma() :bool {
+    return this.guid && savedScripts.hasGUID(this.guid)
+  }
+
+  requireValidGUID() :string {
+    if (!this.meta.guid) {
+      this.meta.guid = guid.gen()
+      this._metaDirty = true
+      this.scheduleSave()
+    }
+    return this.meta.guid
+  }
+
   scheduleSave() {
     // (re)start save timer
     let e = new Error()
     clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       // print(`autosave script ${this}`)
-      this._saveTimer = null
-      this._savedModelVersion = this._currModelVersion
       this.save()
     }, this.meta.id <= 0 ? 0 : 500) // immediate for first save
   }
@@ -129,12 +152,24 @@ export class Script extends EventEmitter<ScriptEventMap> {
   save() :Promise<void> {
     let p :Promise<void>
 
+    clearTimeout(this._saveTimer)
+    this._saveTimer = null
+    this._savedModelVersion = this._currModelVersion
+
+    dlog(`Script.save ID=${this.meta.id} GUID=${this.meta.guid}`, this)
+
     if (this.meta.id <= 0) {
       // create
 
       if (this._body.trim() == "") {
         // avoid creating files that are empty
+        dlog("Script.save canceled because _body is empty")
         return Promise.resolve()
+      }
+
+      // assign GUID if missing
+      if (!this.meta.guid) {
+        this.meta.guid = guid.gen()
       }
 
       print(`save/create script ${JSON.stringify(this.meta.name)}`)
@@ -159,6 +194,13 @@ export class Script extends EventEmitter<ScriptEventMap> {
       return Promise.resolve()
     } else {
       // update
+
+      // assign GUID if missing
+      if (!this.meta.guid) {
+        this.meta.guid = guid.gen()
+        this._metaDirty = true
+      }
+
       let metaDirty = this._metaDirty
       let bodyDirty = this._bodyDirty
       if (bodyDirty || metaDirty) {
@@ -171,6 +213,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
       } else {
         p = Promise.resolve()
       }
+
+      // save to canvas if needed
+      this.saveToFigma({ createIfMissing: false })
     }
 
     // clear dirty flags
@@ -181,6 +226,20 @@ export class Script extends EventEmitter<ScriptEventMap> {
       this.triggerEvent("save", this)
     }).catch(err => {
       console.error(`failed to save ${this} in indexeddb: ${err.stack||err}`)
+    })
+  }
+
+
+  saveToFigma(options :{ createIfMissing :bool }) {
+    this.requireValidGUID()
+    figma.sendMsg<SaveScriptMsg>({
+      type: "save-script",
+      create: options.createIfMissing,
+      script: {
+        guid: this.guid,
+        name: this.name,
+        body: this.body,
+      },
     })
   }
 
@@ -244,7 +303,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
 
   toString() :string {
-    return `script#${this.meta.id}`
+    return `script#${this.meta.id}` + (this.meta.guid ? `/${this.meta.guid}` : "")
   }
 
   // static createDefault() :Script {

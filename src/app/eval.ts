@@ -181,7 +181,8 @@ async function handlePrintMsg(msg :PrintMsg) {
   let htmlPrefix = ""
 
   // format message
-  let messageHtml = ""
+  let messageHtml = ""  // shown in inline UI
+  let messageJs = ""    // inserted into code when user presses the + button
   if (msg.args) {
     // extract images
     let args = []
@@ -226,9 +227,13 @@ async function handlePrintMsg(msg :PrintMsg) {
         messageHtml += htmlEncode(fmtValue(arg))
         prevWasText = true
       }
+
+      messageJs += fmtValue(arg) + "\n"
     }
+    messageJs = "_ = " + messageJs.trim()
   } else {
     messageHtml = htmlEncode(msg.message)
+    messageJs = msg.message
   }
 
   // TODO: find end of print statement and adjust line if it spans more than one line.
@@ -250,5 +255,5 @@ async function handlePrintMsg(msg :PrintMsg) {
   //   > lines
   //
 
-  editor.viewZones.set(new PrintViewZone(pos, messageHtml))
+  editor.viewZones.set(new PrintViewZone(pos, messageHtml, messageJs))
 }

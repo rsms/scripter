@@ -40,14 +40,17 @@ body {
   color: #222;
   overflow: hidden;
 
-  &.windowWidthSmall {
+  &.windowWidthSmall { /* WindowSize.SMALL */
     --inlineWidgetWidth: 260px;
   }
-  &.windowWidthMedium {
+  &.windowWidthMedium { /* WindowSize.MEDIUM */
     --inlineWidgetWidth: 460px;
   }
-  &.windowWidthLarge {
+  &.windowWidthLarge { /* WindowSize.LARGE */
     --inlineWidgetWidth: 660px;
+  }
+  &.windowWidthXLarge { /* WindowSize.XLARGE */
+    --inlineWidgetWidth: 760px;
   }
 }
 body, .sansSerif {
@@ -106,15 +109,17 @@ code b, pre b, tt b { font-weight:540 }
 
 
 .button {
-  &.new { background-image: url("./icon-add.svg") }
-  &.menu { background-image: url('./icon-menu.svg') }
-  &.run { background-image: url('./icon-play.svg') }
+  &.new         { background-image: url("./icon-add.svg") }
+  &.menu        { background-image: url('./icon-menu.svg') }
+  &.run         { background-image: url('./icon-play.svg') }
   &.run.running { background-image: url("./icon-stop.svg") }
-  &.clear { background-image: url('./icon-clear.svg') }
+  &.clear       { background-image: url('./icon-clear.svg') }
+  &.save        { background-image: url('./icon-save.svg') }
+  &.saved       { background-image: url('./icon-saved.svg') }
 }
 
-
 #toolbar {
+  --numButtonsOnSide: 3;  /* max # buttons on either side */
   position: absolute;
   left: 0; right:0; bottom: 0;
   height: var(--toolbarHeight);
@@ -126,21 +131,50 @@ code b, pre b, tt b { font-weight:540 }
   border-bottom-left-radius: 2px; /* match figma dialog corner radius */
   border-bottom-right-radius: 2px; /* match figma dialog corner radius */
 
+  --buttonGroupWidth: calc(var(--toolbarHeight) * var(--numButtonsOnSide));
+  --hoverBGColor: rgba(0,0,0,0.07);
+
   & .title {
     position: absolute;
-    top:2px;
-    bottom:2px;
-    left: calc(var(--toolbarHeight) * 2);
-    right: calc(var(--toolbarHeight) * 2);
-    /*text-align: center;*/
+    top:0;
+    bottom:0;
+    left:  var(--buttonGroupWidth);
+    right: var(--buttonGroupWidth);
+    cursor: text;
+
     display: flex;
     justify-content: center;
     align-items: center;
-    user-select: none;
-    cursor: default;
-    font-weight: 500;
-    color: #333;
-    border-radius:4px;
+
+    & input {
+      flex: 1 1 auto;
+      min-width: 32px;
+      background: none;
+      height: calc(var(--toolbarHeight) - 12px);
+      border: none;
+      border-radius: 2px;
+      text-align: center;
+      font: inherit;
+      font-weight: 500;
+      color: #333;
+      outline: none;
+      margin: 0 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      &:hover {
+        background: var(--hoverBGColor);
+        color: black;
+      }
+
+      &:focus {
+        background: white;
+        color: black;
+      }
+      &[readonly]:focus {
+        background: none;
+      }
+    }
 
     &:hover {
       color: black;
@@ -148,7 +182,7 @@ code b, pre b, tt b { font-weight:540 }
   }
 
   & .button {
-    &:hover { opacity:1; background-color: #ddd; }
+    &:hover { opacity:1; background-color: var(--hoverBGColor); }
     &:active { opacity:1; background-color: #aaa; }
     &:first-child { border-bottom-left-radius:2px; } /* fit figma window */
     &:last-child { border-bottom-right-radius:2px; } /* fit figma window */
@@ -162,46 +196,20 @@ code b, pre b, tt b { font-weight:540 }
       opacity:0.4;
       &:hover { background-color: inherit; }
     }
+    &.saved {
+      &:hover { background-color: inherit; }
+    }
   }
 
   & .spacer { flex: 1 1 auto; }
 
-  /*& .runqueue {
-    flex: 1 1 auto;
-    display: flex;
-    justify-content: center;
-    min-width: var(--toolbarHeight);
-    height: var(--toolbarHeight);
-    line-height: var(--toolbarHeight);
-    font-size: 11px;
-    user-select: none;
-    pointer-events: none;
-    overflow: hidden;
-
-    & > div {
-      width: var(--toolbarHeight);
-      height: var(--toolbarHeight);
-      text-align: center;
-      transition: all 100ms ease-in;
-      transition-property: transform, opacity;
-      transform-origin: 50% 50%;
-      background-position: 0 0;
-      background-repeat: no-repeat;
-
-      visibility:hidden;
-      &.visible { visibility:visible; }
-
-      &.pending { background-image: url("./icon-clock.svg"); opacity:0.3; }
-      &.ok { background-image: url("./icon-success.svg"); }
-      &.err { background-image: url("./icon-error.svg"); }
-      &.hide {
-        transform: translate(0, calc(var(--toolbarHeight) / 2));
-        opacity: 0;
-      }
-    }
-  }*/
-
 } /* #toolbar */
+
+body.windowWidthSmall #toolbar .title.focus {
+  /* expand the title in edit mode when the window size is small */
+  margin:0 calc(calc(var(--buttonGroupWidth) * -1));
+  z-index:9;
+}
 
 
 
@@ -236,10 +244,6 @@ code b, pre b, tt b { font-weight:540 }
     width:var(--menuItemHeight);
     height:var(--menuItemHeight);
     margin: 8px 8px 0 10px;
-
-    &.new {
-      background-image: url("./icon-add.svg");
-    }
   }
 
   & h3, & h4 {

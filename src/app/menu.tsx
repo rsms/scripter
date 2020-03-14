@@ -304,15 +304,25 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           <div className="icon window" />
           <select name="config.windowSize" value={windowSizeVal} onChange={this.onChangeWindowSize}>
           <option disabled={true}>Window W×H</option>
-          <option value={"SMALL,SMALL"}  >S×S window</option>
-          <option value={"SMALL,MEDIUM"} >S×M window</option>
-          <option value={"SMALL,LARGE"}  >S×L window</option>
-          <option value={"MEDIUM,SMALL"} >M×S window</option>
-          <option value={"MEDIUM,MEDIUM"}>M×M window</option>
-          <option value={"MEDIUM,LARGE"} >M×L window</option>
-          <option value={"LARGE,SMALL"}  >L×S window</option>
-          <option value={"LARGE,MEDIUM"} >L×M window</option>
-          <option value={"LARGE,LARGE"}  >L×L window</option>
+          <option value={"SMALL,SMALL"}  >S×S  window</option>
+          <option value={"SMALL,MEDIUM"} >S×M  window</option>
+          <option value={"SMALL,LARGE"}  >S×L  window</option>
+          <option value={"SMALL,XLARGE"} >S×XL window</option>
+
+          <option value={"MEDIUM,SMALL"} >M×S  window</option>
+          <option value={"MEDIUM,MEDIUM"}>M×M  window</option>
+          <option value={"MEDIUM,LARGE"} >M×L  window</option>
+          <option value={"MEDIUM,XLARGE"}>M×XL window</option>
+
+          <option value={"LARGE,SMALL"}  >L×S  window</option>
+          <option value={"LARGE,MEDIUM"} >L×M  window</option>
+          <option value={"LARGE,LARGE"}  >L×L  window</option>
+          <option value={"LARGE,XLARGE"} >L×XL window</option>
+
+          <option value={"XLARGE,SMALL"}  >XL×S  window</option>
+          <option value={"XLARGE,MEDIUM"} >XL×M  window</option>
+          <option value={"XLARGE,LARGE"}  >XL×L  window</option>
+          <option value={"XLARGE,XLARGE"} >XL×XL window</option>
           </select>
         </label>
       </div>
@@ -349,7 +359,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       if (menu.closeOnSelection) {
         menu.toggle()
       }
-      editor.openScript(s.id)
+      editor.openScriptByID(s.id)
       scrollIntoView(ev.target as HTMLElement)
     }
     attrs.onMouseDown = onMouseDown
@@ -371,14 +381,19 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
   }
 
   function deleteScript() {
-    if (s.id > 0 && confirm(`Delete script "${s.name}"?`)) {
+    let confirmMessage = `Delete script "${s.name}"?`
+    if (s.isSavedInFigma()) {
+      confirmMessage =
+        `Remove script "${s.name}" from menu? You can open later again from Figma.`
+    }
+    if (s.id > 0 && confirm(confirmMessage)) {
       // TODO: move this logic to editor or maybe script-data?
       let otherScriptToOpen = scriptsData.scriptAfterOrBefore(s.id)
       if (!otherScriptToOpen) {
         // deleted last script -- we must always have one script, so make a new one
         editor.newScript()
       } else {
-        editor.openScript(otherScriptToOpen.id)
+        editor.openScriptByID(otherScriptToOpen.id)
       }
       s.delete()
     }
@@ -400,6 +415,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       // rename it, the name is saved only in memory and the script is not persisted
       // until some edit is done to the body.
       s.name = newName
+      s.scheduleSave()
     }
     setIsEditing(false)
   }
@@ -420,7 +436,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
     async function onClickPlayButton(ev :React.MouseEvent<HTMLDivElement>) {
       ev.preventDefault()
       ev.stopPropagation()
-      await editor.openScript(s.id)
+      await editor.openScriptByID(s.id)
       editor.runCurrentScript()
     }
 

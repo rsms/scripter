@@ -7,6 +7,8 @@ import {
   UIConfirmRequestMsg, UIConfirmResponseMsg,
   FetchRequestMsg, FetchResponseMsg,
   UIInputRequestMsg, UIInputResponseMsg, isUIRangeInputRequest,
+  LoadScriptMsg,
+  UpdateSavedScriptsIndexMsg,
 } from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
@@ -16,6 +18,7 @@ import { editor } from "./editor"
 import { InputViewZone } from "./viewzone"
 import { UIInput } from "./ui-input"
 import { UIRangeInput, UIRangeInputInit } from "./ui-range"
+import savedScripts from "./saved-scripts"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version
@@ -28,6 +31,11 @@ import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 //   }
 //   return defaultApiVersion
 // })()
+
+
+export function sendMsg<T extends Msg>(msg :T) {
+  parent.postMessage(msg, '*')
+}
 
 
 
@@ -187,6 +195,13 @@ function rpc_ui_input(msg :UIInputRequestMsg) {
 
 
 
+export function start() {
+  // signal to plugin that we are ready
+  parent.postMessage({ type: "ui-init" }, '*')
+  sendWindowConfigMsg()
+}
+
+
 export function init() {
   let runtime = new FigmaPluginEvalRuntime()
   let messageHandler = Eval.setRuntime(runtime)
@@ -212,6 +227,14 @@ export function init() {
       case "ui-input-request":
         rpc_ui_input(msg as UIInputRequestMsg)
         // return  // return to avoid logging these high-frequency messages
+        break
+
+      case "load-script":
+        editor.loadScriptFromFigma(msg as LoadScriptMsg)
+        break
+
+      case "update-save-scripts-index":
+        savedScripts.updateGUIDs((msg as UpdateSavedScriptsIndexMsg).guids)
         break
 
       }
@@ -245,10 +268,6 @@ export function init() {
       sendWindowConfigMsg()
     }
   })
-
-  // signal to plugin that we are ready
-  parent.postMessage({ type: "ui-init" }, '*')
-  sendWindowConfigMsg()
 
   // handle ESC-ESC to close
   let lastEscapeKeypress = 0

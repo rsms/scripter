@@ -242,12 +242,14 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
 export class PrintViewZone extends ViewZone {
   readonly pos         :SourcePos
   readonly messageHtml :string
+  readonly messageJs   :string
 
-  constructor(pos :SourcePos, messageHtml :string) {
+  constructor(pos :SourcePos, messageHtml :string, messageJs :string) {
     super(pos.line, "printWidget")
 
     this.pos = pos
     this.messageHtml = messageHtml
+    this.messageJs = messageJs
 
     this.contentEl.className += " message monospace"
     this.contentEl.innerHTML = messageHtml
@@ -278,7 +280,7 @@ export class PrintViewZone extends ViewZone {
     let lineNumber = this.sourceLine
     this.removeFromEditor()
 
-    let insertMessage = "\n" + this.messageHtml
+    let insertMessage = "\n" + this.messageJs
     let spaces = "                                                                            "
     if (this.pos.column > 1) {
       insertMessage = insertMessage.replace(/\n/g, "\n" + spaces.substr(0, this.pos.column))

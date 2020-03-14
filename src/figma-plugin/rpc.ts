@@ -1,4 +1,4 @@
-import { TransactionalMsg, RPCErrorResponseMsg } from "../common/messages"
+import { Msg, TransactionalMsg, RPCErrorResponseMsg } from "../common/messages"
 
 
 interface Transaction<T extends TransactionalMsg = TransactionalMsg> {
@@ -114,4 +114,9 @@ export function rpc<In extends TransactionalMsg, Out extends TransactionalMsg>(
   figma.ui.postMessage(msg)
 
   return tx.p
+}
+
+
+export function sendMsg<T extends Msg>(msg :T) {
+  figma.ui.postMessage(msg)
 }

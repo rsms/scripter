@@ -882,7 +882,7 @@ env.fetchImg = function(input, init) {
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
 let jsHeader = (
-  `var canceled=false,__onend=null;` +
+  `var _,canceled=false,__onend=null;` +
   `[function (` +
   `module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
   `){\n` +

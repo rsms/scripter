@@ -24,6 +24,10 @@ export function fmtPrintArgs(args :any[]) :string {
 }
 
 export function fmtValue(v :any) :string {
+  if (typeof v == "string") {
+    // root string is not JSON encoded
+    return v
+  }
   return _fmtValue(v, "\n", new Set<any>())
 }
 
@@ -119,12 +123,21 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
         pairs.push(ks + ": " + _fmtValue(v[k], ln2, seen))
       }
     }
-    return "{" + pairs.join("," + ln2) + "}"
+    if (pairs.length == 0) {
+      return "{}"
+    }
+    let inside = pairs.join("," + ln2)
+    let hasLineBreak = inside.indexOf("\n") != -1
+    if (hasLineBreak || inside.length > 40) {
+      // indent if there are multiple lines or if its long
+      return "{" + ln2 + inside + ln + "}"
+    }
+    return "{ " + inside + " }"
   }
 
   if (t == "function") {
     return "[Function" + (v.name ? " " + v.name : "") + "]"
   }
 
-  return String(v)
+  return JSON.stringify(v, null, 2).replace(/\n/g, ln2)
 }

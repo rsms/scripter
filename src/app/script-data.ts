@@ -5,7 +5,7 @@ import { EventEmitter } from "./event"
 import { editor } from "./editor"
 import exampleScripts from "./example-scripts"
 import resources from "./resources"
-// import { print, dlog } from "./util"
+import { dlog } from "./util"
 
 
 interface ScriptsDataEvents {
@@ -21,7 +21,9 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   exampleScripts :{[k:string]:Script[]} = {}
   referenceScripts :Script[] = []
   scripts :Script[] = []
-  scriptsById = new Map<number,Script>()  // same order as scripts
+  scriptsById   = new Map<number,Script>()  // same order as scripts
+  scriptsByGUID = new Map<string,Script>()
+  refreshPromise :Promise<void>|null = null
 
   constructor(db :xdb.Database) {
     super()
@@ -142,6 +144,20 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   }
 
 
+  async getScriptByGUID(guid :string) :Promise<Script|null> {
+    let s = this.scriptsByGUID.get(guid)
+    if (!s) {
+      return null
+    }
+    if (s.id < 0) {
+      // return a copy of a demo script so it can be safely mutated
+      return s.clone()
+    }
+    await s.loadIfEmpty()
+    return s
+  }
+
+
   scriptBefore(id :number) :Script|null {
     for (let i = 0, z = this.scripts.length; i < z; i++) {
       if (this.scripts[i].id == id) {
@@ -185,7 +201,23 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   }
 
 
-  refresh = async () => {
+  refresh = () => {
+    if (!this.refreshPromise) {
+      this.refreshPromise = new Promise((resolve, reject) => {
+        let fin = () => {
+          this.refreshPromise = null
+        }
+        this._refresh()
+          .then(() => { fin(); resolve() })
+          .catch(err => { fin(); reject(err) })
+      })
+    }
+    return this.refreshPromise
+  }
+
+  _refresh = async () => {
+    dlog("REFRESH START")
+
     let [mv] = await this.db.read(["scripts"], async scripts => {
       let modifiedAt = scripts.getIndex("modifiedAt")
       return modifiedAt.getAll()
@@ -195,24 +227,51 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     if (currentScript && currentScript.id == 0) {
       // special case: list new unsaved script
       mv.push(currentScript.meta)
+      this.scriptsById.set(0, currentScript)  // important for figma-loaded scripts
     }
 
     mv.reverse()
+    let byGUID = new Map<string,Script>()
+    let byID = new Map<number,Script>()
+    let scripts :Script[] = []
 
-    let seenScriptIds = new Set<number>()
-    this.scripts = mv.map(m => {
+    for (let m of mv) {
+
       let s = this.scriptsById.get(m.id)
       if (!s) {
+        // Allocate new Script object for metadata.
+        // This happens when the in-memory storage of scripts differ from the
+        // database storage.
         s = new Script(m, "", null)
         this.scriptsById.set(m.id, s)
       }
-      seenScriptIds.add(m.id)
       s.meta = m
-      return s
-    })
+
+      if (s.meta.guid) {
+        let a = byGUID.get(s.meta.guid)
+        if (a) {
+          console.warn(`[script-data] detected duplicate GUID`,
+            { "script meta 1":a.meta, "script meta 2":m })
+        }
+        byGUID.set(s.meta.guid, s)
+      }
+
+      let a = byID.get(s.meta.id)
+      if (a) {
+        console.warn(`[script-data] detected duplicate local ID`,
+          { "script meta 1":a.meta, "script meta 2":m })
+        continue // skip
+      }
+      byID.set(s.meta.id, s)
+
+      scripts.push(s)
+    }
+
+    this.scripts = scripts
 
     // note: no sorting needed as mv was sorted by virtue of database index order
     this.finalizeChanges(/*sort=*/false)
+    dlog("REFRESH END")
   }
 
 
@@ -231,6 +290,13 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     }
     scripts = scripts.concat(this.referenceScripts)
     this.scriptsById = new Map(scripts.map(s => [s.id, s]))
+    this.scriptsByGUID = new Map<string,Script>()
+    for (let s of scripts) {
+      if (s.guid) {
+        this.scriptsByGUID.set(s.guid, s)
+      }
+    }
+
     ;(this as any).version++
     this.triggerEvent("change")
   }

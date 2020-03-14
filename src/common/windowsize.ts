@@ -5,6 +5,7 @@ export function width(ws :WindowSize) :number {
   case WindowSize.SMALL:  return 300
   case WindowSize.MEDIUM: return 500
   case WindowSize.LARGE:  return 700
+  case WindowSize.XLARGE: return 800
   default:
     console.error(`[plugin] unexpected windowWidth ${ws}`)
     return 500
@@ -16,6 +17,7 @@ export function height(ws :WindowSize) :number {
   case WindowSize.SMALL:  return 300
   case WindowSize.MEDIUM: return 500
   case WindowSize.LARGE:  return 700
+  case WindowSize.XLARGE: return 900
   default:
     console.error(`[plugin] unexpected windowHeight ${ws}`)
     return 500

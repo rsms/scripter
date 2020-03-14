@@ -119,18 +119,22 @@ function setupAppEventHandlers() {
     cl.remove("windowWidthSmall")
     cl.remove("windowWidthMedium")
     cl.remove("windowWidthLarge")
+    cl.remove("windowWidthXLarge")
     cl.remove("windowHeightSmall")
     cl.remove("windowHeightMedium")
     cl.remove("windowHeightLarge")
+    cl.remove("windowHeightXLarge")
     switch (wz) {
       case WindowSize.SMALL:  cl.add("windowWidthSmall"); break
       case WindowSize.MEDIUM: cl.add("windowWidthMedium"); break
       case WindowSize.LARGE:  cl.add("windowWidthLarge"); break
+      case WindowSize.XLARGE: cl.add("windowWidthXLarge"); break
     }
     switch (hz) {
       case WindowSize.SMALL:  cl.add("windowHeightSmall"); break
       case WindowSize.MEDIUM: cl.add("windowHeightMedium"); break
       case WindowSize.LARGE:  cl.add("windowHeightLarge"); break
+      case WindowSize.XLARGE: cl.add("windowHeightXLarge"); break
     }
   }
   config.on("change", ev => {
@@ -151,15 +155,16 @@ function updateUIScaleCssVar() {
 
 
 async function main() {
+  figmaPluginBridge.init()
+  setupKeyboardHandlers()
   await initData()
   await config.load()
+  setupAppEventHandlers()
   updateUIScaleCssVar()
   toolbar.init()
   editor.init()
   menu.init()
-  figmaPluginBridge.init()
-  setupKeyboardHandlers()
-  setupAppEventHandlers()
+  figmaPluginBridge.start()
 }
 
 

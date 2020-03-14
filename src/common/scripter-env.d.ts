@@ -52,6 +52,9 @@ interface Animation extends Promise<void> {
 /** Set to true if the script was canceled by the user */
 declare var canceled :boolean;
 
+/** Ignored value */
+declare var _ :any;
+
 /**
  * Shows a modal dialog with question and yes/no buttons.
  *

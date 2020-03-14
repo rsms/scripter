@@ -6,5 +6,8 @@
   "ui":   "ui.ts",
   "figplug": {
     "libs": ["../common/scripter-env"]
-  }
+  },
+  "relaunchButtons": [
+    {"command": "loadScript", "name": "Open Script"}
+  ]
 }

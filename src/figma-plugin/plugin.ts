@@ -1,15 +1,22 @@
 /// <reference path="./evalscript.d.ts" />
 import {
+  Msg,
   EvalRequestMsg,
   EvalCancellationMsg,
   EvalResponseMsg,
   ClosePluginMsg,
+  SaveScriptMsg,
+  LoadScriptMsg,
+  ScriptMsg,
   WindowConfigMsg,
   WindowSize,
+  UpdateSavedScriptsIndexMsg,
 } from "../common/messages"
 import * as windowSize from "../common/windowsize"
 import * as rpc from "./rpc"
 import * as scriptLibImpl from "./script-lib"
+import { SavedScriptIndex } from "./saved-scripts"
+import * as consts from "./constants"
 
 // scriptLib is a global declared in scripter-env.js
 declare var scriptLib :{[k:string]:any}
@@ -18,11 +25,147 @@ scriptLib = scriptLibImpl
 
 const initialWindowSize = WindowSize.MEDIUM
 
-figma.showUI(__html__, {
-  width: windowSize.width(initialWindowSize),
-  height: windowSize.height(initialWindowSize),
-  visible: false,
-})
+
+function main() {
+  figma.showUI(__html__, {
+    width: windowSize.width(initialWindowSize),
+    height: windowSize.height(initialWindowSize),
+    visible: false,
+  })
+
+  // message dispatch
+  figma.ui.onmessage = msg => {
+    // dlog("plugin recv", JSON.stringify(msg, null, 2))
+    switch (msg.type) {
+
+    case "ui-init":
+      // UI is ready. Send info about our figma plugin API version
+      figma.ui.show()
+      break
+
+    case "eval":
+      evalCode(msg as EvalRequestMsg)
+      break
+
+    case "eval-cancel":
+      cancelEval(msg as EvalCancellationMsg)
+      break
+
+    case "close-plugin":
+      figma.closePlugin((msg as ClosePluginMsg).message)
+      break
+
+    case "window-config":
+      windowConfig(msg as WindowConfigMsg)
+      break
+
+    case "save-script":
+      saveScript(msg as SaveScriptMsg).catch(err => console.error(err.stack))
+      break
+
+    default:
+      if (
+        typeof msg.type != "string" ||
+        typeof msg.id != "string" ||
+        !rpc.handleTransactionResponse(msg)
+      ) {
+        dlog(`plugin received unexpected message`, msg)
+      }
+    }
+  }
+
+  // // check launch command (e.g. from clicking "Open Script")
+  // dlog("figma.command", figma.command)
+  // Note: There's currently a bug in Figma where figma.command is set even when the user
+  // opened the plugin normally, so we can't rely on its value for knowing if the user clicked
+  // the "relaunch" button.
+
+  // update "saved script index"
+  SavedScriptIndex.init()
+
+  // attempt to load a script from selection
+  loadScriptFromSelection()
+}
+
+
+function loadScriptFromSelection() {
+  // Note: There's a bug in Figma where the figma.command gets stuck so it's
+  // very likely that the user just launched the plugin normally in this case.
+  let limit = 20
+  for (let n of figma.currentPage.selection) {
+    let scriptData = n.getSharedPluginData(consts.sharedPluginDataNamespace, "script")
+    if (scriptData && scriptData != "") {
+      try {
+        loadScript(JSON.parse(scriptData))
+      } catch (err) {
+        console.error("Scripter failed to load script stored on node: " + (err.stack || err))
+      }
+      break
+    }
+    if (--limit == 0) {
+      break
+    }
+  }
+}
+
+
+function loadScript(script :ScriptMsg) {
+  if (!script.guid) { throw new Error(`script missing guid`) }
+  if (typeof script.body != "string") { throw new Error(`script missing body`) }
+  rpc.sendMsg<LoadScriptMsg>({ type: "load-script", script })
+}
+
+
+async function saveScript(msg :SaveScriptMsg) {
+  // setSharedPluginData(namespace: string, key: string, value: string): void
+  // setRelaunchData(data: { [command: string]: /* description */ string }): void
+
+  const font :FontName = { family: "IBM Plex Mono", style: "Regular" }
+
+  // attempt to lookup existing node for guid, and load font
+  let [node,] = await Promise.all([
+    SavedScriptIndex.getNodeByGUID(msg.script.guid) as Promise<SceneNode|null>,
+    figma.loadFontAsync(font),
+  ])
+
+  // attempt to lookup existing node for guid
+  if (node) {
+    // update existing node
+    node.name = "[Script] " + msg.script.name
+    if (node.type == "TEXT") {
+      node.characters = msg.script.body
+    }
+  } else if (msg.create) {
+    // create new node
+    let t = figma.createText()
+    node = t
+    try {
+      t.fontName = font
+      t.fontSize = 12
+      t.textAlignVertical = "TOP"
+      t.autoRename = false
+      t.name = "[Script] " + msg.script.name
+      t.characters = msg.script.body
+      t.setSharedPluginData(consts.sharedPluginDataNamespace, "scriptGUID", msg.script.guid)
+      t.setRelaunchData({ loadScript: "" })
+      figma.currentPage.appendChild(t)
+    } catch (err) {
+      t.remove()
+      node = null
+      throw err
+    }
+  }
+
+  // write script data
+  if (node) {
+    let json = JSON.stringify(msg.script)
+    node.setSharedPluginData(consts.sharedPluginDataNamespace, "script", json)
+    if (msg.create) {
+      // select node on canvas when "create if missing" was requested
+      figma.currentPage.selection = [ node ]
+    }
+  }
+}
 
 
 function fmtErrorResponse(err :Error, response :EvalResponseMsg) {
@@ -171,38 +314,4 @@ function windowConfig(c :WindowConfigMsg) {
 }
 
 
-figma.ui.onmessage = msg => {
-  // dlog("plugin recv", JSON.stringify(msg, null, 2))
-  switch (msg.type) {
-
-  case "ui-init":
-    // UI is ready. Send info about our figma plugin API version
-    figma.ui.show()
-    break
-
-  case "eval":
-    evalCode(msg as EvalRequestMsg)
-    break
-
-  case "eval-cancel":
-    cancelEval(msg as EvalCancellationMsg)
-    break
-
-  case "close-plugin":
-    figma.closePlugin((msg as ClosePluginMsg).message)
-    break
-
-  case "window-config":
-    windowConfig(msg as WindowConfigMsg)
-    break
-
-  default:
-    if (
-      typeof msg.type != "string" ||
-      typeof msg.id != "string" ||
-      !rpc.handleTransactionResponse(msg)
-    ) {
-      dlog(`plugin received unexpected message`, msg)
-    }
-  }
-}
+main()

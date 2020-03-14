@@ -22,6 +22,7 @@ export enum WindowSize {
   SMALL  = 100,
   MEDIUM = 200,
   LARGE  = 300,
+  XLARGE = 500,
 }
 
 export interface WindowConfigMsg extends Msg {
@@ -92,6 +93,30 @@ export interface FetchResponseMsg extends TransactionalMsg {
   url        : string
   body       : Uint8Array|null
   // trailer    : Promise<Headers>  // TODO add support?
+}
+
+export interface ScriptMsg {
+  guid :string
+  name :string
+  body :string
+}
+
+// sent from UI to plugin to save a script to Figma
+export interface SaveScriptMsg extends Msg {
+  type   :"save-script"
+  create :bool  // if true, a new node is created if none exists
+  script :ScriptMsg
+}
+
+// sent from plugin to UI to load a script from Figma
+export interface LoadScriptMsg extends Msg {
+  type   :"load-script"
+  script :ScriptMsg
+}
+
+export interface UpdateSavedScriptsIndexMsg extends Msg {
+  type  :"update-save-scripts-index"
+  guids :string[]
 }
 
 // --------------------------------------------------------------------------

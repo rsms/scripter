@@ -12,6 +12,7 @@ import * as warningMessage from "./warning-message"
 import toolbar from "./toolbar"
 import { print, dlog } from "./util"
 import { menu } from "./menu"
+import { LoadScriptMsg } from "../common/messages"
 
 
 type EditorModel = monaco.editor.ITextModel
@@ -169,6 +170,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   editor :monaco.editor.IStandaloneCodeEditor
   options :EditorOptions = {...defaultOptions}
 
+  editorPromise :Promise<monaco.editor.IStandaloneCodeEditor>
+  _editorPromiseResolve: (e:monaco.editor.IStandaloneCodeEditor)=>void
+
   viewZones = new ViewZones(this)
 
   _currentModel    :EditorModel
@@ -185,6 +189,14 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   changeObservationLastLineCount = 0
 
   isInitialized = false
+
+
+  constructor() {
+    super()
+    this.editorPromise = new Promise<monaco.editor.IStandaloneCodeEditor>(resolve => {
+      this._editorPromiseResolve = resolve
+    })
+  }
 
 
   // ----------------------------------------------------------------------------------
@@ -229,16 +241,28 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   onCurrentScriptSave = (_ :Script) => {
+    dlog("script saved")
     this._currentScriptId = this._currentScript.id  // may have been assigned one
     config.lastOpenScript = this._currentScript.id
     // menu.updateScriptList()
+    if (this._currentScript.modelVersion == 0) {
+      // change caused not by the editor but by something else. Update editor when ready.
+      let scriptId = this._currentScriptId
+      this.editorPromise.then(() => {
+        if (scriptId == this._currentScriptId) {
+          this._currentModel.setValue(this._currentScript.body)
+        }
+      })
+    }
   }
 
 
   _isSwitchingModel = false
 
 
-  switchToScript(script :Script) {
+  async switchToScript(script :Script) :Promise<Script> {
+    let editor = await this.editorPromise
+
     this.stopCurrentScript()
     let model = this.setCurrentScript(script)
 
@@ -255,7 +279,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // This workaround clears the currently-loaded model's content before it switches models
     // for real.
     this._isSwitchingModel = true
-    this.editor.getModel().setValue(" ")
+    editor.getModel().setValue(" ")
 
     // init new model right away so that we receive events for things like TS feedback
     initEditorModel(model)
@@ -265,42 +289,103 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
       // actually switch model
       this.clearAllMetaInfo()
-      this.editor.setModel(model)
+      editor.setModel(model)
       this.updateOptions({
         readOnly: script.readOnly,
       })
       this.restoreViewState()
-      this.editor.focus()
+      editor.focus()
       config.lastOpenScript = this._currentScript.id
     })
+
+    return this._currentScript
   }
 
 
-  newScript(meta? :Partial<ScriptMeta>, body :string = "") :Script {
+  async newScript(meta? :Partial<ScriptMeta>, body :string = "") :Promise<Script> {
     let script = Script.create(meta, body)
-    this.switchToScript(script)
-    return script
+    return this.switchToScript(script)
   }
 
 
-  async openScript(id :number) {
-    if (this._currentScript.id == id || this._currentScriptId == id) {
+  // Attempts to open script.
+  // Returns null if another open action won the natural race condition.
+  async openScript(script :Script) :Promise<Script|null> {
+    if (this._currentScript.id == script.id || this._currentScriptId == script.id) {
       this.editor.focus()
-      return
+      return this._currentScript
     }
-    dlog(`open script ${id}`)
-    this._currentScriptId = id
+    dlog(`open script ${script}`)
+    this._currentScriptId = script.id
     this.stopCurrentScript()
+    if (this._currentScriptId != script.id) {
+      // another openScript call was made -- discard
+      return null
+    }
+    return this.switchToScript(script)
+  }
+
+
+  async openScriptByID(id :number) :Promise<Script|null> {
+    if (this._currentScript && this._currentScript.id == id) {
+      this.editor.focus()
+      return this._currentScript
+    }
     let script = await scriptsData.getScript(id)
     if (!script) {
-      console.error(`openScript(${id}) failed (not found)`)
-      return
+      // TODO: move error reporting to callers
+      console.error(`openScriptByID(${id}) failed (not found)`)
+      return null
     }
-    if (this._currentScriptId != id) {
-      // another openScript call was made -- discard
-      return
+    return this.openScript(script)
+  }
+
+
+  async openScriptByGUID(guid :string) :Promise<Script|null> {
+    if (!guid || typeof guid != "string") {
+      throw new Error("invalid guid")
     }
-    this.switchToScript(script)
+    if (this._currentScript && this._currentScript.guid == guid) {
+      this.editor.focus()
+      return this._currentScript
+    }
+    let script = await scriptsData.getScriptByGUID(guid)
+    if (!script) {
+      return null
+    }
+    return this.openScript(script)
+  }
+
+
+  // save current script to Figma canvas in a new node
+  async saveScriptToFigma() {
+    this.currentScript.saveToFigma({ createIfMissing: true })
+  }
+
+
+  async loadScriptFromFigma(msg :LoadScriptMsg) {
+    let s = msg.script
+    dlog("editor.loadScriptFromFigma", s.guid, s.name)
+    let script = await this.openScriptByGUID(s.guid)
+    if (script) {
+      dlog("editor.loadScriptFromFigma found local version of script")
+      // a script with the same GUID was found in local database
+      if (script.body != s.body && script.body.trim() != s.body.trim()) {
+        // Body of local version != body of script on canvas.
+        // Unless the local version is empty, ask user what to do and if acceptable,
+        // update local script body.
+        if (script.body.trim() == "" || confirm(
+          "Replace script?\n" +
+          "The script in the Figma file differs from the script stored locally. " +
+          "Would you like to update your local version with the script?")
+        ) {
+          script.body = s.body  // will trigger save
+        }
+      }
+    } else {
+      dlog("editor.loadScriptFromFigma no local version; creating new")
+      script = await this.newScript({ guid: s.guid, name: s.name }, s.body)
+    }
   }
 
 
@@ -382,6 +467,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       this.editor.updateOptions(this.options)
     }
     return updated
+  }
+
+  // focuses keyboard input
+  focus() {
+    this.editor.focus()
   }
 
 
@@ -861,6 +951,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.isInitialized = true
     this.triggerEvent("init")
     this.triggerEvent("modelchange")
+
+    this._editorPromiseResolve(this.editor)
+    ;(this as any)._editorPromiseResolve = null
   } // init()
 
 
@@ -960,8 +1053,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           isRestoringModel = false
           isRestoringViewState = false
         } else if (ev.store == "scripts") {
-          dlog(`TODO: update scriptData in db.on("remotechange"`)
-          // menu.updateScriptList()
+          // script index changed. e.g. a script was added or removed
+          scriptsData.refresh()
         }
       }
     })
