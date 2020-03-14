@@ -19,7 +19,7 @@ class Data {
   uiScale               :number = 1
   showLineNumbers       :bool = false
   wordWrap              :bool = true
-  monospaceFont         :bool = false
+  monospaceFont         :bool = true
   codeFolding           :bool = false
   showWhitespace        :bool = false
   indentGuides          :bool = true
