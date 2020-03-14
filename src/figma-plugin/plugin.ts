@@ -164,6 +164,8 @@ async function saveScript(msg :SaveScriptMsg) {
       // select node on canvas when "create if missing" was requested
       figma.currentPage.selection = [ node ]
     }
+    // update index
+    SavedScriptIndex.patchIndex([ { type: "set", guid: msg.script.guid, nodeId: node.id } ])
   }
 }
 

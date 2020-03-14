@@ -13,6 +13,13 @@ interface SavedScriptIndexData {
 }
 
 
+interface Patch {
+  type   :"set" | "remove"
+  guid   :string
+  nodeId :string  // ignored for type="remove"
+}
+
+
 enum ScanPriority {
   Background,
   Low,
@@ -47,6 +54,30 @@ export const SavedScriptIndex = new class {
       this.scanInBackground()
     } catch (err) {
       console.error(`PLEASE REPORT: Scripter SavedScriptIndex init failure: ${err.stack||err}`)
+    }
+  }
+
+
+  patchIndex(patches :Patch[]) {
+    let index = Object.assign({}, this.index)
+    let changes = 0
+    for (let p of patches) {
+      if (p.type == "remove") {
+        if (p.guid in index) {
+          delete index[p.guid]
+          changes++
+        }
+      } else if (p.type == "set") {
+        if (index[p.guid] != p.nodeId) {
+          index[p.guid] = p.nodeId
+          changes++
+        }
+      } else {
+        throw new Error(`unexpected patch type ${p.type}`)
+      }
+    }
+    if (changes > 0) {
+      this.setIndex(index)
     }
   }
 
