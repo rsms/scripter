@@ -15,6 +15,9 @@ import { menu } from "./menu"
 import { LoadScriptMsg } from "../common/messages"
 
 
+const ts = monaco.languages.typescript
+
+
 type EditorModel = monaco.editor.ITextModel
 type EditorOptions = monaco.editor.IEditorOptions
 
@@ -25,22 +28,24 @@ const kOnUnlock = Symbol("OnUnlock")
 
 const defaultFontSize = 11  // sync with app.css
 
-const varspaceFontFamily = "iaw-quattro-var, iaw-quattro, 'Roboto Mono', 'IBM Plex Mono', monospace"
+const varspaceFontFamily  = "iaw-quattro-var, iaw-quattro, monospace"
 const monospaceFontFamily = "iaw-mono-var, iaw-mono, monospace"
 
 // default monaco editor options
 const defaultOptions :EditorOptions = {
   // automaticLayout: true,
 
-  scrollBeyondLastLine: false,
   lineDecorationsWidth: 16, // margin on left side, in pixels
 
   lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
   lineNumbersMinChars: 3,
+
   wordWrap: "off", // off | on | bounded | wordWrapColumn
   wrappingIndent: "same", // none | same | indent | deepIndent
 
+  scrollBeyondLastLine: false,
   scrollBeyondLastColumn: 2,
+  smoothScrolling: true, // animate scrolling to a position
 
   // fontLigatures: true,
   showUnused: true,  // fade out unused variables
@@ -121,14 +126,17 @@ const typescriptCompilerOptions = {
   // Note: When we set compiler options, we _override_ the default ones.
   // This is why we need to set allowNonTsExtensions.
   allowNonTsExtensions: true, // make "in-memory source" work
-  target: 6,
+  target: ts.ScriptTarget.ES2019,
   allowUnreachableCode: true,
   allowUnusedLabels: true,
   removeComments: true,
-  module: 1, // ts.ModuleKind.CommonJS
+  module: ts.ModuleKind.CommonJS,
   // lib: [ "es2018", "dom" ],
   sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
   strictNullChecks: true,
+
+  jsx: ts.JsxEmit.React,
+  jsxFactory: "DOM.createElement",
 
   // Note on source maps: Since we use eval, and eval in chrome does not interpret sourcemaps,
   // we disable sourcemaps for now (since it's pointless).
@@ -227,7 +235,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this._currentModel = monaco.editor.createModel(
       script.body,
       "typescript",
-      monaco.Uri.from({scheme:"scripter", path:`${modelId}.ts`})
+      monaco.Uri.from({scheme:"scripter", path:`${modelId}.tsx`})
     )
     this._currentModel.updateOptions({
       tabSize: 2,
@@ -284,6 +292,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // init new model right away so that we receive events for things like TS feedback
     initEditorModel(model)
 
+    editor.layout()
+
     requestAnimationFrame(() => {
       this._isSwitchingModel = false
 
@@ -294,7 +304,13 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         readOnly: script.readOnly,
       })
       this.restoreViewState()
+
+      editor.layout()
       editor.focus()
+      setTimeout(() => {
+        editor.layout()
+        this.focus()
+      }, 100)
       config.lastOpenScript = this._currentScript.id
     })
 
@@ -902,6 +918,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     // assign focus to editor
     this.editor.focus()
+    setTimeout(() => this.editor.focus(), 500)
 
     // initialize event handlers
     this.initEditorEventHandlers()
@@ -1061,6 +1078,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     window.addEventListener("resize", () => {
       this.editor.layout()
+      setTimeout(() => this.editor.layout(), 100)
     })
   }
 

@@ -13,6 +13,7 @@ import * as libgeometry from "./script-lib-geometry"
 import { create_libvars } from "./script-lib-vars"
 import { create_libui } from "./script-lib-ui"
 import { getFirstSourcePos } from "./script-lib-runtime"
+import { DOM } from "./script-lib-dom"
 
 export {
   markerProps,
@@ -35,6 +36,7 @@ export {
   create_libui,
   create_libvars,
   libgeometry,
+  DOM,
 }
 
 export function fileType(nameOrData :ArrayLike<byte>|ArrayBuffer|string) :filetype.Info|null {

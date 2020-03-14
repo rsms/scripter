@@ -33,6 +33,7 @@ a, a:active, a:visited { color: inherit; }
   --inlineWidgetWidth: 450px;
   --sansFontFamily: "Inter";
   --uiScale: 1;  /* user-configurable */
+  --red: #F03009;
 }
 
 body {
@@ -128,8 +129,10 @@ code b, pre b, tt b { font-weight:540 }
   z-index:3;
   display: flex;
   /*justify-content: space-between;*/
-  border-bottom-left-radius: 2px; /* match figma dialog corner radius */
-  border-bottom-right-radius: 2px; /* match figma dialog corner radius */
+
+  /* match figma dialog corner radius */
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
 
   --buttonGroupWidth: calc(var(--toolbarHeight) * var(--numButtonsOnSide));
   --hoverBGColor: rgba(0,0,0,0.07);
@@ -467,6 +470,25 @@ body.windowWidthSmall #toolbar .title.focus {
   & > * {
     flex: 1 1 auto;
   }
+}
+
+/* toolbar on top */
+#toolbar {
+  top: 0; bottom: unset;
+  left: 8px; right:4px;
+  background: white;
+  /*background: #f9f9f9;
+  box-shadow:
+    0 0.5px 0 0 rgba(0,0,0,0.1),
+    0 1px 4px 0 rgba(0,0,0,0.04);*/
+  border-radius: 0;
+}
+#main {
+  top: var(--toolbarHeight); bottom: 0;
+
+  /* match figma dialog corner radius */
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
 }
 
 

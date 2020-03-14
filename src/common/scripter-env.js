@@ -431,12 +431,7 @@ const env = {
   figma: figmaObject,
 
   assert,
-  timer,
   TimerCancellation,
-  setTimeout:    _setTimeout,
-  setInterval:   _setInterval,
-  clearTimeout:  _clearTimeout,
-  clearInterval: _clearInterval,
   animate,
 
   // shorthand figma.PROP
@@ -454,72 +449,25 @@ const env = {
 // ------------------------------------------------------------------------------------------
 // Nodes
 
-// shorthand node constructors. figma.createNodeType => NodeType
-const _nodeCtor = c => props => {
-  let n = c()
-  try {
-    let width, height
-    if (props) for (let k in props) {
-      if (k == "width") {
-        width = props[k]
-      } else if (k == "height") {
-        height = props[k]
-      } else {
-        n[k] = props[k]
-      }
-    }
-    if (width !== undefined || height !== undefined) {
-      n.resizeWithoutConstraints(width || n.width, height || n.height)
-    }
-  } catch (e) {
-    n.remove()
-    throw e
-  }
-  return n
-}
-const ignoreGroupProps = {
-  index:1,
-  parent:1,
-}
-function createGroup(children, props) {
-  if (children.length == 0) {
-    throw new Error("group without children")
-  }
-  let parent = props.parent
-  if (!parent) {
-    parent = children[0].parent || figma.currentPage
-  }
-  let n = figma.group(children, parent, props.index)
-  try {
-    if (props) for (let k in props) {
-      if (!(k in ignoreGroupProps)) {
-        n[k] = props[k]
-      }
-    }
-  } catch (e) {
-    n.remove()
-    throw e
-  }
-  return n
-}
-env.BooleanOperation = _nodeCtor(figma.createBooleanOperation)
-env.Component        = _nodeCtor(figma.createComponent)
-env.Ellipse          = _nodeCtor(figma.createEllipse)
-env.Frame            = _nodeCtor(figma.createFrame)
-env.Group            = createGroup
-env.Line             = _nodeCtor(figma.createLine)
-env.Page             = _nodeCtor(figma.createPage)
-env.Polygon          = _nodeCtor(figma.createPolygon)
-env.Rectangle        = _nodeCtor(figma.createRectangle)
-env.Slice            = _nodeCtor(figma.createSlice)
-env.Star             = _nodeCtor(figma.createStar)
-env.Text             = _nodeCtor(figma.createText)
-env.Vector           = _nodeCtor(figma.createVector)
+env.nodeConstructors = {}
+env.Group            = function(){} // specialized
+env.BooleanOperation = env.nodeConstructors["BooleanOperation"] = figma.createBooleanOperation
+env.Component        = env.nodeConstructors["Component"] = figma.createComponent
+env.Ellipse          = env.nodeConstructors["Ellipse"] = figma.createEllipse
+env.Frame            = env.nodeConstructors["Frame"] = figma.createFrame
+env.Line             = env.nodeConstructors["Line"] = figma.createLine
+env.Page             = env.nodeConstructors["Page"] = figma.createPage
+env.Polygon          = env.nodeConstructors["Polygon"] = figma.createPolygon
+env.Rectangle        = env.nodeConstructors["Rectangle"] = figma.createRectangle
+env.Slice            = env.nodeConstructors["Slice"] = figma.createSlice
+env.Star             = env.nodeConstructors["Star"] = figma.createStar
+env.Text             = env.nodeConstructors["Text"] = figma.createText
+env.Vector           = env.nodeConstructors["Vector"] = figma.createVector
+env.PaintStyle       = env.nodeConstructors["PaintStyle"] = figma.createPaintStyle
+env.TextStyle        = env.nodeConstructors["TextStyle"] = figma.createTextStyle
+env.EffectStyle      = env.nodeConstructors["EffectStyle"] = figma.createEffectStyle
+env.GridStyle        = env.nodeConstructors["GridStyle"] = figma.createGridStyle
 
-env.PaintStyle       = _nodeCtor(figma.createPaintStyle)
-env.TextStyle        = _nodeCtor(figma.createTextStyle)
-env.EffectStyle      = _nodeCtor(figma.createEffectStyle)
-env.GridStyle        = _nodeCtor(figma.createGridStyle)
 
 // Node type guards
 const nodeTypeGuard = typename => n => {
@@ -719,7 +667,24 @@ env.scripter = {
     }
   },
 
-  onend() {}
+  onend() {},
+
+  addEndCallback(f) {
+    if (!this._onEndCallbacks) {
+      this._onEndCallbacks = [f]
+    } else {
+      this._onEndCallbacks.push(F)
+    }
+  },
+
+  removeEndCallback(f) {
+    if (this._onEndCallbacks) {
+      let i = this._onEndCallbacks.indexOf(f)
+      if (i != -1) {
+        this._onEndCallbacks.splice(i, 1)
+      }
+    }
+  },
 }
 
 // ------------------------------------------------------------------------------------------
@@ -855,8 +820,14 @@ env.Path = F
 env.fileType = F
 env.Bytes = F
 env.libgeometry = F
-env.libvars = F
 env.libui = F
+env.libvars = F
+env.DOM = F
+env.timer = F
+env.setTimeout = F
+env.setInterval = F
+env.clearTimeout = F
+env.clearInterval = F
 
 env.fetchData = function(input, init) {
   return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
@@ -881,22 +852,21 @@ env.fetchImg = function(input, init) {
 
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
-let jsHeader = (
-  `var _,canceled=false,__onend=null;` +
-  `[function (` +
-  `module,exports,Symbol,__env,__print,__reqid,` + envKeys.join(',') +
-  `){\n` +
-  `Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});` +
-  `function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) };\n` +
-  `return (async function __scripter_script_main(){`
-)
-let jsFooter = (
-  `})();` +
-  `},` +
-  `function(){ canceled = true },` +
-  `function(){ if (__onend)try{ __onend() }catch(_){} }` +
-  `]`
-)
+let jsHeader = `
+var _, canceled=false, __onend;
+[
+  function(module,exports,Symbol,__env,__print,__reqid,${envKeys.join(',')}){<LF>
+    Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});
+    function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
+    return (async function __scripter_script_main(){
+`.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
+let jsFooter = `
+    })();
+  },
+  function(){ canceled = true },
+  function(){ return __onend }
+]
+`.trim().replace(/\n\s*/g, " ")
 
 // Note: The following caused a memory-related crash in fig-js when user code
 // replaced one of the variables. For instance:
@@ -939,25 +909,67 @@ function _evalScript(reqId, js) {
       // @ts-ignore eval (indirect call means scope is global)
       let r = (0,eval)(js);
 
+      // bindenv wraps a function to set `this` to env0.
+      // We can't use bind() since that is not supported by fig-js.
+      let bindenv = v => function() { return v.apply(env0, arguments) }
+
       // create invocation-specific environment
-      let env0 = {
+      let env0 = Object.assign({}, env, {
         canceled: false,
-      }
-      for (let k in env) {
-        let v = env[k]
-        if (typeof v == "function") {
-          // bind env
-          // Note: We can't use bind() since that is not supported by fig-js
-          v = (v => function() { return v.apply(env0, arguments) })(v)
-        }
-        env0[k] = v
-      }
+        timer:         bindenv(timer),
+        setTimeout:    bindenv(_setTimeout),
+        setInterval:   bindenv(_setInterval),
+        clearTimeout:  bindenv(_clearTimeout),
+        clearInterval: bindenv(_clearInterval),
+        // create: function() { return env0.DOM.createElement.apply(env0.DOM, arguments) },
+      })
+
+      // for (let k in env) {
+      //   let v = env[k]
+      //   if (typeof v == "function") {
+      //     // bind env
+      //     // Note: We can't use bind() since that is not supported by fig-js
+      //     v = (v => function() { return v.apply(env0, arguments) })(v)
+      //   }
+      //   env0[k] = v
+      // }
+
       env0.scripter = Object.assign({}, env.scripter)
       env0.libui = scriptLib.create_libui(reqId)
       env0.libvars = scriptLib.create_libvars(env0.libui)
+      env0.DOM = new scriptLib.DOM(env0)
 
-      // _onend function
+      // Node constructors
+      env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }
+      for (let nodeName in env.nodeConstructors) {
+        let cons = env0.nodeConstructors[nodeName]
+        env0[nodeName] = function(props, ...children) {
+          return env0.DOM.createElement(cons, props, ...children)
+        }
+      }
+
+      // onend function, guaranteed to be called at script end, including error.
+      // must not throw
       let _onend = r[2]
+      function onend() {
+        try {
+          let userfun = _onend()
+          if (userfun) {
+            try {
+              userfun()
+            } catch (err) {
+              console.warn("uncaught exception in scripter.onend: " + (err.stack || err))
+            }
+          }
+          if (env0.scripter._onEndCallbacks) {
+            for (let f of env0.scripter._onEndCallbacks) {
+              try { f() } catch (e) { console.error("error in env.onend(): " + (e.stack || e)) }
+            }
+          }
+        } catch (err) {
+          console.error("error in env.onend(): " + (err.stack || err))
+        }
+      }
 
       // create script cancel function
       let cancelInner = r[1]
@@ -965,7 +977,7 @@ function _evalScript(reqId, js) {
         env0.canceled = true
         cancelInner()
         _cancelAllTimers(reason || new Error("cancel"))
-        _onend()
+        onend()
         if (reason) {
           reject(reason)
         } else {
@@ -990,13 +1002,13 @@ function _evalScript(reqId, js) {
       return r[0].apply(env0, params)
         .then(result =>
           _awaitAsync().then(() => {
-            _onend()
+            onend()
             resolve(result)
           })
         )
         .catch(e => {
           try { _cancelAllTimers(e) } catch(_) {}
-          _onend()
+          onend()
 
           // scripterStack is a work-around for limitations in fig-js
           let e2 = new Error()
@@ -1013,7 +1025,7 @@ function _evalScript(reqId, js) {
         })
     } catch(e) {
       _cancelAllTimers(e)
-      _onend()
+      onend()
       reject(e)
     }
   }), cancelFun]
