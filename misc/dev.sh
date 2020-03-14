@@ -65,6 +65,7 @@ ln -s $(ls -d "../../docs/$monaco_build_basedir")
 popd >/dev/null
 
 # figma-plugin
+node ./misc/build-scriptenv.js
 $figplug build -v -g -w src/figma-plugin:build/figma-plugin &
 pids+=( $! )
 

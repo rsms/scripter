@@ -4,6 +4,8 @@ source misc/util.sh
 
 figplug=./node_modules/.bin/figplug
 
+node ./misc/build-scriptenv.js
+
 if [ "$1" == "-dev" ]; then
   echo "building figma-plugin in debug mode"
   $figplug build -v -g src/figma-plugin:build/figma-plugin
