@@ -216,15 +216,17 @@ function initTitle(host) {
   }
 
   input.addEventListener("keydown", ev => {
+    // dlog("onkeypress", ev.key, ev.keyCode)
     switch (ev.key) {
       case "Escape": editSession.cancel() ; break
       case "Enter":  editSession.commit() ; break
-      default: dlog("onkeypress", ev.key, ev.keyCode) ; return
+      default: return // let event pass through
     }
     ev.stopPropagation()
     ev.preventDefault()
   }, {capture:true,passive:false})
 
+  // click on outer container focuses input
   input.addEventListener("pointerdown", ev => {
     ev.stopPropagation()
   }, {capture:true,passive:false})
@@ -236,6 +238,7 @@ function initTitle(host) {
 
   // title.onclick = () => menu.toggle(/* closeOnSelection */ true)
 
+  // update title when it was changed elsewhere, like in a different tab
   let updateTitle = () => {
     let newTitle = editor.currentScript.name
     if (editSession.active) {

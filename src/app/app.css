@@ -162,17 +162,18 @@ code b, pre b, tt b { font-weight:540 }
       overflow: hidden;
       text-overflow: ellipsis;
 
-      &:hover {
-        background: var(--hoverBGColor);
+      &:hover, &:focus {
         color: black;
+        box-shadow: 0 0 0 1px var(--hoverBGColor);
       }
 
       &:focus {
         background: white;
-        color: black;
       }
-      &[readonly]:focus {
+
+      &[readonly]:focus, &[readonly]:hover {
         background: none;
+        box-shadow: none;
       }
     }
 
@@ -193,11 +194,12 @@ code b, pre b, tt b { font-weight:540 }
       &:active { background-color: #bbb; }
     }
     &.unavailable {
-      opacity:0.4;
+      opacity:0.2;
       &:hover { background-color: inherit; }
     }
     &.saved {
-      &:hover { background-color: inherit; }
+      display: none;
+      /*&:hover { background-color: inherit; }*/
     }
   }
 
