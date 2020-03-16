@@ -9,9 +9,10 @@ monaco.editor.defineTheme('scripter-light', {
   // rules: [],
   rules: [
     { token: "comment", foreground: "#999999" }, // fontStyle: "italic"
+    { token: "comment.doc", foreground: "#666666" },
     { token: "keyword", foreground: "#010101" }, // weight defined in css
     { token: "identifier", foreground: "#111111" },
-    { token: "type.identifier", foreground: "#DB2386" }, // #003388 #323EAB #6f42c1
+    { token: "type.identifier", foreground: "#6f42c1" }, // #003388 #323EAB #6f42c1 DB2386
     { token: "number", foreground: "#005cc5" }, // #660099 #003388
     { token: "string", foreground: "#032f62" }, // #032f62 #116622
     { token: "delimiter", foreground: "#555555" }, // #554433

@@ -27,6 +27,7 @@ class Data {
   quickSuggestions      :bool = true
   quickSuggestionsDelay :number = 500 // ms
   hoverCards            :bool = true
+  fontLigatures         :bool = false
   windowSize            :[WindowSize,WindowSize] = [WindowSize.MEDIUM,WindowSize.MEDIUM]
 
   // -------------------------------------------------
@@ -112,6 +113,9 @@ class Config extends EventEmitter<ConfigEvents> {
 
   get hoverCards() :bool { return this.data.hoverCards }
   set hoverCards(v :bool) { this._set("hoverCards", v) }
+
+  get fontLigatures() :bool { return this.data.fontLigatures }
+  set fontLigatures(v :bool) { this._set("fontLigatures", v) }
 
   get windowSize() :[WindowSize,WindowSize] { return this.data.windowSize }
   set windowSize(v :[WindowSize,WindowSize]) { this._set("windowSize", v) }

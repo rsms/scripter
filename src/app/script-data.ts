@@ -216,8 +216,6 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   }
 
   _refresh = async () => {
-    dlog("REFRESH START")
-
     let [mv] = await this.db.read(["scripts"], async scripts => {
       let modifiedAt = scripts.getIndex("modifiedAt")
       return modifiedAt.getAll()
@@ -271,7 +269,6 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
 
     // note: no sorting needed as mv was sorted by virtue of database index order
     this.finalizeChanges(/*sort=*/false)
-    dlog("REFRESH END")
   }
 
 

@@ -104,6 +104,10 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
   get name() :string { return this.meta.name }
   set name(v :string) {
+    v = v.trim()
+    if (v == "") {
+      v = "Untitled"
+    }
     if (this.meta.name !== v) {
       this.meta.name = v
       this._metaDirty = true
@@ -161,7 +165,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     if (this.meta.id <= 0) {
       // create
 
-      if (this._body.trim() == "") {
+      if (this._body == "") {
         // avoid creating files that are empty
         dlog("Script.save canceled because _body is empty")
         return Promise.resolve()
@@ -232,6 +236,13 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
   saveToFigma(options :{ createIfMissing :bool }) {
     this.requireValidGUID()
+    if (this.id == 0) {
+      if (this._body.length == 0) {
+        this._body = " " // force save
+      }
+      this.save()
+      this._body = ""
+    }
     figma.sendMsg<SaveScriptMsg>({
       type: "save-script",
       create: options.createIfMissing,

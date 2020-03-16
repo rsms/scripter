@@ -114,9 +114,18 @@ export interface LoadScriptMsg extends Msg {
   script :ScriptMsg
 }
 
+export interface SavedScriptIndexEntry {
+  nodeId: string
+  name:   string
+}
+
+export interface SavedScriptIndexData {
+  [guid:string] :SavedScriptIndexEntry
+}
+
 export interface UpdateSavedScriptsIndexMsg extends Msg {
   type  :"update-save-scripts-index"
-  guids :string[]
+  index :SavedScriptIndexData
 }
 
 // --------------------------------------------------------------------------

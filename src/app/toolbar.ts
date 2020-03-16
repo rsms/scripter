@@ -16,6 +16,8 @@ class ToolbarUI {
 
   stopCallbacks = new Set<()=>void>()
   isRunning :bool = false
+  isFadedOut :bool = false
+  pointerInsideAt :number = 0 // when non-null, Date.now() when pointer entered toolbar
 
 
   addStopCallback(stopCallback :()=>void) {
@@ -42,26 +44,57 @@ class ToolbarUI {
     this.runButton.classList.toggle("running", this.isRunning)
     this.runButton.title = (
       this.isRunning ? (
-        isMac ? "Stop  (⇧⌘⏎)"
+        isMac ? "Stop  ⇧⌘⏎"
               : "Stop  (Ctrl+Shift+Return)"
       ) : (
-        isMac ? "Run  (⌘⏎)"
+        isMac ? "Run  ⌘⏎"
               : "Run  (Ctrl+Return)"
       )
     )
+  }
+
+  fadeOut() {
+    // pointerInsideTimeout defines how old a pointerenter event can be while we consider
+    // the pointer as being inside the toolbar. This is needed because event handling on the web
+    // platform is a mess and thusd we can't actually know if the pointer is inside.
+    const pointerInsideMaxAge = 30000
+    if (!this.isFadedOut) {
+      if (menu.isVisible ||
+        (this.pointerInsideAt > 0 && Date.now() - this.pointerInsideAt < pointerInsideMaxAge)
+      ) {
+        // don't fade out while the menu is open or the pointer is inside the toolbar
+        return
+      }
+      this.isFadedOut = true
+      this.el.classList.add("faded")
+    }
+  }
+
+  fadeIn() {
+    if (this.isFadedOut) {
+      this.isFadedOut = false
+      this.el.classList.remove("faded")
+    }
   }
 
 
   init() {
     this.el = document.getElementById('toolbar') as HTMLElement
 
+    this.el.addEventListener("pointerenter", () => {
+      this.pointerInsideAt = Date.now()
+      this.fadeIn()
+    })
+    this.el.addEventListener("pointerleave", () => {
+      this.pointerInsideAt = 0
+    })
 
     // menu button
     this.menuButton = this.el.querySelector('.button.menu') as HTMLElement
     let updateMenuButtonTitle = () => {
       let verb = menu.isVisible ? "Hide" : "Show"
-      let shortcut = isMac ? "⌃M" : "Ctrl+M"
-      this.menuButton.title = `${verb} menu  (${shortcut})`
+      let shortcut = isMac ? "⌃M" : "(Ctrl+M)"
+      this.menuButton.title = `${verb} menu  ${shortcut}`
     }
     updateMenuButtonTitle()
     this.menuButton.addEventListener("click", ev => {
@@ -70,9 +103,11 @@ class ToolbarUI {
       ev.preventDefault()
       ev.stopPropagation()
     }, {passive:false,capture:true})
-    menu.on("visibility", menuVisible => {
-      this.menuButton.classList.toggle("on", menuVisible)
-    })
+    const updateMenuVisible = () => {
+      this.el.classList.toggle("menuVisible", menu.isVisible)
+      this.menuButton.classList.toggle("on", menu.isVisible)
+    }
+    menu.on("visibility", updateMenuVisible)
 
 
     // new button
@@ -91,39 +126,46 @@ class ToolbarUI {
       ev.preventDefault()
       ev.stopPropagation()
     }, {passive:false,capture:true})
-
     const updateSaveButton = () => {
-      // dlog("savedScripts change", {
-      //   "editor.currentScript.guid": editor.currentScript && editor.currentScript.guid,
-      //   "savedScripts.hasGUID(editor.currentScript.guid)":
-      //     savedScripts.hasGUID(editor.currentScript ? editor.currentScript.guid : ""),
-      // })
-      let scriptIsSaved = editor.currentScript && savedScripts.hasGUID(editor.currentScript.guid)
-      this.saveButton.classList.toggle("save", !scriptIsSaved)
-      this.saveButton.classList.toggle("saved", scriptIsSaved)
-      if (scriptIsSaved) {
-        this.saveButton.title = "Saved in Figma"
-      } else {
-        this.saveButton.title = "Save to Figma file"
+      let saveButtonAvailable = false
+      if (editor.currentScript) {
+        if (editor.currentScript.id >= 0) {
+          // Note: Example scripts (id<0) can't be saved since they have no GUID and
+          // they can not be edited (i.e. given a guid.) Plus, it makes no sense to save
+          // an example script as it's always available in Scripter.
+          saveButtonAvailable = !savedScripts.hasGUID(editor.currentScript.guid)
+        }
       }
+      this.saveButton.classList.toggle("hidden", !saveButtonAvailable)
     }
-    scriptsData.on("change", updateSaveButton)
+    updateSaveButton()
     savedScripts.on("change", updateSaveButton)
 
 
     // clear button
     this.clearButton = this.el.querySelector('.button.clear') as HTMLElement
     this.clearButton.title = "Clear messages  " + (
-      isMac ? "(⌘K)"
+      isMac ? "⌘K"
             : "(Ctrl+L)"
     )
     handleClick(this.clearButton, () => {
       warningMessage.hide()
       editor.clearMessages()
     })
-    editor.viewZones.on("update", () => {
-      this.clearButton.classList.toggle("unavailable", editor.viewZones.count == 0)
-    })
+    const updateClearButton = () => {
+      let cl = this.clearButton.classList
+      let readOnly = !editor.currentScript || editor.currentScript.readOnly
+      cl.toggle("hidden", readOnly)
+      if (!readOnly) {
+        cl.toggle(
+          "unavailable",
+          editor.viewZones.count == 0 && editor.editorDecorationIds.length == 0
+        )
+      }
+    }
+    updateClearButton()
+    editor.viewZones.on("update", updateClearButton)
+    editor.on("decorationchange", updateClearButton)
 
 
     // run button
@@ -140,6 +182,19 @@ class ToolbarUI {
       } else {
         editor.runCurrentScript()
       }
+    })
+    const updateRunButton = () => {
+      let readOnly = !editor.currentScript || editor.currentScript.readOnly
+      this.runButton.classList.toggle("hidden", readOnly)
+    }
+    updateRunButton()
+
+
+    // update when script changes
+    scriptsData.on("change", () => {
+      updateSaveButton()
+      updateClearButton()
+      updateRunButton()
     })
 
 

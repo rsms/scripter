@@ -82,6 +82,15 @@ function _fmtValue(v :any, ln :string, seen :Set<any>) :string {
       return "LazySeq[" + v.toString() + "]"
     }
 
+    if ("__scripter_error__" in v) {
+      // TODO: source pos v.__scripter_error__.srcpos (it's in compiled-code space)
+      let s = v.__scripter_error__.str
+      if (v.__scripter_error__.stack && v.__scripter_error__.stack.length) {
+        s += "\n" + v.__scripter_error__.stack.join("\n")
+      }
+      return s
+    }
+
     // let it = v[]
     if (Symbol.iterator in v) {
       let isMap = v instanceof Map

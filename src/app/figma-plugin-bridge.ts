@@ -234,7 +234,7 @@ export function init() {
         break
 
       case "update-save-scripts-index":
-        savedScripts.updateGUIDs((msg as UpdateSavedScriptsIndexMsg).guids)
+        savedScripts.updateFromPlugin((msg as UpdateSavedScriptsIndexMsg).index)
         break
 
       }

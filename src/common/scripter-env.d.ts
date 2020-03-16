@@ -16,6 +16,34 @@ declare function print(...args :any[]) :void
 /** Throws an error if condition is not thruthy */
 declare function assert(condition :any, ...message :any[]) :void
 
+/** Promise which can be cancelled */
+interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
+
+/**
+ * Creates a cancellable Promise.
+ *
+ * Example:
+ * ```
+ * let p = createCancellablePromise((resolve, reject, oncancel) => {
+ *   let timer = setTimeout(() => resolve("ok"), 600)
+ *   oncancel(() => {
+ *     clearTimeout(timer)
+ *     reject("cancelled")
+ *   })
+ * })
+ * p.then(v => console.log("resolved", v))
+ *  .catch(v => console.warn("rejected", v))
+ * setTimeout(() => { p.cancel() }, 500)
+ * ```
+ */
+declare function createCancellablePromise<T>(
+  executor :(
+    resolve  : (v? :T | PromiseLike<T>) => void,
+    reject   : ((reason?:any)=>void),
+    oncancel : (f:()=>void)=>void
+  )=>void,
+) :CancellablePromise<T>
+
 // timer functions
 declare function clearInterval(id?: number): void;
 declare function clearTimeout(id?: number): void;
@@ -23,8 +51,9 @@ declare function setInterval(handler: string|Function, timeout?: number, ...argu
 declare function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 
 /** Start a timer that expires after `duration` milliseconds */
+declare function Timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
 declare function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
-interface Timer<T = void> extends Promise<T> {
+interface Timer<T = void> extends CancellablePromise<T> {
   cancel() :void
 
   then<R1=T,R2=never>(
@@ -38,6 +67,15 @@ interface Timer<T = void> extends Promise<T> {
 declare class TimerCancellation extends Error {
   readonly name :"TimerCancellation"
 }
+
+/**
+ * Adds a timeout to a cancellable process.
+ * When timeout is reached, "TIMEOUT" is returned instead R.
+ */
+declare function withTimeout<
+  T extends CancellablePromise<R>,
+  R = T extends Promise<infer U> ? U : T
+>(p :T, timeout :number) :CancellablePromise<R|"TIMEOUT">
 
 /**
  * Calls f at a high frequency.
@@ -240,21 +278,30 @@ type Shape = BooleanOperationNode
            | VectorNode
 
 /** Get the current selection in Figma */
-declare function selection(): ReadonlyArray<SceneNode>;
+declare function selection() :ReadonlyArray<SceneNode>;
 /** Get the nth currently-selected node in Figma */
-declare function selection(index :number): SceneNode|null;
+declare function selection(index :number) :SceneNode|null;
 
 /** Set the current selection. Non-selectable nodes of n, like pages, are ignored. */
-declare function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void;
+declare function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>>(n :T) :T;
 
 /** Version of Figma plugin API that is currently in use */
-declare var apiVersion: string
+declare var apiVersion :string
 
 /** Viewport */
-declare var viewport: ViewportAPI
+declare var viewport :ViewportAPI
 
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
-declare var MIXED: symbol
+declare var MIXED :symbol
+
+/** Current page. Equivalent to figma.currentPage */
+declare var currentPage :PageNode
+
+/**
+ * Add node to current page.
+ * Equivalent to `(figma.currentPage.appendChild(n),n)`
+ */
+declare function addToPage<N extends SceneNode>(n :N) :N
 
 /**
  * Store data on the user's local machine. Similar to localStorage.
@@ -623,6 +670,15 @@ declare namespace libvars {
   }
 }
 
+
+// ------------------------------------------------------------------------------------
+declare namespace Base64 {
+  /** Encode data as base-64 */
+  function encode(data :Uint8Array|ArrayBuffer|string) :string
+
+  /** Decode base-64 encoded data */
+  function decode(encoded :string) :Uint8Array
+}
 
 
 // ------------------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import { editor, initEditorModel } from "./editor"
 import * as figmaPluginBridge from "./figma-plugin-bridge"
 import toolbar from "./toolbar"
 import { isMac, dlog } from "./util"
+import * as warningMessage from "./warning-message"
 import "../common/filetype"
 
 
@@ -83,7 +84,9 @@ function setupKeyboardHandlers() {
 
     // clean up (cmd-K on mac, ctrl-L anywhere)
     if ((key == "l" && ev.ctrlKey) || (isMac && ev.metaKey && key == "k")) {
-      return editor.clearMessages(), true
+      warningMessage.hide()
+      editor.clearMessages()
+      return true
     }
 
     // toggle menu

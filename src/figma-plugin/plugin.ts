@@ -17,6 +17,7 @@ import * as rpc from "./rpc"
 import * as scriptLibImpl from "./script-lib"
 import { SavedScriptIndex } from "./saved-scripts"
 import * as consts from "./constants"
+import { createScriptNode, updateScriptNode } from "./scriptnode"
 
 // scriptLib is a global declared in scripter-env.js
 declare var scriptLib :{[k:string]:any}
@@ -89,23 +90,46 @@ function main() {
 
 
 function loadScriptFromSelection() {
-  // Note: There's a bug in Figma where the figma.command gets stuck so it's
-  // very likely that the user just launched the plugin normally in this case.
+  // Note: There's a bug-like (but intentional) behaviro in Figma where the figma.command
+  // "gets stuck"; is set even for normal plugin launches, so it's very likely that the user
+  // just launched the plugin normally in this case.
+  //
+  // However, the resulting behavior is acceptable:
+  // a) When the user clicks the "Open script" relaunch button, the selected script is opened.
+  //    This is good.
+  // b) When the user selects a script node and just runs Scripter normally, the selected script
+  //    is opened. This is not ideal, but it's acceptable. When/if Figma changes the API so that
+  //    relaunch data doesn't "get stcuck" this behavior will change to the better.
+  // c) When the user selects something that is not a script node and runs Scripter, whatever the
+  //    last script they were working on is opened. This is good.
+  //
   let limit = 20
   for (let n of figma.currentPage.selection) {
-    let scriptData = n.getSharedPluginData(consts.sharedPluginDataNamespace, "script")
-    if (scriptData && scriptData != "") {
-      try {
-        loadScript(JSON.parse(scriptData))
-      } catch (err) {
-        console.error("Scripter failed to load script stored on node: " + (err.stack || err))
-      }
+    let script = loadScriptDataFromNode(n)
+    if (script) {
+      loadScript(script)
       break
     }
     if (--limit == 0) {
       break
     }
   }
+}
+
+
+function loadScriptDataFromNode(n :SceneNode) :ScriptMsg|null {
+  if (n.type == "GROUP") {
+    // Select the first child of groups.
+    // Note that groups are never empty so this always succeeeds.
+    n = n.children[0]
+  }
+  let guid = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptGUID)
+  if (!guid) {
+    return null
+  }
+  let name = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptName) || "Untitled"
+  let body = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptBody) || ""
+  return { guid, name, body }
 }
 
 
@@ -116,56 +140,41 @@ function loadScript(script :ScriptMsg) {
 }
 
 
+const scriptNodeFont :FontName = { family: "IBM Plex Mono", style: "Regular" }
+
+
 async function saveScript(msg :SaveScriptMsg) {
   // setSharedPluginData(namespace: string, key: string, value: string): void
   // setRelaunchData(data: { [command: string]: /* description */ string }): void
 
-  const font :FontName = { family: "IBM Plex Mono", style: "Regular" }
-
   // attempt to lookup existing node for guid, and load font
   let [node,] = await Promise.all([
     SavedScriptIndex.getNodeByGUID(msg.script.guid) as Promise<SceneNode|null>,
-    figma.loadFontAsync(font),
+    figma.loadFontAsync(scriptNodeFont),
   ])
 
-  // attempt to lookup existing node for guid
+  // update or create node
   if (node) {
-    // update existing node
-    node.name = "[Script] " + msg.script.name
-    if (node.type == "TEXT") {
-      node.characters = msg.script.body
-    }
+    await updateScriptNode(node, msg.script)
   } else if (msg.create) {
-    // create new node
-    let t = figma.createText()
-    node = t
-    try {
-      t.fontName = font
-      t.fontSize = 12
-      t.textAlignVertical = "TOP"
-      t.autoRename = false
-      t.name = "[Script] " + msg.script.name
-      t.characters = msg.script.body
-      t.setSharedPluginData(consts.sharedPluginDataNamespace, "scriptGUID", msg.script.guid)
-      t.setRelaunchData({ loadScript: "" })
-      figma.currentPage.appendChild(t)
-    } catch (err) {
-      t.remove()
-      node = null
-      throw err
-    }
+    node = await createScriptNode(msg.script)
   }
 
-  // write script data
   if (node) {
-    let json = JSON.stringify(msg.script)
-    node.setSharedPluginData(consts.sharedPluginDataNamespace, "script", json)
     if (msg.create) {
       // select node on canvas when "create if missing" was requested
-      figma.currentPage.selection = [ node ]
+      let n = node
+      if (n.type == "FRAME" && n.parent && n.parent.type == "GROUP") {
+        n = n.parent
+      }
+      figma.currentPage.selection = [ n ]
     }
     // update index
-    SavedScriptIndex.patchIndex([ { type: "set", guid: msg.script.guid, nodeId: node.id } ])
+    SavedScriptIndex.patchIndex([{
+      type: "update",
+      guid: msg.script.guid,
+      entry: { nodeId: node.id, name: msg.script.name }
+    }])
   }
 }
 

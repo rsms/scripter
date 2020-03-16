@@ -183,12 +183,16 @@ async function handlePrintMsg(msg :PrintMsg) {
   // format message
   let messageHtml = ""  // shown in inline UI
   let messageJs = ""    // inserted into code when user presses the + button
+  let isError = false   // true if msg.args contains an error (shallow check)
   if (msg.args) {
     // extract images
     let args = []
     let prevWasText = false
-    for (let arg of msg.args) {
-      if (arg && typeof arg == "object" && "__scripter_image_marker__" in arg) {
+    for (let i = 0; i < msg.args.length; i++) {
+      let arg = msg.args[i]
+      let isobj = arg && typeof arg == "object"
+
+      if (isobj && "__scripter_image_marker__" in arg) {
         // the arg is an image
         let url = ""
         if (typeof arg.source == "string") {
@@ -226,6 +230,9 @@ async function handlePrintMsg(msg :PrintMsg) {
         }
         messageHtml += htmlEncode(fmtValue(arg))
         prevWasText = true
+        if (isobj && "__scripter_error__" in arg) {
+          isError = true
+        }
       }
 
       messageJs += fmtValue(arg) + "\n"
@@ -255,5 +262,5 @@ async function handlePrintMsg(msg :PrintMsg) {
   //   > lines
   //
 
-  editor.viewZones.set(new PrintViewZone(pos, messageHtml, messageJs))
+  editor.viewZones.set(new PrintViewZone(pos, messageHtml, messageJs, {isError}))
 }

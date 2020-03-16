@@ -2,6 +2,7 @@
   <meta charset="utf-8">
   <link href="https://rsms.me/inter/inter.css" rel="stylesheet">
   <link href="res/iaw.css?v=${BUILD_VERSION}" rel="stylesheet">
+  <link href="res/jbmono.css?v=${BUILD_VERSION}" rel="stylesheet">
   <link href="monaco-${MONACO_VERSION}/monaco.css" rel="stylesheet">
   <link rel="shortcut icon" href="/icon.png?v=${BUILD_VERSION}">
   <link rel="icon" type="image/png" sizes="any" href="/icon.png?v=${BUILD_VERSION}">
@@ -19,11 +20,11 @@
   <div id="toolbar">
     <div class="button menu"></div>
     <div class="button new" title="New script"></div>
-    <div class="button save" title="Save script Figma file"></div>
+    <div class="button save hidden" title="Save to Figma file"></div>
     <div class="title"><input type="text"></div>
     <div class="spacer"></div>
-    <div class="button clear unavailable"></div>
-    <div class="button run"></div>
+    <div class="button clear unavailable hidden"></div>
+    <div class="button run hidden"></div>
   </div>
   <div id="progress-spinner"></div>
   <script type="text/javascript" src="resources.js?v=${BUILD_VERSION}"></script>

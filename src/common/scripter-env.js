@@ -28,7 +28,6 @@ function isTypedArray(v) {
   return v.buffer instanceof ArrayBuffer && v.BYTES_PER_ELEMENT !== undefined
 }
 
-// const print = console.log.bind(console)
 
 function preClone(v, seen) {
   if (!v) {
@@ -48,6 +47,15 @@ function preClone(v, seen) {
 
     if (v instanceof Date) {
       return String(v)
+    }
+
+    if (v instanceof Error) {
+      let stackFrames = scriptLib.getUserStackFrames(v.stack)
+      return { __scripter_error__: {
+        str: String(v),
+        stack: stackFrames.slice(0, stackFrames.length-1), // drop main
+        srcpos: scriptLib.getFirstSourcePosInStackFrames(stackFrames, /* stackOffset */1),
+      } }
     }
 
     // make sure we don't send huge chunks of data over ipc.
@@ -89,7 +97,11 @@ function _print(env, reqId, args) {
 
   // [fig-js limitation] calls in lambda-style functions have no source location
   // in stack frame. In this case, we pick the first frame that has source location.
-  let srcPos = scriptLib.getFirstSourcePos(/* stackOffset */1)
+  //
+  // Note: stackOffset is 2 here to exclude both the call frame for
+  // - this function (_print)
+  // - its parent function (print)
+  let srcPos = scriptLib.getFirstSourcePos(/* stackOffset */2)
   if (srcPos.line == 0) {
     // unable to find source location :-(
     return
@@ -238,7 +250,7 @@ function _cancelAllTimers(error) {
 
 // interface Timer extends Promise<void> { cancel():void }
 // timer(duration :number, handler :(canceled?:boolean)=>any) :Timer
-function timer(duration, f) {
+function Timer(duration, f) {
   if (this.canceled) { throw new Error("script canceled") }
   var id, rejectfun, resolvefun
 
@@ -260,7 +272,7 @@ function timer(duration, f) {
       duration
     )
     resolvefun = resolve
-    _timerDebug(id, `timer() start`)
+    _timerDebug(id, `Timer() start`)
     _timers[id] = rejectfun = reject
     return id
   })
@@ -567,6 +579,7 @@ env.selection = index => (
 // setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void
 env.setSelection = n => {
   figma.currentPage.selection = (Array.isArray(n) ? n : [n]).filter(env.isSceneNode)
+  return n
 }
 
 const kPaint = Symbol("paint")
@@ -805,6 +818,12 @@ env.range = function range(start, end, step) {
   return new scriptLib.LazyNumberSequence(start, end, step)
 }
 
+
+env.addToPage = function add(node) {
+  figma.currentPage.appendChild(node)
+  return node
+}
+
 // ------------------------------------------------------------------------------------------
 // Misc functions
 // All defined in scriptLib and initialized at first call to evalScript
@@ -823,11 +842,15 @@ env.libgeometry = F
 env.libui = F
 env.libvars = F
 env.DOM = F
-env.timer = F
+env.Base64 = F
+env.createCancellablePromise = F
+env.timer = F // deprecated
+env.Timer = F
 env.setTimeout = F
 env.setInterval = F
 env.clearTimeout = F
 env.clearInterval = F
+env.withTimeout = F
 
 env.fetchData = function(input, init) {
   return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
@@ -853,10 +876,13 @@ env.fetchImg = function(input, init) {
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
 let jsHeader = `
-var _, canceled=false, __onend;
+var _, canceled=false, __onend, currentPage;
+function __oncurrentpagechange() { currentPage = figma.currentPage; }
 [
   function(module,exports,Symbol,__env,__print,__reqid,${envKeys.join(',')}){<LF>
     Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});
+    currentPage = figma.currentPage;
+    figma.on("currentpagechange", __oncurrentpagechange);
     function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
     return (async function __scripter_script_main(){
 `.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
@@ -864,7 +890,7 @@ let jsFooter = `
     })();
   },
   function(){ canceled = true },
-  function(){ return __onend }
+  function(){ figma.off("currentpagechange", __oncurrentpagechange); return __onend }
 ]
 `.trim().replace(/\n\s*/g, " ")
 
@@ -891,8 +917,6 @@ function _evalScript(reqId, js) {
   if (!initialized) {
     initialized = true
     env.Img = scriptLib.Img
-    env.confirm = scriptLib.confirm
-    env.fetch = scriptLib.fetch
     env.Headers = scriptLib.Headers
     env.Response = scriptLib.Response
     env.Request = scriptLib.Request
@@ -900,6 +924,11 @@ function _evalScript(reqId, js) {
     env.fileType = scriptLib.fileType
     env.Bytes = scriptLib.Bytes
     env.libgeometry = scriptLib.libgeometry
+    env.fetch = scriptLib.fetch
+    // misc
+    env.confirm = scriptLib.misc.confirm
+    env.Base64 = scriptLib.misc.Base64
+    env.createCancellablePromise = scriptLib.misc.createCancellablePromise
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
@@ -916,24 +945,14 @@ function _evalScript(reqId, js) {
       // create invocation-specific environment
       let env0 = Object.assign({}, env, {
         canceled: false,
-        timer:         bindenv(timer),
+        timer:         bindenv(Timer), // deprecated
+        Timer:         bindenv(Timer),
+        withTimeout:   bindenv(scriptLib.misc.withTimeout),
         setTimeout:    bindenv(_setTimeout),
         setInterval:   bindenv(_setInterval),
         clearTimeout:  bindenv(_clearTimeout),
         clearInterval: bindenv(_clearInterval),
-        // create: function() { return env0.DOM.createElement.apply(env0.DOM, arguments) },
       })
-
-      // for (let k in env) {
-      //   let v = env[k]
-      //   if (typeof v == "function") {
-      //     // bind env
-      //     // Note: We can't use bind() since that is not supported by fig-js
-      //     v = (v => function() { return v.apply(env0, arguments) })(v)
-      //   }
-      //   env0[k] = v
-      // }
-
       env0.scripter = Object.assign({}, env.scripter)
       env0.libui = scriptLib.create_libui(reqId)
       env0.libvars = scriptLib.create_libvars(env0.libui)
@@ -944,14 +963,19 @@ function _evalScript(reqId, js) {
       for (let nodeName in env.nodeConstructors) {
         let cons = env0.nodeConstructors[nodeName]
         env0[nodeName] = function(props, ...children) {
-          return env0.DOM.createElement(cons, props, ...children)
+          return env0.DOM.createElementv(cons, props, children, /*oncanvas*/true)
         }
       }
 
       // onend function, guaranteed to be called at script end, including error.
       // must not throw
       let _onend = r[2]
+      let ended = false  // dedupe in case its called multiple times
       function onend() {
+        if (ended) {
+          return
+        }
+        ended = true
         try {
           let userfun = _onend()
           if (userfun) {

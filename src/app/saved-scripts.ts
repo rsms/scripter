@@ -3,21 +3,22 @@
 // This index is maintained by the Figma plugin.
 //
 import { EventEmitter } from "./event"
-
-// This is the index data. A set of script GUIDs which exist in the document.
-let knownGuids = new Set<string>()
+import { SavedScriptIndexData } from "../common/messages"
 
 interface Events {
   "change": undefined
 }
 
 export default new class extends EventEmitter<Events> {
-  updateGUIDs(guids: Iterable<string>) {
-    knownGuids = new Set<string>(guids)
+  // This is the index data; scripts which exist in the document.
+  index :SavedScriptIndexData = {}  // keyed by GUID
+
+  updateFromPlugin(index: SavedScriptIndexData) {
+    this.index = index
     this.triggerEvent("change")
   }
 
   hasGUID(guid :string) :boolean {
-    return knownGuids.has(guid)
+    return guid in this.index
   }
 }

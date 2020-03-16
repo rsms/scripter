@@ -26,10 +26,10 @@ const kLocked = Symbol("Locked")
 const kOnUnlock = Symbol("OnUnlock")
 
 
-const defaultFontSize = 11  // sync with app.css
+const defaultFontSize = 12  // sync with --editorFontSize in app.css
 
 const varspaceFontFamily  = "iaw-quattro-var, iaw-quattro, monospace"
-const monospaceFontFamily = "iaw-mono-var, iaw-mono, monospace"
+const monospaceFontFamily = "jbmono, monospace"
 
 // default monaco editor options
 const defaultOptions :EditorOptions = {
@@ -57,7 +57,7 @@ const defaultOptions :EditorOptions = {
 
   fontSize: defaultFontSize,
   fontFamily: varspaceFontFamily,
-  disableMonospaceOptimizations: true, // required for non-monospace fonts
+  disableMonospaceOptimizations: false, // required for non-monospace fonts
 
   extraEditorClassName: 'scripter-light',
 
@@ -169,6 +169,7 @@ type DecoratedTextChangedCallback = (d :monaco.editor.IModelDecoration) => void
 interface EditorStateEvents {
   "init": undefined
   "modelchange": undefined
+  "decorationchange": undefined
 }
 
 
@@ -214,39 +215,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   get currentScript() :Script { return this._currentScript }
   get currentScriptId() :number { return this._currentScript ? this._currentScript.id : -1 }
 
-  setCurrentScript(script :Script) :EditorModel {
-    if (this._currentScript === script) {
-      return this._currentModel
-    }
-    if (this._currentScript) {
-      this._currentScript.removeListener("save", this.onCurrentScriptSave)
-    }
-    this._currentScript = script
-    this._currentScriptId = script.id
-    this._currentScript.on("save", this.onCurrentScriptSave)
-
-    if (this._currentModel) {
-      let oldModel = this._currentModel
-      this.invalidateDiagnostics(oldModel)
-      setTimeout(() => diposeModel(oldModel), 0)
-    }
-
-    let modelId = this._nextModelId++
-    this._currentModel = monaco.editor.createModel(
-      script.body,
-      "typescript",
-      monaco.Uri.from({scheme:"scripter", path:`${modelId}.tsx`})
-    )
-    this._currentModel.updateOptions({
-      tabSize: 2,
-      indentSize: 2,
-      insertSpaces: true,
-      trimAutoWhitespace: true,
-    })
-
-    return this._currentModel
-  }
-
 
   onCurrentScriptSave = (_ :Script) => {
     dlog("script saved")
@@ -264,56 +232,93 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
   }
 
+  modelCache :{[id:string]:EditorModel} = {}
 
-  _isSwitchingModel = false
-
-
-  async switchToScript(script :Script) :Promise<Script> {
-    let editor = await this.editorPromise
-
-    this.stopCurrentScript()
-    let model = this.setCurrentScript(script)
-
-    if (this._isSwitchingModel) {
-      throw new Error("[scripter] internal error (switchToScript while _isSwitchingModel)")
+  setCurrentScript(script :Script) :EditorModel {
+    if (this._currentScript === script) {
+      return this._currentModel
+    }
+    if (this._currentScript) {
+      this._currentScript.removeListener("save", this.onCurrentScriptSave)
     }
 
-    // This is a sad workaround for a bug in Monaco where if you swap out an editor's model
-    // for another different model, and both models use the same language (i.e. typescript),
-    // then Monaco's typescript worker will think the newly-loaded script's top-level
-    // declarations are _additions_ to declarations of the past model, causing errors for
-    // names that appear in both.
-    //
-    // This workaround clears the currently-loaded model's content before it switches models
-    // for real.
-    this._isSwitchingModel = true
-    editor.getModel().setValue(" ")
+    let filename = script.guid
+    if (!filename) {
+      if (script.id != 0) {
+        filename = `__id${script.id}`
+      } else {
+        filename = `__model${this._nextModelId++}`
+      }
+    }
+    let modelUri = monaco.Uri.from({scheme:"scripter", path:`${filename}.tsx`})
+    let model = monaco.editor.getModel(modelUri)
 
-    // init new model right away so that we receive events for things like TS feedback
-    initEditorModel(model)
+    if (!model) {
+      model = monaco.editor.createModel(script.body, "typescript", modelUri)
+      model.updateOptions({
+        tabSize: 2,
+        indentSize: 2,
+        insertSpaces: true,
+        trimAutoWhitespace: true,
+      })
+      // init new model right away so that we receive events for things like TS feedback
+      initEditorModel(model)
+    }
 
-    editor.layout()
+    this._currentModel = model
 
-    requestAnimationFrame(() => {
-      this._isSwitchingModel = false
-
-      // actually switch model
+    if (this.editor) {
+      // path taken in all cases but during initial initialization
       this.clearAllMetaInfo()
-      editor.setModel(model)
+      this.setModel(model)
       this.updateOptions({
         readOnly: script.readOnly,
       })
-      this.restoreViewState()
+      let layoutAndFocus = () => {
+        this.editor.layout()
+        this.editor.focus()
+      }
+      layoutAndFocus()
+      requestAnimationFrame(() => {
+        layoutAndFocus()
+        this.restoreViewState()
+        setTimeout(layoutAndFocus, 1)
+        setTimeout(layoutAndFocus, 100)
+      })
+    }
 
-      editor.layout()
-      editor.focus()
-      setTimeout(() => {
-        editor.layout()
-        this.focus()
-      }, 100)
-      config.lastOpenScript = this._currentScript.id
-    })
+    this._currentScript = script
+    this._currentScriptId = script.id
+    this._currentScript.on("save", this.onCurrentScriptSave)
+    config.lastOpenScript = script.id
 
+    return model
+  }
+
+
+  setModel(model :EditorModel) {
+    let prevModel = this.editor.getModel()
+    if (prevModel !== model) {
+      // Note: Monaco only has a single TypeScript instance, so we can't have multiple
+      // models in Scripter as they would share scope, which causes errors like
+      // "can not redeclare x". So, we disposeany previous model before setting a new one.
+      // Disposing of a model causes the TypeScript instance to "forget".
+      if (prevModel) {
+        prevModel.dispose()
+      }
+      this.editor.setModel(model)
+    }
+    this._currentModel = model
+  }
+
+
+  _isSwitchingModel = false // used to avoid recording edits to scripts
+
+
+  async switchToScript(script :Script) :Promise<Script> {
+    let editor = await this.editorPromise  // wait for editor to initialize
+    this.stopCurrentScript()
+    this.setCurrentScript(script)
     return this._currentScript
   }
 
@@ -376,6 +381,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // save current script to Figma canvas in a new node
   async saveScriptToFigma() {
     this.currentScript.saveToFigma({ createIfMissing: true })
+    editor.focus()
+    requestAnimationFrame(() => editor.focus())
   }
 
 
@@ -459,9 +466,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     if (config.monospaceFont) {
       options.fontFamily = monospaceFontFamily
       options.disableMonospaceOptimizations = false
+      document.body.classList.toggle("font-ligatures", config.fontLigatures)
     } else {
       options.fontFamily = varspaceFontFamily
       options.disableMonospaceOptimizations = true
+      document.body.classList.add("font-ligatures")
     }
     this.updateOptions(options)
   }
@@ -628,6 +637,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.decorationCallbacks.clear()
     this.editor.deltaDecorations(this.editorDecorationIds, [])
     this.editorDecorationIds = []
+    this.triggerEvent("decorationchange")
   }
 
   removeDecorations(ids :string[]) {
@@ -637,6 +647,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       this.decorationCallbacks.delete(id)
     }
     this.editor.deltaDecorations(ids, [])
+    this.triggerEvent("decorationchange")
   }
 
   addDecorations(
@@ -655,6 +666,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         this.decorationCallbacks.set(id, callback)
       }
     }
+    this.triggerEvent("decorationchange")
   }
 
   decorateError(pos :SourcePos, message :string) {
@@ -912,13 +924,15 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // initialize model
     initEditorModel(model)
 
-    this.editor.layout()
-    setTimeout(() => this.editor.layout(), 100)
-    setTimeout(() => this.editor.layout(), 500)
-
-    // assign focus to editor
-    this.editor.focus()
-    setTimeout(() => this.editor.focus(), 500)
+    // layout and focus
+    const layoutAndFocus = () => {
+      monaco.editor.remeasureFonts()
+      this.editor.layout()
+      this.editor.focus()
+    }
+    layoutAndFocus() // OH COME ON MONACO...
+    setTimeout(layoutAndFocus, 100)
+    setTimeout(layoutAndFocus, 500)
 
     // initialize event handlers
     this.initEditorEventHandlers()
@@ -935,6 +949,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     menu.menuUIMountPromise.then(() => {
       menu.scrollToActiveItem()
+      requestAnimationFrame(() => { menu.scrollToActiveItem() })
     })
 
     // monaco.languages.registerCodeActionProvider("typescript", {
@@ -1045,6 +1060,20 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         this.triggerEvent("modelchange")
       }
       // this.stopObservingChanges()
+    })
+
+    // some key presses causes the toolbar to fade out (only when menu is closed)
+    const ignoreKeyPresses = {
+      [monaco.KeyCode.Alt]:1,
+      [monaco.KeyCode.Shift]:1,
+      [monaco.KeyCode.Ctrl]:1,
+      [monaco.KeyCode.Meta]:1,
+      [monaco.KeyCode.ContextMenu]:1,
+    }
+    editor.onKeyDown((e: monaco.IKeyboardEvent) => {
+      if (!(e.keyCode in ignoreKeyPresses)) {
+        toolbar.fadeOut()
+      }
     })
 
     // editor.addCommand(monaco.KeyCode.Enter | monaco.KeyCode.Ctrl, (ctx :any) => {
@@ -1260,24 +1289,30 @@ async function loadLastOpenedScript() :Promise<Script> {
 
 // prevents model from being disposed. Must be balanced with a later call to unlockModel().
 function lockModel(m :EditorModel) {
-  ;(m as any)[kLocked] = true
+  // dlog(`lockModel ${m.id}`)
+  // ;(m as any)[kLocked] = true
+  // ;(m as any)[kOnUnlock] = []
 }
+
+// function awaitUnlockedModel(m :EditorModel) :Promise<void> {
+//   return new Promise(resolve => {
+//     if (!(m as any)[kLocked]) {
+//       resolve()
+//     } else {
+//       (m as any)[kOnUnlock].push(resolve)
+//     }
+//   })
+// }
 
 // allows model to be disposed.
 function unlockModel(m :EditorModel) {
-  delete (m as any)[kLocked]
-  if (kOnUnlock in m) {
-    let f = (m as any)[kOnUnlock]
-    delete (m as any)[kOnUnlock]
-    f()
-  }
+  // dlog(`unlockModel ${m.id}`)
+  // if ((m as any)[kLocked]) {
+  //   for (let f of (m as any)[kOnUnlock]) {
+  //     try { f() } catch(err) { console.error(err.stack||String(err)) }
+  //   }
+  //   delete (m as any)[kLocked]
+  //   delete (m as any)[kOnUnlock]
+  // }
 }
 
-function diposeModel(m :EditorModel) {
-  if (kOnUnlock in m) {
-    let f = (m as any)[kOnUnlock]
-    ;(m as any)[kOnUnlock] = () => { f(); m.dispose() }
-  } else {
-    m.dispose()
-  }
-}

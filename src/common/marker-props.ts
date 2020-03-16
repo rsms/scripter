@@ -2,4 +2,5 @@
 export default {
   __scripter_image_marker__: 1,
   __scripter_lazy_seq__: 1,
+  __scripter_error__: 1,
 }

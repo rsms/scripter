@@ -1,22 +1,19 @@
-import { Msg, UpdateSavedScriptsIndexMsg } from "../common/messages"
+import {
+  Msg,
+  UpdateSavedScriptsIndexMsg,
+  SavedScriptIndexEntry,
+  SavedScriptIndexData,
+} from "../common/messages"
 import * as consts from "./constants"
 import * as rpc from "./rpc"
 import { delayed } from "./util"
 import { visit } from "./visit"
 
 
-const pluginDataIndexKey = "saved_script_index"
-
-
-interface SavedScriptIndexData {
-  [guid:string] :string  // Scripter GUID => Figma node ID
-}
-
-
 interface Patch {
-  type   :"set" | "remove"
+  type   :"update" | "remove"
   guid   :string
-  nodeId :string  // ignored for type="remove"
+  entry  :SavedScriptIndexEntry  // ignored for type="remove"
 }
 
 
@@ -67,9 +64,10 @@ export const SavedScriptIndex = new class {
           delete index[p.guid]
           changes++
         }
-      } else if (p.type == "set") {
-        if (index[p.guid] != p.nodeId) {
-          index[p.guid] = p.nodeId
+      } else if (p.type == "update") {
+        let existing = index[p.guid]
+        if (!existing || existing.nodeId != p.entry.nodeId) {
+          index[p.guid] = { nodeId: p.entry.nodeId, name: p.entry.name }
           changes++
         }
       } else {
@@ -91,32 +89,32 @@ export const SavedScriptIndex = new class {
     }
     this.index = index
     this.guids = guids
-    figma.currentPage.setPluginData(pluginDataIndexKey, indexJSON)
+    figma.currentPage.setPluginData(consts.dataPrivateIndexKey, indexJSON)
     rpc.sendMsg<UpdateSavedScriptsIndexMsg>({
       type: "update-save-scripts-index",
-      guids,
+      index: this.index,
     })
   }
 
 
   async getNodeByGUID(guid :string) :Promise<BaseNode|null> {
     await this.initPromise
-    let nodeId = this.index[guid]
-    if (!nodeId) {
+    let entry = this.index[guid]
+    if (!entry) {
       return null
     }
-    let n = figma.getNodeById(nodeId)
+    let n = figma.getNodeById(entry.nodeId)
     // validate
     if (!n) {
       delete this.index[guid]
       return null
     }
-    let scriptGUID = n.getSharedPluginData(consts.sharedPluginDataNamespace, "scriptGUID")
+    let scriptGUID = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptGUID)
     if (!scriptGUID || scriptGUID != guid) {
-      // fixup index
+      // fixup index; move entry into proper GUID association
       delete this.index[guid]
       if (scriptGUID && scriptGUID != guid) {
-        this.index[scriptGUID] = n.id
+        this.index[scriptGUID] = entry
       }
       return null
     }
@@ -128,7 +126,7 @@ export const SavedScriptIndex = new class {
     let index :SavedScriptIndexData = {}
 
     // loading a saved index
-    let indexData = figma.currentPage.getPluginData(pluginDataIndexKey)
+    let indexData = figma.currentPage.getPluginData(consts.dataPrivateIndexKey)
     if (indexData) {
       try {
         index = JSON.parse(indexData) as SavedScriptIndexData
@@ -186,14 +184,28 @@ export const SavedScriptIndex = new class {
     )
 
     visit(page, maxdepth, maxtime, n => {
-      if (n.type == "TEXT") {
-        let scriptGUID = n.getSharedPluginData(consts.sharedPluginDataNamespace, "scriptGUID")
+      if (n.type == "GROUP") {
+        if (n.children.length == 1 && n.children[0].type == "FRAME") {
+          return true  // let's visit this group
+        }
+        return false // ignore this group; definitely not a
+      }
+      if (n.type == "FRAME") {
+        let scriptGUID = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptGUID)
         if (scriptGUID) {
           // dlog(`found a script node (node ID ${n.id})`, scriptGUID)
-          index[scriptGUID] = n.id
+          let entry = this.index[scriptGUID]
+          if (!entry) {
+            let name = n.getSharedPluginData(consts.dataNamespace, consts.dataScriptName)
+            entry = { nodeId: n.id, name: name || "Untitled" }
+          }
+          index[scriptGUID] = entry
+          return false // don't visit the insides of a script node
         }
       }
+      return true // descend (only has effect if n is a container)
     })
+
     return index
   }
 }

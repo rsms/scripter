@@ -8,28 +8,28 @@ import * as filetype from "../common/filetype"
 import * as Path from "../common/path"
 import markerProps from "../common/marker-props"
 import { LazyNumberSequence } from "../common/lazyseq"
-import { base64Encode, base64Decode, confirm, fetch } from "./script-lib-misc"
 import * as libgeometry from "./script-lib-geometry"
 import { create_libvars } from "./script-lib-vars"
 import { create_libui } from "./script-lib-ui"
-import { getFirstSourcePos } from "./script-lib-runtime"
+import {
+  getFirstSourcePos,
+  getFirstSourcePosInStackFrames,
+  getUserStackFrames,
+} from "./script-lib-runtime"
 import { DOM } from "./script-lib-dom"
+import * as misc from "./script-lib-misc"
+import { fetch } from "./script-lib-misc"
 
 export {
   markerProps,
   fmtPrintArgs,
   Path,
+  misc,
+  fetch,
 
   FetchHeaders as Headers,
   FetchResponse as Response,
   FetchRequest as Request,
-
-  base64Encode,
-  base64Decode,
-  confirm,
-  fetch,
-
-  getFirstSourcePos,
 
   LazyNumberSequence,
 
@@ -37,6 +37,11 @@ export {
   create_libvars,
   libgeometry,
   DOM,
+
+  // internal utilities used by rest of script-lib
+  getFirstSourcePos,
+  getFirstSourcePosInStackFrames,
+  getUserStackFrames,
 }
 
 export function fileType(nameOrData :ArrayLike<byte>|ArrayBuffer|string) :filetype.Info|null {

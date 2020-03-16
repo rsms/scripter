@@ -239,13 +239,17 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
 
 // -----------------------------------------------------------------------------------------------
 
+interface PrintViewZoneOptions {
+  isError? :bool
+}
+
 export class PrintViewZone extends ViewZone {
   readonly pos         :SourcePos
   readonly messageHtml :string
   readonly messageJs   :string
 
-  constructor(pos :SourcePos, messageHtml :string, messageJs :string) {
-    super(pos.line, "printWidget")
+  constructor(pos :SourcePos, messageHtml :string, messageJs :string, opt :PrintViewZoneOptions) {
+    super(pos.line, "printWidget" + (opt.isError ? " error" : ""))
 
     this.pos = pos
     this.messageHtml = messageHtml

@@ -17,22 +17,40 @@ export class LazyNumberSequence implements LazySeq<number,number,number> {
   readonly step   :number
 
   constructor(start :number, end :number, step :number) {
-    this.length = end === Infinity ? Infinity : Math.ceil(Math.max(0, end - start) / step)
+    if (start > end) {
+      this.length = end === Infinity ? Infinity : Math.ceil(Math.max(0, start - end) / step)
+      this.step = -step
+    } else {
+      this.length = end === Infinity ? Infinity : Math.ceil(Math.max(0, end - start) / step)
+      this.step = step
+    }
     this.start = start
     this.end = end
-    this.step = step
   }
 
   [Symbol.iterator]() :Iterator<number> {
     let value = this.start, end = this.end, step = this.step
-    return {
-      next() :IteratorResult<number> {
-        if (value >= end) {
-          return {done:true, value:0}
+    if (this.start < this.end) {
+      return {
+        next() :IteratorResult<number> {
+          if (value >= end) {
+            return {done:true, value:0}
+          }
+          let v = value
+          value += step
+          return {value: v, done:false}
         }
-        let v = value
-        value += step
-        return {value: v, done:false}
+      }
+    } else {
+      return {
+        next() :IteratorResult<number> {
+          if (value <= end) {
+            return {done:true, value:0}
+          }
+          let v = value
+          value += step
+          return {value: v, done:false}
+        }
       }
     }
   }
@@ -42,8 +60,14 @@ export class LazyNumberSequence implements LazySeq<number,number,number> {
       throw new Error("infinite sequence")
     }
     let a :R[] = []
-    for (let i = 0, v = this.start; v < this.end; v += this.step) {
-      a.push(f(v, i++))
+    if (this.start < this.end) {
+      for (let i = 0, v = this.start; v < this.end; v += this.step) {
+        a.push(f(v, i++))
+      }
+    } else {
+      for (let i = 0, v = this.start; v > this.end; v += this.step) {
+        a.push(f(v, i++))
+      }
     }
     return a
   }
@@ -53,8 +77,14 @@ export class LazyNumberSequence implements LazySeq<number,number,number> {
       throw new Error("infinite sequence")
     }
     let a :number[] = []
-    for (let v = this.start; v < this.end; v += this.step) {
-      a.push(v)
+    if (this.start < this.end) {
+      for (let v = this.start; v < this.end; v += this.step) {
+        a.push(v)
+      }
+    } else {
+      for (let v = this.start; v > this.end; v += this.step) {
+        a.push(v)
+      }
     }
     return a
   }

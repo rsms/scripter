@@ -3,15 +3,16 @@ export function visit(
   container :ChildrenMixin,
   maxdepth :number,
   maxtime :number,
-  f :(n :SceneNode)=>void
+  f :(n :SceneNode)=>any
 ) {
   let containers :{c:ChildrenMixin,depth:number}[] = []
 
   function visitContainer(c :ChildrenMixin, depth :number, f :(n :SceneNode)=>any) {
     c.findChildren(n => {
-      f(n)
+      let res = f(n)
       if (depth < maxdepth &&
-          (n as ChildrenMixin).children && (n as ChildrenMixin).children.length > 0
+          (res === undefined || !!res) &&
+          "children" in n && n.children.length > 0
       ) {
         containers.push({c: n as ChildrenMixin, depth: depth + 1})
       }

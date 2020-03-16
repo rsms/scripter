@@ -240,12 +240,21 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  onChange={this.onChangeSettingBool} />
           Word wrap
         </label>
-        <label title="Use a monospace font instead of Quattro">
+        <label title="Use the font JetBrains Mono instead of iA Writer Quattro">
           <input type="checkbox"
                  name="config.monospaceFont"
                  checked={config.monospaceFont}
                  onChange={this.onChangeSettingBool} />
           Monospace font
+        </label>
+        <label
+          className={"dependant" + (config.monospaceFont ? "" : " disabled")}
+          title="Enables fancy ligatures of the monospace font JetBrains Mono, like special glyphs for => and ==">
+          <input type="checkbox"
+                 name="config.fontLigatures"
+                 checked={config.fontLigatures}
+                 onChange={this.onChangeSettingBool} />
+          Font ligatures
         </label>
         <label title="Visualize otherwise-invisible characters like spaces and tabs">
           <input type="checkbox"

@@ -21,6 +21,9 @@ type bool  = boolean
 /** Throws an error if condition is not thruthy */
  function assert(condition :any, ...message :any[]) :void
 
+/** Promise which can be cancelled */
+interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
+
 // timer functions
  function clearInterval(id?: number): void;
  function clearTimeout(id?: number): void;
@@ -28,8 +31,9 @@ type bool  = boolean
  function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 
 /** Start a timer that expires after `duration` milliseconds */
+ function Timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
  function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
-interface Timer<T = void> extends Promise<T> {
+interface Timer<T = void> extends CancellablePromise<T> {
   cancel() :void
 
   then<R1=T,R2=never>(
@@ -42,6 +46,15 @@ interface Timer<T = void> extends Promise<T> {
  class TimerCancellation extends Error {
   readonly name :"TimerCancellation"
 }
+
+/**
+ * Adds a timeout to a cancellable process.
+ * When timeout is reached, "TIMEOUT" is returned instead R.
+ */
+ function withTimeout<
+  T extends CancellablePromise<R>,
+  R = T extends Promise<infer U> ? U : T
+>(p :T, timeout :number) :CancellablePromise<R|"TIMEOUT">
 
 /**
  * Calls f at a high frequency.
@@ -72,34 +85,46 @@ interface Animation extends Promise<void> {
 /** JSX interface for creating Figma nodes */
  var DOM :DOM
 interface DOM {
-
-  // createElement(
-  //   type        : string,
-  //   props?      : {[k:string]:any} | null,
-  //   ...children : any[]
-  // ): BaseNode
-
-  // createElement(
-  //   cons        :typeof Rectangle,
-  //   props?      :Partial<RectangleNode> | null,
-  //   ...children :BaseNode[]
-  // ): RectangleNode
-
+  /**
+   * Create a node.
+   * Nodes created with createElement are initially hidden and automatically
+   * removed when the script ends, unless added to the scene explicitly.
+   *
+   * Can be used to created trees of nodes, e.g.
+   *   let f = DOM.createElement(Frame, null,
+   *     DOM.createElement(Rectangle),
+   *     DOM.createElement(Text, {characters:"Hello", y:110}) )
+   *   figma.currentPage.appendChild(f)
+   */
   createElement<N extends BaseNode, P extends Partial<N>>(
-    cons        :(props:P|null)=>N,
+    cons        :(props?:P|null)=>N,
     props?      :P | null,
     ...children :BaseNode[]
   ): N
 
+  /**
+   * Create a node by name.
+   * Name starts with a lower-case character. e.g. "booleanOperation".
+   */
   createElement(
-    kind        :"rectangle",
-    props?      :Partial<RectangleNode> | null,
+    kind        :string,
+    props?      :{[k:string]:any} | null,
     ...children :never[]
-  ): RectangleNode
+  ): SceneNode
 
+  // TODO: Consider defining types for all known names.
+  //       We could define a `nodeNames:{"name":RectangleNode, ...}` type which can
+  //       then be used to do `keyof` to build a single type that expresses all node types.
+  //
+  // Note: Currently Monaco/TypeScript does not provide result type support for
+  //       JSX, so doing this has little to no upside.
+  //
+  // createElement(
+  //   kind        :"rectangle",
+  //   props?      :Partial<RectangleNode> | null,
+  //   ...children :never[]
+  // ): RectangleNode
 }
-
-// interface NodeConstructor<N extends BaseNode> {}
 
 
 // ------------------------------------------------------------------------------------
@@ -231,21 +256,30 @@ type Shape = BooleanOperationNode
            | VectorNode
 
 /** Get the current selection in Figma */
- function selection(): ReadonlyArray<SceneNode>;
+ function selection() :ReadonlyArray<SceneNode>;
 /** Get the nth currently-selected node in Figma */
- function selection(index :number): SceneNode|null;
+ function selection(index :number) :SceneNode|null;
 
 /** Set the current selection. Non-selectable nodes of n, like pages, are ignored. */
  function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void;
 
 /** Version of Figma plugin API that is currently in use */
- var apiVersion: string
+ var apiVersion :string
 
 /** Viewport */
- var viewport: ViewportAPI
+ var viewport :ViewportAPI
 
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
- var MIXED: symbol
+ var MIXED :symbol
+
+/** Current page. Equivalent to figma.currentPage */
+ var currentPage :PageNode
+
+/**
+ * Add node to current page.
+ * Equivalent to `(figma.currentPage.appendChild(n),n)`
+ */
+ function addToPage<N extends SceneNode>(n :N) :N
 
 /**
  * Store data on the user's local machine. Similar to localStorage.
@@ -253,44 +287,46 @@ type Shape = BooleanOperationNode
  */
  var clientStorage: ClientStorageAPI
 
+type NodeProps<N> = Partial<Omit<N,"type">>
 
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
 //
 /** Creates a new Page */
- function Page(props? :Partial<PageNode>): PageNode;
+ function Page(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
 /** Creates a new Rectangle */
- function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
+ function Rectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
 /** Creates a new Line */
- function Line(props? :Partial<LineNode>): LineNode;
+ function Line(props? :NodeProps<LineNode>|null): LineNode;
 /** Creates a new Ellipse */
- function Ellipse(props? :Partial<EllipseNode>): EllipseNode;
+ function Ellipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
 /** Creates a new Polygon */
- function Polygon(props? :Partial<PolygonNode>): PolygonNode;
+ function Polygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
 /** Creates a new Star */
- function Star(props? :Partial<StarNode>): StarNode;
+ function Star(props? :NodeProps<StarNode>|null): StarNode;
 /** Creates a new Vector */
- function Vector(props? :Partial<VectorNode>): VectorNode;
+ function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
 /** Creates a new Text */
- function Text(props? :Partial<TextNode>): TextNode;
+ function Text(props? :NodeProps<TextNode>|null): TextNode;
 /** Creates a new BooleanOperation */
- function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
+ function BooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
 /** Creates a new Frame */
- function Frame(props? :Partial<FrameNode>): FrameNode;
+ function Frame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
 /** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
- function Group(children :ReadonlyArray<BaseNode>, props? :Partial<GroupNode & {index :number}>): GroupNode;
+ function Group(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
+ function Group(...children :SceneNode[]): GroupNode;
 /** Creates a new Component */
- function Component(props? :Partial<ComponentNode>): ComponentNode;
+ function Component(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
 /** Creates a new Slice */
- function Slice(props? :Partial<SliceNode>): SliceNode;
+ function Slice(props? :NodeProps<SliceNode>|null): SliceNode;
 /** Creates a new PaintStyle */
- function PaintStyle(props? :Partial<PaintStyle>): PaintStyle;
+ function PaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
 /** Creates a new TextStyle */
- function TextStyle(props? :Partial<TextStyle>): TextStyle;
+ function TextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
 /** Creates a new EffectStyle */
- function EffectStyle(props? :Partial<EffectStyle>): EffectStyle;
+ function EffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
 /** Creates a new GridStyle */
- function GridStyle(props? :Partial<GridStyle>): GridStyle;
+ function GridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
 
 
 
@@ -610,6 +646,15 @@ interface UIInputIterator<T> extends AsyncIterable<T> {
   }
 }
 
+
+// ------------------------------------------------------------------------------------
+ namespace Base64 {
+  /** Encode data as base-64 */
+  function encode(data :Uint8Array|ArrayBuffer|string) :string
+
+  /** Decode base-64 encoded data */
+  function decode(encoded :string) :Uint8Array
+}
 
 
 // ------------------------------------------------------------------------------------

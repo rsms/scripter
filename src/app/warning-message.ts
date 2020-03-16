@@ -13,4 +13,5 @@ export function show(message :string) {
 export function hide() {
   document.body.classList.remove("showMessage")
   editor.editor.layout()
+  editor.focus()
 }

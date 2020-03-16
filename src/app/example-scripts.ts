@@ -36,7 +36,7 @@ export default (samples => {
 
 
 s(100, "Introduction", `
-/*
+/**
 Hello hi and welcome to Scripter.
 
 Scripts are written in relaxed TypeScript.
@@ -45,17 +45,27 @@ This grey text here is a comment.
 Try running this script using the ► button in the toolbar, or by pressing ${kb("⌘↩︎", "Ctrl+Return")}
 */
 print(\`Today is \${Date()}\`)
-print(\`You are using Figma API v\${apiVersion}\`)
-/*
+print("Your viewport:", viewport.bounds)
 
+/**
 There are more examples in the menu ☰.
 Open the menu using the ☰ button in the bottom left corner.
 
 This editor provides automatic completions of all available functionality, including the Figma API.
 Type "figma." to start exploring the API.
 
+Scripts are automatically saved locally and securely.
+You can also load and save scripts to the current Figma file.
+To save a script, press the "Save to Figma File" button in the toolbar.
+Changes to the script are not automatically saved both to the Figma file
+as well as locally to your computer.
+To remove a script from a Figma file, simply delete the frame in the Figma file's page.
+To share a script with someone else, save it to a Figma file and invite others to the file.
+To load a script from a Figma file, select the script's frame in Figma and then start Scripter.
+
 Editor basics
-• Scripts are saved automatically, locally
+• Scripts are automatically saved locally
+• Scripts can optionally by saved to the Figma file
 • Manage your scripts in the menu.
 • Double-click a script in the menu to rename,
   pressing RETURN to commit a name change or
@@ -63,14 +73,17 @@ Editor basics
 • Rename a script "" (nothing) to delete it.
 
 Keyboard shortcuts
- ${kb("⌘↩", "Ctrl+Return")} runs the current script
- ${kb("⇧⌘↩", "Ctrl+Shift+Return")} stop a running script
- ${kb("⌥⌘P", "Ctrl+Alt+P")} closes Scripter
- ${kb("⌃M", "Ctrl+M")} toggles the menu
- ${kb("⌘+", "Ctrl+Plus")} increases text size
- ${kb("⌘−", "Ctrl+Minus")} decreases text size
- ${kb("⌘0", "Ctrl+0")} resets text size
- ${kb("F1", "F1")} opens the VS Code commander
+ ${kb("⌘ ↩    ",     "Ctrl+Return")      }  runs the current script
+ ${kb("⇧ ⌘ ↩ ",    "Ctrl+Shift+Return") }  stop a running script
+ ${kb("⌥ ⌘ P ",     "Ctrl+Alt+P")        }  closes Scripter
+ ${kb("⌃ M    ",     "Ctrl+M")            }  toggles the menu
+ ${kb("⌘ +    ",     "Ctrl+Plus")         }  increases text size
+ ${kb("⌘ −    ",     "Ctrl+Minus")        }  decreases text size
+ ${kb("⌘ 0    ",     "Ctrl+0")            }  resets text size
+ ${kb("F1      ",    "F1")                }  opens the VS Code commander
+ ${kb("⌘ F12  ",     "Ctrl+F12")          }  goes to defintion of selected symbol
+ ${kb("⇧ F12  ",     "Shift+F12")         }  show references to selected symbol
+ ${kb("⇧ ⌘ O ",     "Ctrl+Shift+O")      }  quick navigator
 
 */
 `),
@@ -80,20 +93,12 @@ Keyboard shortcuts
 
 
 s(200, "Figma/Create rectangles", `
-// This script creates some rectangles on the current page
-const numberOfRectangles = 5
+// Create some rectangles on the current page
+let rectangles = range(0, 5).map(i =>
+  Rectangle({ x: i * 150, fills: [ ORANGE.paint ] }))
 
-let nodes: SceneNode[] = []
-for (let i = 0; i < numberOfRectangles; i++) {
-  let r = Rectangle({ x: i * 150, fills: [ ORANGE.paint ] })
-  nodes.push(r)
-}
-
-// select our new rectangles
-setSelection(nodes)
-
-// pan & zoom the viewport to show the rectangles
-viewport.scrollAndZoomIntoView(nodes)
+// select our new rectangles and center the viewport
+viewport.scrollAndZoomIntoView(setSelection(rectangles))
 `),
 
 
@@ -108,8 +113,7 @@ for (let n of selection()) {
 
 
 s(202, "Figma/Trim line indentation", `
-// Select some text and run this script to trim away whitespace from the
-// beginning of lines
+// Select some text and run this script to trim away whitespace from the beginning of lines
 for (let n of selection()) {
   if (isText(n)) {
     n.characters = n.characters.replace(/\\n\\s+/g, "\\n")
@@ -136,11 +140,11 @@ setSelection(images)
 //
 // These can also be used as type guards:
 //
-// let n = selection(0)
-// // here, n's type is the generic BaseNode
-// if (isRect(n)) {
-//   // but here n's type is RectangleNode
-// }
+let n = selection(0)
+// here, n's type is the generic BaseNode
+if (isRect(n)) {
+  // but here n's type is RectangleNode
+}
 `),
 
 
@@ -262,6 +266,12 @@ s(304, "Basics/Ranges", `
 // range [start–end), incrementing in steps. Steps defaults to 1.
 print(range(1, 10))
 print(range(1, 10, 3))
+print(range(100, 0, 20))
+
+// Ranges are iterable
+for (let n of range(1,4)) {
+  print(n) ; await timer(200)
+}
 
 // If we want a pre-allocated array, we can call the array() function
 print(range(10).array())
@@ -298,8 +308,52 @@ print(range(0, Infinity, 3))
 try {
   range(0, Infinity).array()
 } catch (e) {
-  print(""+e)
+  print(e)
 }
+`),
+
+
+
+s(305, "Basics/JSX", `
+/**
+ * Scripter supports JSX for creating nodes.
+ * JSX tags map 1:1 to Scripter's node constructor functions,
+ * like for instance Rectangle() and Frame().
+ **/
+
+<Rectangle fills={[ RED.paint ]} />
+
+/**
+ * You may notice that the above line does not actually add a
+ * rectangle to the current page. This is an intentional
+ * difference between the regular constructor form:
+ *   Rectangle(...)
+ * and the JSX form:
+ *   <Rectangle ... />
+ * The regular constructor form adds the object to the current
+ * page automatically, while the JSX form does not add the node
+ * to the page on creation. Instead you call appendChild or
+ * addToScene explicitly.
+ **/
+
+let frame :FrameNode =
+<Frame height={130} fills={[ WHITE.paint ]}>
+  <Rectangle fills={[ RED.paint ]} />
+  <Text characters="Hello" x={8} y={110} />
+</Frame>
+
+// Try uncommenting this to see the frame added to the page
+// addToPage(frame)
+
+// Here is an example of using the regular node constructors:
+let g = Group(
+  Rectangle(),
+  Text({characters:"Hello", y:110}),
+)
+
+// remove the group since the regular constructor form automatically
+// adds nodes to the current page.
+g.remove()
 `),
 
 
@@ -332,22 +386,20 @@ const { rangeInput } = libui
 
 // Save viewport and create a red rectangle
 let origViewport = { zoom: viewport.zoom, center: viewport.center }
-let r = Rectangle({ fills: [RED.paint], cornerRadius: 8, opacity: 0.5 })
+let r = addToPage(Rectangle({ fills: [ORANGE.paint], cornerRadius: 10 }))
 try {
   // Set viewport to focus on the rectangle
   viewport.zoom = 1
   viewport.center = {y: r.y, x: r.x}
 
   // Show a slider and move rectangle as it changes
-  let x = r.x
-  for await (let v of rangeInput({min:-200, max:200})) {
-    r.x = x + v
-    viewport.center = {y: viewport.center.y, x: -v}
+  for await (let v of rangeInput({min:-300, max:300})) {
+    r.x = Math.sin(v * 0.03) * 200
+    r.y = Math.cos(v * 0.05) * 80
   }
 } finally {
-  // When the script is stopped, remove the rectangle
+  // Remove the rectangle and restore viewport
   r.remove()
-  // Restore viewport
   viewport.center = origViewport.center
   viewport.zoom = origViewport.zoom
 }
@@ -419,48 +471,27 @@ async function fetchFigmaFile(fileKey :string) :Promise<any> {
 //------------------------------------------------------------------------------------------------
 
 
-s(600, "Advanced/Timers", `
-// Advanced use of multiple timers to implement timeout
+s(600, "Advanced/Timeout", `
+// Example of using withTimeout for limiting the time
+// of a long-running process.
 
-// Try changing this from 200 to 300:
+// Try changing the delay here from 200 to 300:
 await doSlowThing(200)
 async function doSlowThing(timeout :number) {
   let result = await withTimeout(getFromSlowInternet(), timeout)
-  if (result === "TIMEOUT") {
+  if (result == "TIMEOUT") {
     print("network request timed out :-(")
   } else {
     print("network request finished on time :-)", result)
   }
 }
 
-// Function that simulates a slow, cancellable network fetch
-function getFromSlowInternet() :CPromise<Object> {
-  // fake network request result
+// Function that simulates a slow, cancellable network fetch.
+// In parctice, this would be some some actual long-running thing
+// like fetch call or timer.
+function getFromSlowInternet() :CancellablePromise<Object> {
   return timer(250).catch(_=>{}).then(() => ({message: "Hello"}))
 }
-
-// Use timer to implement timeout
-function withTimeout<
-    T extends CPromise<R>,
-    R = T extends Promise<infer U> ? U : T,
-  >(p :T, timeout :number) :Promise<R|"TIMEOUT"> {
-  let t = timer(timeout) // Start our timeout timer
-  let to = false // set to true when timeout timer expired
-  return new Promise<R|"TIMEOUT">((resolve, reject) => {
-    p.then(r => {
-      resolve(r)
-      t.cancel() // cancel the timeout timer
-    })
-    t.then(() => {
-      resolve("TIMEOUT") // signal timeout
-      p.cancel() // cancel the user promise
-    }).catch(()=>{})
-  })
-}
-
-// Cancellable promise type
-interface CPromise<R> extends Promise<R> { cancel():void }
-
 `),
 
 
@@ -477,11 +508,9 @@ for (let i = 1; true; i++) {
 
 
 s(602, "Advanced/Animation", `
-// Rudimentary animation with animate()
+// Example of using animate()
 // Moves a rectangle around in a "figure eight" pattern.
-//
-// Create rectangle
-let r = Rectangle({ fills:[BLACK.paint] })
+let r = addToPage(Rectangle({ fills:[ORANGE.paint], rotation: 45 }))
 try {
   // setup viewport
   viewport.scrollAndZoomIntoView([r])
