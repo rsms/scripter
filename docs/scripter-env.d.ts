@@ -1,7 +1,7 @@
 //
 // The Scripter environment.
 //
-// What's declared in there is available to scripts in their global namespace.
+// What's declared here is available to scripts in their global namespace.
 //
 
 // symbolic type aliases
@@ -16,6 +16,34 @@ declare function print(...args :any[]) :void
 /** Throws an error if condition is not thruthy */
 declare function assert(condition :any, ...message :any[]) :void
 
+/** Promise which can be cancelled */
+interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
+
+/**
+ * Creates a cancellable Promise.
+ *
+ * Example:
+ * ```
+ * let p = createCancellablePromise((resolve, reject, oncancel) => {
+ *   let timer = setTimeout(() => resolve("ok"), 600)
+ *   oncancel(() => {
+ *     clearTimeout(timer)
+ *     reject("cancelled")
+ *   })
+ * })
+ * p.then(v => console.log("resolved", v))
+ *  .catch(v => console.warn("rejected", v))
+ * setTimeout(() => { p.cancel() }, 500)
+ * ```
+ */
+declare function createCancellablePromise<T>(
+  executor :(
+    resolve  : (v? :T | PromiseLike<T>) => void,
+    reject   : ((reason?:any)=>void),
+    oncancel : (f:()=>void)=>void
+  )=>void,
+) :CancellablePromise<T>
+
 // timer functions
 declare function clearInterval(id?: number): void;
 declare function clearTimeout(id?: number): void;
@@ -23,8 +51,9 @@ declare function setInterval(handler: string|Function, timeout?: number, ...argu
 declare function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 
 /** Start a timer that expires after `duration` milliseconds */
+declare function Timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
 declare function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
-interface Timer<T = void> extends Promise<T> {
+interface Timer<T = void> extends CancellablePromise<T> {
   cancel() :void
 
   then<R1=T,R2=never>(
@@ -40,6 +69,15 @@ declare class TimerCancellation extends Error {
 }
 
 /**
+ * Adds a timeout to a cancellable process.
+ * When timeout is reached, "TIMEOUT" is returned instead R.
+ */
+declare function withTimeout<
+  T extends CancellablePromise<R>,
+  R = T extends Promise<infer U> ? U : T
+>(p :T, timeout :number) :CancellablePromise<R|"TIMEOUT">
+
+/**
  * Calls f at a high frequency.
  * `time` is a monotonically-incrementing number of seconds with millisecond precision.
  * Return or throw "STOP" to end animation which resolved the promise.
@@ -52,6 +90,9 @@ interface Animation extends Promise<void> {
 /** Set to true if the script was canceled by the user */
 declare var canceled :boolean;
 
+/** Ignored value */
+declare var _ :any;
+
 /**
  * Shows a modal dialog with question and yes/no buttons.
  *
@@ -61,6 +102,50 @@ declare function confirm(question: string): Promise<bool>;
 
 /** Presents a message to the user in a disruptive way. */
 declare function alert(message: string): void;
+
+/** JSX interface for creating Figma nodes */
+declare var DOM :DOM
+interface DOM {
+  /**
+   * Create a node.
+   * Nodes created with createElement are initially hidden and automatically
+   * removed when the script ends, unless added to the scene explicitly.
+   *
+   * Can be used to created trees of nodes, e.g.
+   *   let f = DOM.createElement(Frame, null,
+   *     DOM.createElement(Rectangle),
+   *     DOM.createElement(Text, {characters:"Hello", y:110}) )
+   *   figma.currentPage.appendChild(f)
+   */
+  createElement<N extends BaseNode, P extends Partial<N>>(
+    cons        :(props?:P|null)=>N,
+    props?      :P | null,
+    ...children :BaseNode[]
+  ): N
+
+  /**
+   * Create a node by name.
+   * Name starts with a lower-case character. e.g. "booleanOperation".
+   */
+  createElement(
+    kind        :string,
+    props?      :{[k:string]:any} | null,
+    ...children :never[]
+  ): SceneNode
+
+  // TODO: Consider defining types for all known names.
+  //       We could define a `nodeNames:{"name":RectangleNode, ...}` type which can
+  //       then be used to do `keyof` to build a single type that expresses all node types.
+  //
+  // Note: Currently Monaco/TypeScript does not provide result type support for
+  //       JSX, so doing this has little to no upside.
+  //
+  // createElement(
+  //   kind        :"rectangle",
+  //   props?      :Partial<RectangleNode> | null,
+  //   ...children :never[]
+  // ): RectangleNode
+}
 
 
 // ------------------------------------------------------------------------------------
@@ -89,7 +174,7 @@ declare function fetchImg(input: RequestInfo, init?: RequestInit): Promise<Img>;
 // Img
 
 /** Drawable image. Accepts a URL or image data. Can be passed to print for display. */
-declare interface Img<DataType=null|Uint8Array> {
+interface Img<DataType=null|Uint8Array> {
   type        :string      // mime type
   width       :number      // 0 means "unknown"
   height      :number      // 0 means "unknown"
@@ -193,21 +278,30 @@ type Shape = BooleanOperationNode
            | VectorNode
 
 /** Get the current selection in Figma */
-declare function selection(): ReadonlyArray<SceneNode>;
+declare function selection() :ReadonlyArray<SceneNode>;
 /** Get the nth currently-selected node in Figma */
-declare function selection(index :number): SceneNode|null;
+declare function selection(index :number) :SceneNode|null;
 
 /** Set the current selection. Non-selectable nodes of n, like pages, are ignored. */
-declare function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void;
+declare function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>>(n :T) :T;
 
 /** Version of Figma plugin API that is currently in use */
-declare var apiVersion: string
+declare var apiVersion :string
 
 /** Viewport */
-declare var viewport: ViewportAPI
+declare var viewport :ViewportAPI
 
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
-declare var MIXED: symbol
+declare var MIXED :symbol
+
+/** Current page. Equivalent to figma.currentPage */
+declare var currentPage :PageNode
+
+/**
+ * Add node to current page.
+ * Equivalent to `(figma.currentPage.appendChild(n),n)`
+ */
+declare function addToPage<N extends SceneNode>(n :N) :N
 
 /**
  * Store data on the user's local machine. Similar to localStorage.
@@ -215,44 +309,47 @@ declare var MIXED: symbol
  */
 declare var clientStorage: ClientStorageAPI
 
+type NodeProps<N> = Partial<Omit<N,"type">>
 
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
 //
 /** Creates a new Page */
-declare function Page(props? :Partial<PageNode>): PageNode;
+declare function Page(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
 /** Creates a new Rectangle */
-declare function Rectangle(props? :Partial<RectangleNode>) :RectangleNode;
+declare function Rectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
 /** Creates a new Line */
-declare function Line(props? :Partial<LineNode>): LineNode;
+declare function Line(props? :NodeProps<LineNode>|null): LineNode;
 /** Creates a new Ellipse */
-declare function Ellipse(props? :Partial<EllipseNode>): EllipseNode;
+declare function Ellipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
 /** Creates a new Polygon */
-declare function Polygon(props? :Partial<PolygonNode>): PolygonNode;
+declare function Polygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
 /** Creates a new Star */
-declare function Star(props? :Partial<StarNode>): StarNode;
+declare function Star(props? :NodeProps<StarNode>|null): StarNode;
 /** Creates a new Vector */
-declare function Vector(props? :Partial<VectorNode>): VectorNode;
+declare function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
 /** Creates a new Text */
-declare function Text(props? :Partial<TextNode>): TextNode;
+declare function Text(props? :NodeProps<TextNode>|null): TextNode;
 /** Creates a new BooleanOperation */
-declare function BooleanOperation(props? :Partial<BooleanOperationNode>): BooleanOperationNode;
+declare function BooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
 /** Creates a new Frame */
-declare function Frame(props? :Partial<FrameNode>): FrameNode;
+declare function Frame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
 /** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
-declare function Group(children :ReadonlyArray<BaseNode>, props? :Partial<GroupNode & {index :number}>): GroupNode;
+declare function Group(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
+declare function Group(...children :SceneNode[]): GroupNode;
 /** Creates a new Component */
-declare function Component(props? :Partial<ComponentNode>): ComponentNode;
+declare function Component(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
 /** Creates a new Slice */
-declare function Slice(props? :Partial<SliceNode>): SliceNode;
+declare function Slice(props? :NodeProps<SliceNode>|null): SliceNode;
 /** Creates a new PaintStyle */
-declare function PaintStyle(props? :Partial<PaintStyle>): PaintStyle;
+declare function PaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
 /** Creates a new TextStyle */
-declare function TextStyle(props? :Partial<TextStyle>): TextStyle;
+declare function TextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
 /** Creates a new EffectStyle */
-declare function EffectStyle(props? :Partial<EffectStyle>): EffectStyle;
+declare function EffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
 /** Creates a new GridStyle */
-declare function GridStyle(props? :Partial<GridStyle>): GridStyle;
+declare function GridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
+
 
 
 // Type guards, nodes
@@ -373,16 +470,16 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 
 
 /** Returns the first node encountered in scope which the predicate returns */
-function findOne<R extends SceneNode>(scope :BaseNode, p :(n :PageNode|SceneNode) => R|false) :R|null
+declare function findOne<R extends SceneNode>(scope :BaseNode, p :(n :PageNode|SceneNode) => R|false) :R|null
 /** Returns the first node encountered in scope for which predicate returns a truthy value for */
-function findOne(scope :DocumentNode, p :(n :PageNode|SceneNode) => boolean|undefined) :PageNode|SceneNode|null
+declare function findOne(scope :DocumentNode, p :(n :PageNode|SceneNode) => boolean|undefined) :PageNode|SceneNode|null
 /** Returns the first node encountered in scope for which predicate returns a truthy value for */
-function findOne(scope :PageNode|SceneNode, p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+declare function findOne(scope :PageNode|SceneNode, p :(n :SceneNode) => boolean|undefined) :SceneNode|null
 
 /** Returns the first node on the current page which the predicate returns */
-function findOne<R extends SceneNode>(p :(n :SceneNode) => R|false) :R|null
+declare function findOne<R extends SceneNode>(p :(n :SceneNode) => R|false) :R|null
 /** Returns the first node on the current page for which predicate returns a truthy value for */
-function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+declare function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
 
 
 /**
@@ -471,6 +568,12 @@ declare namespace scripter {
 
   /** Close scripter, optionally showing a message (e.g. reason, status, etc) */
   function close(message? :string) :void
+
+  /** Register a function to be called when the script ends */
+  function addEndCallback(f :Function) :void
+
+  /** Unregister a function to be called when the script ends */
+  function removeEndCallback(f :Function) :void
 
   /** A function to be called when the script ends */
   var onend :()=>void
@@ -567,6 +670,15 @@ declare namespace libvars {
   }
 }
 
+
+// ------------------------------------------------------------------------------------
+declare namespace Base64 {
+  /** Encode data as base-64 */
+  function encode(data :Uint8Array|ArrayBuffer|string) :string
+
+  /** Decode base-64 encoded data */
+  function decode(encoded :string) :Uint8Array
+}
 
 
 // ------------------------------------------------------------------------------------
