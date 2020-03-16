@@ -2,6 +2,8 @@
 
 A Figma plugin that runs little scrips directly in Figma.
 
+[Install in Figma...](https://figma.com/c/plugin/757836922707087381/)
+
 
 ## Local development
 
