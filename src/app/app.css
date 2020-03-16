@@ -539,6 +539,10 @@ body.windowWidthSmall #toolbar .title.focus {
   /*display: flex;*/
   display: none;
 
+  /* match figma dialog corner radius */
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+
   & .message {
     flex: 1 1 auto;
     align-items: center;
