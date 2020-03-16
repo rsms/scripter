@@ -24,6 +24,31 @@ type bool  = boolean
 /** Promise which can be cancelled */
 interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
 
+/**
+ * Creates a cancellable Promise.
+ *
+ * Example:
+ * ```
+ * let p = createCancellablePromise((resolve, reject, oncancel) => {
+ *   let timer = setTimeout(() => resolve("ok"), 600)
+ *   oncancel(() => {
+ *     clearTimeout(timer)
+ *     reject("cancelled")
+ *   })
+ * })
+ * p.then(v => console.log("resolved", v))
+ *  .catch(v => console.warn("rejected", v))
+ * setTimeout(() => { p.cancel() }, 500)
+ * ```
+ */
+ function createCancellablePromise<T>(
+  executor :(
+    resolve  : (v? :T | PromiseLike<T>) => void,
+    reject   : ((reason?:any)=>void),
+    oncancel : (f:()=>void)=>void
+  )=>void,
+) :CancellablePromise<T>
+
 // timer functions
  function clearInterval(id?: number): void;
  function clearTimeout(id?: number): void;
@@ -261,7 +286,7 @@ type Shape = BooleanOperationNode
  function selection(index :number) :SceneNode|null;
 
 /** Set the current selection. Non-selectable nodes of n, like pages, are ignored. */
- function setSelection(n :BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>) :void;
+ function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>>(n :T) :T;
 
 /** Version of Figma plugin API that is currently in use */
  var apiVersion :string
