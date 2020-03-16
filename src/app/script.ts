@@ -313,6 +313,17 @@ export class Script extends EventEmitter<ScriptEventMap> {
   }
 
 
+  mergeApply(b :Script) {
+    let a = this
+    if (a.meta.modifiedAt > b.meta.modifiedAt) {
+      return
+    }
+    // apply data of B
+    a.body = b.body
+    a.name = b.name
+  }
+
+
   toString() :string {
     return `script#${this.meta.id}` + (this.meta.guid ? `/${this.meta.guid}` : "")
   }

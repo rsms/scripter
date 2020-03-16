@@ -248,8 +248,11 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       if (s.meta.guid) {
         let a = byGUID.get(s.meta.guid)
         if (a) {
+          let b = s
           console.warn(`[script-data] detected duplicate GUID`,
-            { "script meta 1":a.meta, "script meta 2":m })
+            { "script A meta":a.meta, "script B meta":b.meta }, "(merging)")
+          a.mergeApply(b)
+          continue
         }
         byGUID.set(s.meta.guid, s)
       }
@@ -263,6 +266,19 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       byID.set(s.meta.id, s)
 
       scripts.push(s)
+
+      // // simulate GUID collision
+      // if (DEBUG && s.meta.guid == "3QF1IZWGhdmUqzvHdDTliW") {
+      //   dlog("SIMULATE GUID COLLISION")
+      //   let a = byGUID.get("5kQR5mJyYlK2gEhhEgHUuh")
+      //   if (a) {
+      //     let b = s
+      //     console.warn(`[script-data] detected duplicate GUID`,
+      //       { "script A meta":a.meta, "script B meta":b.meta }, "(merging)")
+      //     a.mergeApply(b)
+      //     continue
+      //   }
+      // }
     }
 
     this.scripts = scripts
