@@ -321,6 +321,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
     // apply data of B
     a.body = b.body
     a.name = b.name
+    if (a.meta.id == 0) {
+      a.meta.id = b.meta.id
+    }
   }
 
 
