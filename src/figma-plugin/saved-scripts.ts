@@ -6,8 +6,13 @@ import {
 } from "../common/messages"
 import * as consts from "./constants"
 import * as rpc from "./rpc"
-import { delayed } from "./util"
+import { delayed, sortedObject } from "./util"
 import { visit } from "./visit"
+
+
+const dlog = DEBUG ? function dlog(msg :string, ...v :any[]) {
+  console.log("[script-index]", msg, ...v)
+} : function(){}
 
 
 interface Patch {
@@ -46,8 +51,24 @@ export const SavedScriptIndex = new class {
 
   async init() {
     try {
-      await this.update()
+      dlog(`init phase starting`)
+
+      // load index from document
+      dlog(`loading index from document`)
+      await this.load()
+
+      // scan document (slow)
+      // delay scan by a little bit of time to really give all the CPU to booting up Monaco in the UI
+      dlog(`initial scan starting`)
+      await delayed(500, ()=> this.scanForChanges(ScanPriority.Low) )
+      dlog(`initial scan completed`)
+
+      // init is complete
+      dlog(`init phase completed`)
       this._initPromiseResolve()
+
+      // start background scan
+      dlog(`background scan starting`)
       this.scanInBackground()
     } catch (err) {
       console.error(`PLEASE REPORT: Scripter SavedScriptIndex init failure: ${err.stack||err}`)
@@ -56,6 +77,7 @@ export const SavedScriptIndex = new class {
 
 
   patchIndex(patches :Patch[]) {
+    dlog(`patch`, patches)
     let index = Object.assign({}, this.index)
     let changes = 0
     for (let p of patches) {
@@ -81,12 +103,15 @@ export const SavedScriptIndex = new class {
 
 
   setIndex(index :SavedScriptIndexData) {
+    index = sortedObject(index)
     let guids = Object.keys(index)
     let indexJSON = JSON.stringify(index)
     if (this.guids.length == guids.length && indexJSON == JSON.stringify(this.index)) {
       // no change; avoid sending message to UI and avoid writing to Figma
+      dlog(`setIndex no-op`)
       return
     }
+    dlog(`setIndex index changed\n  prev: ${JSON.stringify(this.index)}\n  next: ${indexJSON}`)
     this.index = index
     this.guids = guids
     figma.currentPage.setPluginData(consts.dataPrivateIndexKey, indexJSON)
@@ -122,7 +147,7 @@ export const SavedScriptIndex = new class {
   }
 
 
-  async update() :Promise<void> {
+  async load() :Promise<void> {
     let index :SavedScriptIndexData = {}
 
     // loading a saved index
@@ -135,10 +160,6 @@ export const SavedScriptIndex = new class {
         console.error("SavedScriptIndex.update failed to parse guidsData from plugin data")
       }
     }
-
-    // scan document (slow)
-    // delay scan by a little bit of time to really give all the CPU to booting up Monaco in the UI
-    return delayed(500, ()=> this.scanForChanges(ScanPriority.Low) )
   }
 
 
@@ -161,7 +182,9 @@ export const SavedScriptIndex = new class {
 
 
   async scanForChanges(priority :ScanPriority) :Promise<void> {
+    dlog(`scan start`)
     let index = await this.scanPage(figma.currentPage, priority)
+    dlog(`scan finished`)
     // TODO: scan all pages and merge index
     this.setIndex(index)
   }
@@ -183,7 +206,7 @@ export const SavedScriptIndex = new class {
       200
     )
 
-    visit(page, maxdepth, maxtime, n => {
+    await visit(page, maxdepth, maxtime, n => {
       if (n.type == "GROUP") {
         if (n.children.length == 1 && n.children[0].type == "FRAME") {
           return true  // let's visit this group
