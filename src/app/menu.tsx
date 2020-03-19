@@ -172,18 +172,6 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     }
   }
 
-  onClickLegacy = () => {
-    if (confirm(
-      "If you used Scripter before Sep 30, 2019, this allows you to retrieve old scripts.\n\n" +
-      "When clicking the OK button, the plugin window will switch to legacy Scripter.\n" +
-      "Copy your scripts from there.\n" +
-      "Restart Scripter when you are done.\n\n" +
-      "Continue?"
-    )) {
-      document.location.href = `https://rsms.me/scripter-legacy/?v=${BUILD_VERSION}`
-    }
-  }
-
   render() {
     // TODO: consider adding a button to "Reset defaults..." that deletes the database.
     let currentScriptId = this.state.currentScriptId
@@ -335,10 +323,6 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           </select>
         </label>
       </div>
-      <h4>Misc</h4>
-      <ul>
-        <li onClick={this.onClickLegacy}>Access old scripts...</li>
-      </ul>
     </div>
     )
   }
