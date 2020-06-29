@@ -22,8 +22,7 @@ const outdir = path.join(builddir, isDevMode ? "dev" : "release")
 return {
   mode,
 
-  // This is necessary because Figma's 'eval' works differently than normal eval
-  devtool: isDevMode ? 'inline-source-map' : false,
+  devtool: false,
 
   entry: {
     app: "./app.ts",
@@ -118,16 +117,22 @@ return {
 
   // see https://github.com/webpack-contrib/mini-css-extract-plugin#minimizing-for-production
   optimization: isDevMode ? {} : {
+    minimize: true,
     minimizer: [
       new TerserJSPlugin({
         cache: path.join(builddir, '.terser-cache'),
         parallel: true,
+        sourceMap: true,
       }),
       new OptimizeCSSAssetsPlugin({}),
     ],
   },
 
   plugins: [
+
+    new webpack.SourceMapDevToolPlugin({
+      filename: isDevMode ? '[name].js.map' : '[name].[hash].js.map',
+    }),
 
     new webpack.DefinePlugin({
       DEBUG: isDevMode ? "true" : "false",
