@@ -2,10 +2,14 @@ import { EventEmitter } from "./event"
 
 const print = console.log.bind(console)
 
-const _indexedDB = (window.indexedDB
-                 || window["mozIndexedDB"]
-                 || window["webkitIndexedDB"]
-                 || window["msIndexedDB"]) as IDBFactory
+const _indexedDB = (typeof window != "undefined") ? (
+   window.indexedDB
+|| window["mozIndexedDB"]
+|| window["webkitIndexedDB"]
+|| window["msIndexedDB"]) : null as unknown as IDBFactory
+
+
+export const supported = !!_indexedDB
 
 
 // UpgradeFun is a function provided to Database.open and is called when an upgrade is needed.
@@ -113,11 +117,41 @@ export class Database extends EventEmitter<DatabaseEventMap> {
 
   _lastSnapshot :DatabaseSnapshot
   _broadcastChannel :BroadcastChannel|undefined
+  _requirePromise :Promise<Database|null>|null = null
 
   constructor(name :string, version :number) {
     super()
     this.name = name
     this.version = version
+  }
+
+  // require is a high-level function that can be used instead of open() to cause a database
+  // to be opened lazily and just once. It also provides an easy safety net for hosts that
+  // lack IndexedDB support.
+  //
+  // Example use:
+  //
+  //   const db = new xdb.Database("mydb", 1)
+  //   const useDB = () => localdb.require(async t => {
+  //     log(`upgrade database ${t.prevVersion} -> ${t.nextVersion}`)
+  //     if (t.prevVersion < 1) {
+  //       t.createStore("users", { keyPath: "email" })
+  //     }
+  //   })
+  //   async function saveUser(user) {
+  //     if (await useDB()) {
+  //       return db.set("users", user)
+  //     }
+  //   }
+  //
+  require(upgradefun? :UpgradeFun) :Promise<Database|null> {
+    if (!supported) {
+      return Promise.resolve(null)
+    }
+    if (!this._requirePromise) {
+      this._requirePromise = this.open(upgradefun).then(() => this)
+    }
+    return this._requirePromise
   }
 
   // open the database, creating and/or upgrading it as needed using optional upgradefun
