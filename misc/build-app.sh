@@ -16,7 +16,7 @@ webpack --mode=production --progress --display=errors-only "--output-path=$rootd
 
 wait
 popd > /dev/null
-mv -f docs/resources.* docs/resources.js
+mv -f docs/resources.*.js docs/resources.js
 
 # remove "resources" script tag added by webpack
 node <<_JS_
