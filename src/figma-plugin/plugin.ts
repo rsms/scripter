@@ -34,6 +34,13 @@ function main() {
     visible: false,
   })
 
+  // load window size from figma.clientStorage
+  restoreWindowConfig().then(ok => {
+    if (ok) {
+      figma.ui.show()
+    }
+  })
+
   // message dispatch
   figma.ui.onmessage = msg => {
     // dlog("plugin recv", JSON.stringify(msg, null, 2))
@@ -58,6 +65,7 @@ function main() {
 
     case "window-config":
       windowConfig(msg as WindowConfigMsg)
+      saveWindowConfig(msg as WindowConfigMsg)
       break
 
     case "save-script":
@@ -86,6 +94,38 @@ function main() {
 
   // attempt to load a script from selection
   loadScriptFromSelection()
+}
+
+
+const windowConfigStorageKey = "windowConfig"
+
+async function restoreWindowConfig() :Promise<boolean> {
+  let ok = false
+  await figma.clientStorage.getAsync(windowConfigStorageKey)
+    .then((data :WindowConfigMsg|undefined|null) => {
+      dlog(`getAsync("windowSize") =>`, data)
+      if (data) {
+        try {
+          windowConfig(data)
+          ok = true
+        } catch (err) {
+          console.error(`windowConfig in restoreWindowConfig: ${err.stack||err}`)
+        }
+      }
+    })
+    .catch(err => {
+      console.error(`getAsync("${windowConfigStorageKey}") => ${err.stack||err}`)
+    })
+  return ok
+}
+
+
+function saveWindowConfig(config :WindowConfigMsg) {
+  figma.clientStorage.setAsync(windowConfigStorageKey, config).then(() => {
+    dlog(`setAsync("${windowConfigStorageKey}") => OK`)
+  }).catch(err => {
+    console.error(`setAsync("${windowConfigStorageKey}") => ${err.stack||err}`)
+  })
 }
 
 
