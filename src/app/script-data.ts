@@ -249,11 +249,11 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
         let a = byGUID.get(s.meta.guid)
         if (a) {
           let b = s
-          console.warn(`[script-data] detected duplicate GUID`,
+          console.debug && console.debug(`[script-data] detected duplicate GUID`,
             { "script A meta":a.meta, "script B meta":b.meta }, "(merging)")
           a.mergeApply(b)
           a.save()
-          b.delete()
+          // b.delete()
           continue
         }
         byGUID.set(s.meta.guid, s)
