@@ -1,0 +1,86 @@
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<script>(async ()=>{
+
+let worker = null
+let workerPromise = null
+
+function getZipWorker() {
+  if (workerPromise) {
+    return workerPromise
+  }
+  return workerPromise = new Promise((resolve, reject) => {
+    let requestId = 0
+    let requests = new Map()
+
+    function workerRequest(callName, callInput) {
+      let req = { resolve(){}, reject(){} }
+      let p = new Promise((res, rej) => {
+        req.resolve = res
+        req.reject = rej
+      })
+      p.id = (requestId++).toString(36)
+      requests.set(p.id, req)
+      worker.postMessage([callName, p.id, callInput])
+      return p
+    }
+
+    function finalizeRequest(msg) {
+      let r = requests.get(msg[1])
+      if (r) {
+        requests.delete(msg[1])
+        if (msg[2] == "ok") {
+          r.resolve(msg[3])
+        } else {
+          r.reject(msg[3])
+        }
+      }
+    }
+
+    worker = new Worker("worker.js")
+    worker.onmessage = ev => {
+      let msg = ev.data
+      switch (msg[0]) {
+
+      case "result":
+        finalizeRequest(msg)
+        break
+
+      case "ready": resolve(new class ZipWorker {
+        create(props) {
+          return workerRequest("create", props)
+        }
+      }) ; break
+      default:
+        reject(new Error(`[zip] unexpected message from worker: ${JSON.stringify(msg)}`))
+        break
+      }
+    }
+  })
+}
+
+let zip = await getZipWorker()
+console.log("zip", zip)
+
+let buf = await zip.create({
+  name: "foo",
+  files: [
+    { name: "hello.txt", contents: "Hello\n", },
+    { name: "hello2.txt", contents: "Hello\n", },
+  ],
+})
+
+let blob = new Blob([ buf ], {type : "application/zip"})
+let objectURL = URL.createObjectURL(blob)
+setTimeout(() => {
+  URL.revokeObjectURL(objectURL)
+}, 1000)
+document.location.href = objectURL
+
+console.log(buf)
+
+
+})()</script>
+</body>

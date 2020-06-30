@@ -3,6 +3,7 @@ import ReactDOM from "react-dom"
 import { Script } from "./script"
 import { db } from "./data"
 import { scriptsData } from "./script-data"
+import { exportAllScripts } from "./script-export"
 import { editor } from "./editor"
 import { EventEmitter } from "./event"
 import { config } from "./config"
@@ -87,6 +88,7 @@ interface MenuState {
   referenceScripts :Script[]
   currentScriptId :number
   configVersion :number
+  isExportingScripts :boolean
 }
 
 export class MenuUI extends React.Component<MenuProps,MenuState> {
@@ -99,6 +101,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       referenceScripts: scriptsData.referenceScripts,
       currentScriptId: editor.currentScriptId,
       configVersion: config.version,
+      isExportingScripts: false,
     }
   }
 
@@ -172,17 +175,29 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     }
   }
 
+  onExportAllScripts = (ev :any) => {
+    dlog("onExportAllScripts")
+    this.setState({ isExportingScripts: true })
+    exportAllScripts().then(() => {
+      this.setState({ isExportingScripts: false })
+    }).catch(err => {
+      console.error(`failed to export scripts: ${err.stack||err}`)
+      this.setState({ isExportingScripts: false })
+    })
+  }
+
   render() {
     // TODO: consider adding a button to "Reset defaults..." that deletes the database.
-    let currentScriptId = this.state.currentScriptId
+    const state = (this as any).state as MenuState // fix for IDE type issues
+    let currentScriptId = state.currentScriptId
     let windowSizeVal = config.windowSize.map(v => WindowSize[v]).join(",")
 
     let examples = <div className="examples">
-      {Object.keys(this.state.exampleScripts).map(cat =>
+      {Object.keys(state.exampleScripts).map(cat =>
         <div key={cat} className="category">
           {cat ? <h4>{cat}</h4> : <h3>Examples</h3>}
           <ul>
-            {this.state.exampleScripts[cat].map(s =>
+            {state.exampleScripts[cat].map(s =>
               <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} />
             )}
           </ul>
@@ -198,9 +213,9 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
 
     return (
     <div>
-      {this.state.scripts.length > 0 ?
+      {state.scripts.length > 0 ?
         <ul>
-        {this.state.scripts.map(s =>
+        {state.scripts.map(s =>
           <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} />
         )}
         </ul> :
@@ -209,7 +224,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       {examples}
       <h3>References</h3>
       <ul>
-      {this.state.referenceScripts.map(s =>
+      {state.referenceScripts.map(s =>
         <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} /> )}
       </ul>
       <h3>Settings</h3>
@@ -321,6 +336,11 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           <option value={"XLARGE,LARGE"}  >XL×L  window</option>
           <option value={"XLARGE,XLARGE"} >XL×XL window</option>
           </select>
+        </label>
+        <label className="extra-actions">
+          <button disabled={state.isExportingScripts}
+                  onClick={state.isExportingScripts ? ()=>{} : this.onExportAllScripts}
+                  >{state.isExportingScripts ? "Exporting..." : "Export all scripts"}</button>
         </label>
       </div>
     </div>

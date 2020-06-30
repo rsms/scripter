@@ -288,11 +288,36 @@ body.windowWidthSmall #toolbar .title.focus {
 
   & * { font-size: inherit; }
 
-  & .button {
+  & .button { /* square button */
     border-radius: 2px;
     width:var(--menuItemHeight);
     height:var(--menuItemHeight);
     margin: 8px 8px 0 10px;
+  }
+
+  & button {
+    border-radius: 6px;
+    background: white;
+    padding: 0 8px;
+    height: 24px;
+    border: 1px solid rgba(0,0,0,0.1);
+    font-weight:500;
+    box-shadow:
+      0 0 0 0.5px rgba(0,0,0,0.6),
+      0 1px 1px 0 rgba(0,0,0,0.1),
+      0 1px 3px 0 rgba(0,0,0,0.05);
+    outline: none;
+    flex: 1 1 auto;
+    margin-right: 8px;
+
+    &:active {
+      background: #ddd;
+    }
+  }
+
+  & .extra-actions {
+    display: flex;
+    padding-top: 16px;
   }
 
   & h3, & h4 {
