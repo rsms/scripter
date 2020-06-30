@@ -253,7 +253,7 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
             { "script A meta":a.meta, "script B meta":b.meta }, "(merging)")
           a.mergeApply(b)
           a.save()
-          // b.delete()
+          b.delete()
           continue
         }
         byGUID.set(s.meta.guid, s)
