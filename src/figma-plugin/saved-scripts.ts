@@ -10,9 +10,10 @@ import { delayed, sortedObject } from "./util"
 import { visit } from "./visit"
 
 
-const dlog = DEBUG ? function dlog(msg :string, ...v :any[]) {
-  console.log("[script-index]", msg, ...v)
-} : function(){}
+// const dlog = DEBUG ? function dlog(msg :string, ...v :any[]) {
+//   console.log("[script-index]", msg, ...v)
+// } : function(){}
+const dlog = function(..._:any){}
 
 
 interface Patch {

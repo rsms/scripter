@@ -10,13 +10,16 @@
     "@types/react": "^16.9.16",
     "@types/react-dom": "^16.9.4",
     "autoprefixer": "^9.7.3",
+    "browserify": "^16.5.1",
     "caniuse-lite": "^1.0.30001090",
     "copy-webpack-plugin": "^5.1.0",
     "css-loader": "^3.3.0",
     "cssnano": "^4.1.10",
+    "esbuild": "^0.5.16",
     "figplug": "0.1.17",
     "html-webpack-inline-source-plugin": "0.0.10",
     "html-webpack-plugin": "^3.2.0",
+    "jsdom": "^16.2.2",
     "livereload": "^0.9.1",
     "mini-css-extract-plugin": "^0.8.0",
     "monaco-editor-webpack-plugin": "1.9.0",
@@ -33,7 +36,7 @@
     "typescript": "^3.7.3",
     "uglify-es": "^3.3.9",
     "url-loader": "^2.3.0",
-    "webpack": "4.42.0",
-    "webpack-cli": "^3.3.11"
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.12"
   }
 }

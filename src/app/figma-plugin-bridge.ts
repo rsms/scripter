@@ -9,6 +9,8 @@ import {
   UIInputRequestMsg, UIInputResponseMsg, isUIRangeInputRequest,
   LoadScriptMsg,
   UpdateSavedScriptsIndexMsg,
+  WorkerCreateRequestMsg, WorkerCreateResponseMsg,
+  WorkerMessageMsg, WorkerErrorMsg, WorkerCtrlMsg,
 } from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
@@ -19,6 +21,8 @@ import { InputViewZone } from "./viewzone"
 import { UIInput } from "./ui-input"
 import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 import savedScripts from "./saved-scripts"
+import * as workerTemplate from "./worker-template"
+import jsdomInfo from "./jsdom_info"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version
@@ -33,8 +37,8 @@ import savedScripts from "./saved-scripts"
 // })()
 
 
-export function sendMsg<T extends Msg>(msg :T) {
-  parent.postMessage(msg, '*')
+export function sendMsg<T extends Msg>(msg :T, transfer? :Transferable[]) {
+  parent.postMessage(msg, '*', transfer)
 }
 
 
@@ -111,6 +115,269 @@ function rpc_fetch(req :FetchRequestMsg) {
     dlog("fetch response", response)
     return response
   })
+}
+
+
+interface ScripterWorkerI {
+  postMessage(message :any, transfer? :Transferable[]) :void
+  terminate() :void
+  onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
+  onmessageerror :(this: ScripterWorkerI, ev: MessageEvent) => any
+  onerror        :(this: ScripterWorkerI, ev: ErrorEvent) => any
+}
+
+
+const iframeWorkers = new Map<MessageEventSource,IFrameWorker>()
+let iframeWorkersInit = false
+
+function worker_iframeInit() {
+  if (iframeWorkersInit) {
+    return
+  }
+  iframeWorkersInit = true
+
+  window.addEventListener('message', ev => {
+    let worker = iframeWorkers.get(ev.source)
+    //dlog("iframe supervisor got message", ev, {worker})
+    if (worker) {
+      worker._onmessage(ev)
+      ev.stopPropagation()
+      ev.preventDefault()
+    }
+  })
+
+  window.addEventListener('messageerror', ev => {
+    let worker = iframeWorkers.get(ev.source)
+    //dlog("iframe supervisor got messageerror", ev, {worker})
+    if (worker) {
+      worker.onmessageerror(ev)
+      ev.stopPropagation()
+      ev.preventDefault()
+    }
+  })
+}
+
+
+class IFrameWorker implements ScripterWorkerI {
+  readonly workerId :string
+  readonly frame :HTMLIFrameElement
+  readonly recvq :{ message :any, transfer? :Transferable[] }[] = []
+
+  onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
+  onmessageerror :(this: ScripterWorkerI, ev: MessageEvent) => any
+  onerror        :(this: ScripterWorkerI, ev: ErrorEvent) => any
+
+  ready = false
+  closed = false
+
+  constructor(workerId :string, scriptBody :string) {
+    this.workerId = workerId
+    this.frame = document.createElement("iframe")
+    const frame = this.frame
+
+    worker_iframeInit()
+
+    frame.setAttribute("sandbox", "allow-scripts")
+    frame.onerror = err => {
+      this.onerror(err as any as ErrorEvent) // FIXME
+    }
+
+    const S = frame.style
+    S.position = "fixed"
+    S.zIndex = "-1"
+    S.left = "10px"
+    S.top = "10px"
+    S.width = "800px"
+    S.height = "600px"
+    S.visibility = "hidden"
+    S.pointerEvents = "none"
+    document.body.appendChild(frame)
+
+    iframeWorkers.set(frame.contentWindow, this)
+
+    let blobParts = [
+      `<html><head></head><body><script type='text/javascript'>`,
+      workerTemplate.frame[0],  // generated from worker-frame-template.js
+      workerTemplate.worker[0], // generated from worker-template.js
+      scriptBody,
+      workerTemplate.worker[1],
+      workerTemplate.frame[1],,
+      `</script></body></html>`,
+    ]
+    let url = URL.createObjectURL(new Blob(blobParts, {type: "text/html;charset=utf8"} ))
+    frame.src = url
+    setTimeout(() => { URL.revokeObjectURL(url) }, 1)
+  }
+
+  onReady() {
+    dlog("iframe ready. recvq:", this.recvq)
+    this.ready = true
+    for (let { message, transfer } of this.recvq) {
+      this.postMessage(message, transfer)
+    }
+    this.recvq.length = 0
+  }
+
+  _onmessage(ev :MessageEvent) {
+    if (ev.data === "__scripter_iframe_ready") {
+      this.ready || this.onReady()
+    } else if (ev.data === "__scripter_iframe_close") {
+      this.terminate()
+    } else {
+      this.onmessage(ev)
+    }
+  }
+
+  postMessage(message :any, transfer? :Transferable[]) :void {
+    dlog("postmessage to iframe", message)
+    if (this.ready) {
+      this.frame.contentWindow.postMessage(message, "*", transfer)
+    } else {
+      this.recvq.push({ message, transfer })
+    }
+  }
+
+  terminate() :void {
+    if (this.closed) {
+      return
+    }
+    this.closed = true
+    iframeWorkers.delete(this.frame.contentWindow)
+    this.frame.parentElement.removeChild(this.frame)
+    this.frame.src = "about:blank"
+    ;(this as any).frame = null
+  }
+}
+
+
+function worker_createWebWorker(workerId :string, scriptBody :string) :ScripterWorkerI {
+  let blobParts = [
+    workerTemplate.worker[0], // generated from worker-template.js
+    scriptBody,
+    workerTemplate.worker[1]
+  ]
+  let workerURL = URL.createObjectURL(new Blob(blobParts, {type: "application/javascript"} ))
+  let worker = new Worker(workerURL)
+  URL.revokeObjectURL(workerURL)
+  return worker as any as ScripterWorkerI
+}
+
+
+let workerIdGen = 0
+let workers = new Map<string,ScripterWorkerI>()
+
+function rpc_worker_create(req :WorkerCreateRequestMsg) {
+  // WorkerCreateRequestMsg, WorkerCreateResponseMsg,
+  rpc_reply<WorkerCreateResponseMsg>(req.id, "worker-create-res", async () => {
+    dlog("App todo create worker", req)
+
+    let workerId = (workerIdGen++).toString(36)
+    let worker = (
+      // launch an iframe-based worker
+      req.jsdom ? new IFrameWorker(workerId, req.js) :
+      worker_createWebWorker(workerId, req.js)
+    )
+
+    workers.set(workerId, worker)
+
+    // forward messages to the plugin process
+    worker.onmessage = ev => {
+      dlog(`app got message from worker#${workerId}`, ev.data)
+      let d = ev.data.data
+      if (!d) {
+        return
+      }
+      if (d.type == "__scripter_close") {
+        return worker_onclose(workerId)
+      } else if (d.type == "__scripter_toplevel_err") {
+        worker.terminate()
+        sendMsg<WorkerErrorMsg>({ type: "worker-error", workerId, error: {
+          error:   d.message,
+          message: d.stack || d.message,
+        } })
+        return worker_onclose(workerId)
+      }
+      sendMsg<WorkerMessageMsg>({
+        type: "worker-message",
+        evtype: "message",
+        workerId,
+        data: ev.data.data,
+        transfer: ev.data.transfer,
+      }, ev.data.transfer)
+    }
+
+    worker.onmessageerror = (ev :MessageEvent) => {
+      sendMsg<WorkerMessageMsg>({
+        type: "worker-message",
+        evtype: "messageerror",
+        workerId,
+        data: ev.data,
+      })
+    }
+
+    worker.onerror = (ev :ErrorEvent) => {
+      console.error("worker error event", ev)
+      worker.terminate()
+      sendMsg<WorkerErrorMsg>({ type: "worker-error", workerId, error: {
+        colno:    ev.colno,
+        error:    String(ev.error),
+        filename: ev.filename,
+        lineno:   ev.lineno,
+        message:  ev.message,
+      } })
+      worker_onclose(workerId)
+    }
+
+    return {
+      workerId,
+    }
+  })
+}
+
+
+function worker_onclose(workerId :string) {
+  dlog("worker_onclose", workerId)
+  if (workers.has(workerId)) {
+    dlog("worker_onclose", workerId, "FOUND")
+    workers.delete(workerId)
+    sendMsg<WorkerCtrlMsg>({
+      type: "worker-ctrl",
+      workerId,
+      signal: "close",
+    })
+  }
+}
+
+
+function worker_get(msg :{ workerId :string }) : ScripterWorkerI | null {
+  let worker = workers.get(msg.workerId)
+  if (!worker) {
+    // this happens naturally for close & terminate messages, as close & terminate
+    // are naturally racey.
+    dlog(`ignoring message for non-existing worker#${msg.workerId||""}`, {msg})
+    return null
+  }
+  return worker
+}
+
+
+function worker_postMessage(msg :WorkerMessageMsg) {
+  let worker = worker_get(msg)
+  if (!worker) { return }
+  worker.postMessage(msg.data, msg.transfer)
+}
+
+
+function worker_ctrl(msg :WorkerCtrlMsg) {
+  // "terminate" is currently the only supported signal
+  if (msg.signal != "terminate") {
+    console.warn(`worker_ctrl unexpected signal ${msg.signal}`)
+    return
+  }
+  let worker = worker_get(msg)
+  if (!worker) { return }
+  worker.terminate()
+  worker_onclose(msg.workerId)
 }
 
 
@@ -207,6 +474,10 @@ export function init() {
   let messageHandler = Eval.setRuntime(runtime)
 
   window.onmessage = ev => {
+    if (ev.source !== parent) {
+      // message is not from the Figma plugin
+      return
+    }
     let msg = ev.data
     if (msg && typeof msg == "object") {
       switch (msg.type) {
@@ -227,6 +498,18 @@ export function init() {
       case "ui-input-request":
         rpc_ui_input(msg as UIInputRequestMsg)
         // return  // return to avoid logging these high-frequency messages
+        break
+
+      case "worker-create-req":
+        rpc_worker_create(msg as WorkerCreateRequestMsg)
+        break
+
+      case "worker-message":
+        worker_postMessage(msg as WorkerMessageMsg)
+        break
+
+      case "worker-ctrl":
+        worker_ctrl(msg as WorkerCtrlMsg)
         break
 
       case "load-script":

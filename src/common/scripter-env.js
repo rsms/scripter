@@ -842,6 +842,7 @@ env.libgeometry = F
 env.libui = F
 env.libvars = F
 env.DOM = F
+env.createWorker = F
 env.Base64 = F
 env.createCancellablePromise = F
 env.timer = F // deprecated
@@ -957,6 +958,7 @@ function _evalScript(reqId, js) {
       env0.libui = scriptLib.create_libui(reqId)
       env0.libvars = scriptLib.create_libvars(env0.libui)
       env0.DOM = new scriptLib.DOM(env0)
+      env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
 
       // Node constructors
       env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }

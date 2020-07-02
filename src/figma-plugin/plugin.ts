@@ -15,6 +15,7 @@ import {
 import * as windowSize from "../common/windowsize"
 import * as rpc from "./rpc"
 import * as scriptLibImpl from "./script-lib"
+import * as worker from "./script-lib-worker"
 import { SavedScriptIndex } from "./saved-scripts"
 import * as consts from "./constants"
 import { createScriptNode, updateScriptNode } from "./scriptnode"
@@ -70,6 +71,12 @@ function main() {
 
     case "save-script":
       saveScript(msg as SaveScriptMsg).catch(err => console.error(err.stack))
+      break
+
+    case "worker-message":
+    case "worker-error":
+    case "worker-ctrl":
+      worker.handleIncomingMessage(msg)
       break
 
     default:

@@ -10,6 +10,10 @@ rm -rf docs/app.* docs/resources.* docs/source-map-*.wasm
 
 spawn_monaco_build "$rootdir/docs" && echo "monaco is up-to-date" || true
 
+node misc/build-worker-template.js &
+bash misc/build-jsdom.sh
+wait
+
 echo "building ./src/app -> ./docs"
 pushd src/app > /dev/null
 webpack --mode=production --progress --display=errors-only "--output-path=$rootdir/docs"

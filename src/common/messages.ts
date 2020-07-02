@@ -175,3 +175,49 @@ export interface UIInputResponseMsg extends TransactionalMsg {
 // export interface ShowImageResponseMsg extends TransactionalMsg {
 //   type   :"show-image-response"
 // }
+
+
+// --------------------------------------------------------------------------
+// worker
+
+export interface WorkerCreateRequestMsg extends TransactionalMsg {
+  type   :"worker-create-req"
+  js     :string
+  jsdom? :boolean
+}
+
+export interface WorkerCreateResponseMsg extends TransactionalMsg {
+  type     :"worker-create-res"
+  workerId :string
+  error?   :WorkerError
+}
+
+export interface WorkerMessageMsg extends Msg {
+  type      :"worker-message"
+  evtype    :"message"|"messageerror"|"error"
+  workerId  :string
+  data      :any
+  transfer? :Transferable[]
+}
+
+export interface WorkerErrorMsg extends Msg {
+  type     :"worker-error"
+  workerId :string
+  error    :WorkerError
+}
+
+export interface WorkerError {
+  colno?    :number
+  error?    :any
+  filename? :string
+  lineno?   :number
+  message?  :string
+}
+
+export interface WorkerCtrlMsg extends Msg {
+  type     :"worker-ctrl"
+  workerId :string
+  signal   :"terminate" | "close"
+  // "terminate" is sent by host to worker to terminate worker
+  // "close" is sent by worker supervisor to host when worker closed
+}

@@ -17,6 +17,7 @@ import {
   getUserStackFrames,
 } from "./script-lib-runtime"
 import { DOM } from "./script-lib-dom"
+import { createCreateWorker } from "./script-lib-worker"
 import * as misc from "./script-lib-misc"
 import { fetch } from "./script-lib-misc"
 
@@ -26,6 +27,7 @@ export {
   Path,
   misc,
   fetch,
+  createCreateWorker,
 
   FetchHeaders as Headers,
   FetchResponse as Response,

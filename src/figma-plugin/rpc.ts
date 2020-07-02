@@ -118,5 +118,6 @@ export function rpc<In extends TransactionalMsg, Out extends TransactionalMsg>(
 
 
 export function sendMsg<T extends Msg>(msg :T) {
+  // Note: No transfer list in the Figma postMessage API
   figma.ui.postMessage(msg)
 }

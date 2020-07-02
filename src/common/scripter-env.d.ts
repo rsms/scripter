@@ -103,6 +103,117 @@ declare function confirm(question: string): Promise<bool>;
 /** Presents a message to the user in a disruptive way. */
 declare function alert(message: string): void;
 
+// ------------------------------------------------------------------------------------
+// worker
+
+/** Create a worker */
+declare function createWorker(script :string | ScripterWorkerFun) :ScripterWorker
+
+/** Create a worker, with virtual DOM */
+declare function createWorker(opt :ScripterCreateWorkerOptions & { DOM:true },
+                              script :string | ScripterWorkerDOMFun) :ScripterWorker
+
+/** Create a worker, with options */
+declare function createWorker(opt :ScripterCreateWorkerOptions | undefined | null,
+                              script :string | ScripterWorkerFun) :ScripterWorker
+
+
+interface ScripterWorker extends Promise<void> {
+  /** Event callback invoked when a message arrives from the worker */
+  onmessage? :((data :any)=>void) | null
+
+  /** Event callback invoked when a message error occurs */
+  onmessageerror? :((data :any)=>void) | null
+
+  /**
+   * Event callback invoked when an error occurs.
+   * When this happens, the worker should be considered defunct.
+   */
+  onerror? :((err :ScripterWorkerError)=>void) | null
+
+  /** Event callback invoked when the worker closes */
+  onclose? :()=>void
+
+  /** Send a message to the worker */
+  postMessage(msg :any, transfer?: Transferable[]) :void
+
+  /** Send a message to the worker (alias for postMessage) */
+  send<T=any>(msg :T, transfer?: Transferable[]) :void  // alias for postMessage
+
+  /**
+   * Receive a message from the worker. Resolves on the next message received.
+   * This is an alternative to event-based message processing with `onmessage`.
+   */
+  recv<T=any>() :Promise<T>
+
+  /** Request termination of the worker */
+  terminate() :this
+}
+
+interface ScripterCreateWorkerOptions {
+  /**
+   * If true, the worker will actually run in an iframe with a full DOM.
+   * Note that iframes are a little slower and blocks the UI thread.
+   * This is useful for making certain libraries work which depend on DOM features,
+   * like for example the popular D3 library.
+   */
+  DOM?: boolean
+}
+
+type ScripterWorkerFun = (self :ScripterWorkerEnv) => void|Promise<void>
+type ScripterWorkerDOMFun = (self :ScripterWorkerEnv, window :any & typeof globalThis) => void|Promise<void>
+
+interface ScripterWorkerEnv extends WindowOrWorkerGlobalScope {
+  /** Close this worker */
+  close(): void
+
+  /**
+   * Import scripts into the worker process.
+   * Async when DOM is used. Blocking in pure web workers.
+   */
+  importScripts(...urls: string[]): Promise<void>
+
+  /** Event callback invoked when a message arrives from the main Scripter script */
+  onmessage? :((ev :MessageEvent)=>void) | null
+
+  /** Event callback invoked when a message error occurs */
+  onmessageerror? :((ev :MessageEvent)=>void) | null
+
+  /** Event callback invoked when an error occurs */
+  onerror? :((err :ScripterWorkerError)=>void) | null
+
+  /** Send a message to the the main Scripter script */
+  postMessage(msg :any, transfer?: Transferable[]) :void
+
+  /** Send a message to the main Scripter script (alias for postMessage) */
+  send<T=any>(msg :T, transfer?: Transferable[]) :void  // alias for postMessage
+
+  /**
+   * Receive a message from the main Scripter script.
+   * Resolves on the next message received.
+   * This is an alternative to event-based message processing with `onmessage`.
+   */
+  recv<T=any>() :Promise<T>
+
+  /**
+   * Wrapper around importScripts() for importing a script that expects a CommonJS
+   * environment, i.e. module object and exports object. Returns the exported API.
+   * Async when DOM is used. Blocking in pure web workers.
+   */
+  importCommonJS(url :string) :Promise<any>
+}
+
+interface ScripterWorkerError {
+  readonly colno?: number;
+  readonly error?: any;
+  readonly filename?: string;
+  readonly lineno?: number;
+  readonly message?: string;
+}
+
+// ------------------------------------------------------------------------------------
+// DOM
+
 /** JSX interface for creating Figma nodes */
 declare var DOM :DOM
 interface DOM {

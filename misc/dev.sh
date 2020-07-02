@@ -66,11 +66,13 @@ ln -s $(ls -d "../../docs/zip") zip
 popd >/dev/null
 
 # figma-plugin
-node ./misc/build-scriptenv.js
+node misc/build-scriptenv.js
 $figplug build -v -g -w src/figma-plugin:build/figma-plugin &
 pids+=( $! )
 
 # app
+node misc/build-worker-template.js
+bash misc/build-jsdom.sh
 pushd src/app >/dev/null
 webpack --mode=development --display=minimal --cache --watch &
 pids+=( $! )
