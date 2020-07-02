@@ -10,10 +10,9 @@ import { ViewZones } from "./viewzones"
 import * as Eval from "./eval"
 import * as warningMessage from "./warning-message"
 import toolbar from "./toolbar"
-import { print, dlog } from "./util"
+import { print, dlog, isMac } from "./util"
 import { menu } from "./menu"
 import { LoadScriptMsg } from "../common/messages"
-
 
 const ts = monaco.languages.typescript
 
@@ -43,17 +42,19 @@ const defaultOptions :EditorOptions = {
   wordWrap: "off", // off | on | bounded | wordWrapColumn
   wrappingIndent: "same", // none | same | indent | deepIndent
 
-  scrollBeyondLastLine: false,
+  scrollBeyondLastLine: true,
   scrollBeyondLastColumn: 2,
   smoothScrolling: true, // animate scrolling to a position
 
   // fontLigatures: true,
-  showUnused: true,  // fade out unused variables
+  // showUnused: true,  // fade out unused variables
   folding: false,
   cursorBlinking: "smooth", // solid | blink | smooth | phase
   renderLineHighlight: "none",
-  renderWhitespace: "none", // none | boundary | all (default: none)
+  renderWhitespace: "selection", // none | boundary | selection | all (default: none)
   renderControlCharacters: false,
+  multiCursorModifier: isMac ? 'ctrlCmd' : 'alt',
+  dragAndDrop: true,
 
   fontSize: defaultFontSize,
   fontFamily: varspaceFontFamily,
@@ -75,12 +76,14 @@ const defaultOptions :EditorOptions = {
   acceptSuggestionOnEnter: "smart",
   suggestSelection: "recentlyUsedByPrefix", // first | recentlyUsed | recentlyUsedByPrefix
 
+  tabCompletion: "on",
+
   // "hover" configures the hover cards shown on pointer hover
   hover: {
     enabled: true, // Defaults to true.
 
     // Delay for showing the hover.
-    // delay?: number; // Defaults to 300.
+    delay: 1000,
 
     // Is the hover sticky such that it can be clicked and its contents selected?
     // sticky?: boolean; // Defaults to true.
@@ -103,10 +106,12 @@ const defaultOptions :EditorOptions = {
     // showIcons: false,
 
     // Max suggestions to show in suggestions. Defaults to 12.
-    maxVisibleSuggestions: 9,
+    // maxVisibleSuggestions: 9,
 
     // Names of suggestion types to filter.
     // filteredTypes?: Record<string, boolean>;
+
+    hideStatusBar: false,
   },
 
   scrollbar: {
@@ -456,7 +461,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       quickSuggestions:        config.quickSuggestions,
       quickSuggestionsDelay:   config.quickSuggestionsDelay,
       folding:                 config.codeFolding,
-      renderWhitespace:        config.showWhitespace ? "all" : "none",
+      renderWhitespace:        config.showWhitespace ? "all" : "selection",
       renderControlCharacters: config.showWhitespace,
       renderIndentGuides:      config.indentGuides,
       fontSize:                defaultFontSize * config.uiScale,
@@ -995,10 +1000,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       label: 'Run Script',
       keybindings: [
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-        // monaco.KeyMod.chord(
-        //   monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_K,
-        //   monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_M,
-        // )
       ],
       contextMenuGroupId: "navigation", // 1_modification
       contextMenuOrder: 0,
@@ -1007,6 +1008,25 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         return null
       }
     })
+
+    // // var myCondition1 = this.editor.createContextKey('editorHasCompletionItemProvider', false)
+    // // var myCondition2 = this.editor.createContextKey('editorReadonly', false)
+    // // this.editor.createContextKey('textInputFocus', false)
+    // this.editor.addCommand(monaco.KeyCode.Escape, (ctx :any) => {
+    //   // services available in `ctx`
+    //   console.log('my command is executing!', {ctx})
+    //   // editor.getSupportedActions()
+    // }, 'editorHasCompletionItemProvider && !editorReadonly && textInputFocus')
+
+    // monaco.languages.registerCompletionItemProvider('typescript', {
+    //   provideCompletionItems(model, position, context, token) {
+    //     token.onCancellationRequested(e => {
+    //       dlog("CANCEL")
+    //     })
+    //     dlog("SUGGEST", model)
+    //     return new Promise(r => {})
+    //   }
+    // })
 
     // this.editor.addAction({
     //   id: "scripter-stop-script",
@@ -1071,13 +1091,18 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       [monaco.KeyCode.ContextMenu]:1,
     }
     editor.onKeyDown((e: monaco.IKeyboardEvent) => {
+      // fade out toolbar
       if (!(e.keyCode in ignoreKeyPresses)) {
         toolbar.fadeOut()
       }
     })
 
-    // editor.addCommand(monaco.KeyCode.Enter | monaco.KeyCode.Ctrl, (ctx :any) => {
-    //   print("handler called with ctx:", ctx)
+    // setTimeout(() => {
+    // dlog("editor.getSupportedActions():", editor.getSupportedActions())
+    // },1000)
+
+    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_P, (ctx :any) => {
+    //   editor.trigger('', 'editor.action.quickCommand', {})
     // })
 
     // handle changes to the database that were made by another tab

@@ -110,7 +110,6 @@ async function restoreWindowConfig() :Promise<boolean> {
   let ok = false
   await figma.clientStorage.getAsync(windowConfigStorageKey)
     .then((data :WindowConfigMsg|undefined|null) => {
-      dlog(`getAsync("windowSize") =>`, data)
       if (data) {
         try {
           windowConfig(data)
@@ -128,11 +127,11 @@ async function restoreWindowConfig() :Promise<boolean> {
 
 
 function saveWindowConfig(config :WindowConfigMsg) {
-  figma.clientStorage.setAsync(windowConfigStorageKey, config).then(() => {
-    dlog(`setAsync("${windowConfigStorageKey}") => OK`)
-  }).catch(err => {
-    console.error(`setAsync("${windowConfigStorageKey}") => ${err.stack||err}`)
-  })
+  figma.clientStorage.setAsync(windowConfigStorageKey, config)
+    // .then(() => dlog(`setAsync("${windowConfigStorageKey}") => OK`))
+    .catch(err => {
+      console.error(`setAsync("${windowConfigStorageKey}") => ${err.stack||err}`)
+    })
 }
 
 

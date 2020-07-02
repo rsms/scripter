@@ -19,7 +19,7 @@ monaco.editor.defineTheme('scripter-light', {
     // { token: "delimiter.bracket", foreground: "#333333" },
   ],
   colors: {
-    'editor.foreground': '#222222',
+    'editor.foreground': '#000000',
     'editor.background': '#ffffff',  // #fefefa
     'editorCursor.foreground': '#000000', // #004499
     'editorLineNumber.foreground': '#d9d9d9',
@@ -27,7 +27,7 @@ monaco.editor.defineTheme('scripter-light', {
     // 'editorLineNumber.foreground': '#008800',
     // 'editor.inactiveSelectionBackground': '#88000015'
 
-    'editorIndentGuide.background': "#f8f8f8",
+    'editorIndentGuide.background': "#00000007", // alpha to look good when selected
 
     // 'widget.shadow': '#00000011', // Shadow color of widgets such as find/replace inside the editor.
     // 'editorWidget.background': "#fffadd", // Background color of editor widgets, such as find/replace.
@@ -50,7 +50,7 @@ monaco.editor.defineTheme('scripter-light', {
     // 'editor.findRangeHighlightBackground' // Color the range limiting the search.
     // 'editor.hoverHighlightBackground' // Highlight below the word for which a hover is shown.
 
-    // 'editor.selectionBackground': "#ff9999", // Color of the editor selection.
+    // 'editor.selectionBackground': "#fffa55", // Color of the editor selection.
     // 'editor.selectionForeground': "#000000", // Color of the selected text for high contrast.
     // 'editor.selectionHighlightBackground': "#ffffee", // Color for regions with the same content as the selection.
 

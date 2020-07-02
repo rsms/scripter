@@ -604,16 +604,12 @@ body.showMessage #editor { bottom: var(--messageHeight); }
 
 #editor {
   position: absolute;
-  left: 0; top: 0; right:0; bottom: 0;
-  /* for blur effect */
+  left: 0; top: 0; right:0; bottom: 2px;
+    /* small margin at end to leave room for rounded corners in figma window */
   font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'ss04' 1;
 
   & .monaco-editor {
     background: transparent;
-
-    & .monaco-editor-background {
-      background: transparent;
-    }
 
     & .margin {
       background: transparent;
