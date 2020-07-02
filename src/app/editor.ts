@@ -1101,9 +1101,18 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // dlog("editor.getSupportedActions():", editor.getSupportedActions())
     // },1000)
 
-    // editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_P, (ctx :any) => {
-    //   editor.trigger('', 'editor.action.quickCommand', {})
-    // })
+    // shift-cmd-P / shift-ctrl-P for quick command in addition to F1
+    editor.addCommand(
+        monaco.KeyMod.CtrlCmd
+      | monaco.KeyMod.Shift
+      | monaco.KeyCode.KEY_P,
+      (ctx :any) => { editor.trigger('', 'editor.action.quickCommand', {}) }
+    )
+
+    editor.addCommand(
+      monaco.KeyCode.F12,
+      (ctx :any) => { editor.trigger('', 'editor.action.revealDefinition', {}) }
+    )
 
     // handle changes to the database that were made by another tab
     db.on("remotechange", async ev => {
