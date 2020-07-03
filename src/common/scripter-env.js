@@ -933,97 +933,123 @@ function _evalScript(reqId, js) {
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
+    // // clean js
+    // // "use strict";
+    // // Object.defineProperty(exports, "__esModule", { value: true });
+    // const expectHeader1 = '"use strict";\n'
+    // const expectHeader2 = 'Object.defineProperty(exports, "__esModule", { value: true });\n'
+    // if (DEBUG) {
+    //   console.log("--------- script code --------\n" + js + "\n-----------------------------\n")
+    //   // sanity checks for when typescript or monaco are upgraded and tested
+    //   if (js.substr(0, expectHeader1.length) != expectHeader1) {
+    //     console.warn("scripter-eval UNEXPECTED header1", {
+    //       expect: expectHeader1,
+    //       actual: js.substr(0, expectHeader1.length)
+    //     })
+    //   }
+    //   if (js.substr(expectHeader1.length, expectHeader2.length) != expectHeader2) {
+    //     console.warn("scripter-eval UNEXPECTED header2")
+    //   }
+    // }
+    // js = js.substr(expectHeader1.length + expectHeader2.length)
+
+    // eval
     js = jsHeader + js + "\n" + jsFooter
-    if (DEBUG) { console.log("evalScript", js) }
+    dlog("evalScript\n" + js)
+    let r = null
     try {
       // @ts-ignore eval (indirect call means scope is global)
-      let r = (0,eval)(js);
+      r = (0,eval)(js);
+    } catch(e) {
+      return reject(e)
+    }
 
-      // bindenv wraps a function to set `this` to env0.
-      // We can't use bind() since that is not supported by fig-js.
-      let bindenv = v => function() { return v.apply(env0, arguments) }
+    // bindenv wraps a function to set `this` to env0.
+    // We can't use bind() since that is not supported by fig-js.
+    let bindenv = v => function() { return v.apply(env0, arguments) }
 
-      // create invocation-specific environment
-      let env0 = Object.assign({}, env, {
-        canceled: false,
-        timer:         bindenv(Timer), // deprecated
-        Timer:         bindenv(Timer),
-        withTimeout:   bindenv(scriptLib.misc.withTimeout),
-        setTimeout:    bindenv(_setTimeout),
-        setInterval:   bindenv(_setInterval),
-        clearTimeout:  bindenv(_clearTimeout),
-        clearInterval: bindenv(_clearInterval),
-      })
-      env0.scripter = Object.assign({}, env.scripter)
-      env0.libui = scriptLib.create_libui(reqId)
-      env0.libvars = scriptLib.create_libvars(env0.libui)
-      env0.DOM = new scriptLib.DOM(env0)
-      env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
+    // create invocation-specific environment
+    let env0 = Object.assign({}, env, {
+      canceled: false,
+      timer:         bindenv(Timer), // deprecated
+      Timer:         bindenv(Timer),
+      withTimeout:   bindenv(scriptLib.misc.withTimeout),
+      setTimeout:    bindenv(_setTimeout),
+      setInterval:   bindenv(_setInterval),
+      clearTimeout:  bindenv(_clearTimeout),
+      clearInterval: bindenv(_clearInterval),
+    })
+    env0.scripter = Object.assign({}, env.scripter)
+    env0.libui = scriptLib.create_libui(reqId)
+    env0.libvars = scriptLib.create_libvars(env0.libui)
+    env0.DOM = new scriptLib.DOM(env0)
+    env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
 
-      // Node constructors
-      env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }
-      for (let nodeName in env.nodeConstructors) {
-        let cons = env0.nodeConstructors[nodeName]
-        env0[nodeName] = function(props, ...children) {
-          return env0.DOM.createElementv(cons, props, children, /*oncanvas*/true)
-        }
+    // Node constructors
+    env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }
+    for (let nodeName in env.nodeConstructors) {
+      let cons = env0.nodeConstructors[nodeName]
+      env0[nodeName] = function(props, ...children) {
+        return env0.DOM.createElementv(cons, props, children, /*oncanvas*/true)
       }
+    }
 
-      // onend function, guaranteed to be called at script end, including error.
-      // must not throw
-      let _onend = r[2]
-      let ended = false  // dedupe in case its called multiple times
-      function onend() {
-        if (ended) {
-          return
-        }
-        ended = true
-        try {
-          let userfun = _onend()
-          if (userfun) {
-            try {
-              userfun()
-            } catch (err) {
-              console.warn("uncaught exception in scripter.onend: " + (err.stack || err))
-            }
+    // onend function, guaranteed to be called at script end, including error.
+    // must not throw
+    let _onend = r[2]
+    let ended = false  // dedupe in case its called multiple times
+    function onend() {
+      if (ended) {
+        return
+      }
+      ended = true
+      try {
+        let userfun = _onend()
+        if (userfun) {
+          try {
+            userfun()
+          } catch (err) {
+            console.warn("uncaught exception in scripter.onend: " + (err.stack || err))
           }
-          if (env0.scripter._onEndCallbacks) {
-            for (let f of env0.scripter._onEndCallbacks) {
-              try { f() } catch (e) { console.error("error in env.onend(): " + (e.stack || e)) }
-            }
+        }
+        if (env0.scripter._onEndCallbacks) {
+          for (let f of env0.scripter._onEndCallbacks) {
+            try { f() } catch (e) { console.error("error in env.onend(): " + (e.stack || e)) }
           }
-        } catch (err) {
-          console.error("error in env.onend(): " + (err.stack || err))
         }
+      } catch (err) {
+        console.error("error in env.onend(): " + (err.stack || err))
       }
+    }
 
-      // create script cancel function
-      let cancelInner = r[1]
-      cancelFun = reason => {
-        env0.canceled = true
-        cancelInner()
-        _cancelAllTimers(reason || new Error("cancel"))
-        onend()
-        if (reason) {
-          reject(reason)
-        } else {
-          resolve(reason)
-        }
+    // create script cancel function
+    let cancelInner = r[1]
+    cancelFun = reason => {
+      env0.canceled = true
+      cancelInner()
+      _cancelAllTimers(reason || new Error("cancel"))
+      onend()
+      if (reason) {
+        reject(reason)
+      } else {
+        resolve(reason)
       }
+    }
 
-      // arguments for script entry function
-      let _module = {id:"",exports:{}}
-      let params = [
-        _module,          // module
-        _module.exports,  // exports
-        Symbol,           // Symbol
-        env0,             // __env
-        _print,           // __print
-        reqId,            // __reqId
-      ].concat(envKeys.map(k => env0[k]))
-      // Note: Important to use envKeys here; same as we use for order of
-      // argument names in jsHeader.
+    // arguments for script entry function
+    let _module = {id:"",exports:{}}
+    let params = [
+      _module,          // module
+      _module.exports,  // exports
+      Symbol,           // Symbol
+      env0,             // __env
+      _print,           // __print
+      reqId,            // __reqId
+    ].concat(envKeys.map(k => env0[k]))
+    // Note: Important to use envKeys here; same as we use for order of
+    // argument names in jsHeader.
 
+    try {
       // call script entry function and handle reply
       return r[0].apply(env0, params)
         .then(result =>
@@ -1059,7 +1085,7 @@ function _evalScript(reqId, js) {
 
 
 // count lines that the source is offset, used for sourcemaps
-let i = 0, lineOffset = 1  // 1 = the \n we always end jsHeader with
+let i = 0, lineOffset = 0
 while (true) {
   i = jsHeader.indexOf("\n", i)
   if (i == -1) {

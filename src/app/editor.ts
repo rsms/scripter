@@ -163,9 +163,10 @@ const typescriptCompilerOptions = {
   allowUnreachableCode: true,
   allowUnusedLabels: true,
   removeComments: true,
-  module: ts.ModuleKind.CommonJS,
+  module: ts.ModuleKind.ES2015,
   sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
   strictNullChecks: true,
+  newLine: ts.NewLineKind.LineFeed, // scripter-env.js relies on this
 
   jsx: ts.JsxEmit.React,
   jsxFactory: "DOM.createElement",
@@ -1146,21 +1147,21 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // // DEBUG print compiled JS code
     // compileCurrentScript().then(r => print(r.outputFiles[0].text))
 
-    // DEBUG ts
-    ;(async () => {
-      let model = this.editor.getModel()
-      let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
-      let tsclient = await tsworker(model.uri)
-      print("tsworker", tsworker)
-      print("tsclient", tsclient)
+    // // DEBUG ts
+    // ;(async () => {
+    //   let model = this.editor.getModel()
+    //   let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
+    //   let tsclient = await tsworker(model.uri)
+    //   print("tsworker", tsworker)
+    //   print("tsclient", tsclient)
 
-      let uri = model.uri.toString()
-      print("tsclient.getCompilerOptionsDiagnostics()",
-        await tsclient.getCompilerOptionsDiagnostics(uri))
+    //   let uri = model.uri.toString()
+    //   print("tsclient.getCompilerOptionsDiagnostics()",
+    //     await tsclient.getCompilerOptionsDiagnostics(uri))
 
-      print("tsclient.getSemanticDiagnostics()", await tsclient.getSemanticDiagnostics(uri))
-      // print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings(uri))
-    })()
+    //   print("tsclient.getSemanticDiagnostics()", await tsclient.getSemanticDiagnostics(uri))
+    //   // print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings(uri))
+    // })()
 
     this.isInitialized = true
     this.triggerEvent("init")
