@@ -876,6 +876,8 @@ env.fetchImg = function(input, init) {
 
 const envKeys = Object.keys(env)
 // Note: "__scripter_script_main" has special meaning: used to find stack start.
+//       "__scripter_script_main" used to be added here but is now added by the
+//       editor, in script.ts
 let jsHeader = `
 var _, canceled=false, __onend, currentPage;
 function __oncurrentpagechange() { currentPage = figma.currentPage; }
@@ -885,10 +887,8 @@ function __oncurrentpagechange() { currentPage = figma.currentPage; }
     currentPage = figma.currentPage;
     figma.on("currentpagechange", __oncurrentpagechange);
     function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
-    return (async function __scripter_script_main(){
-`.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
+    return`.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
 let jsFooter = `
-    })();
   },
   function(){ canceled = true },
   function(){ figma.off("currentpagechange", __oncurrentpagechange); return __onend }
@@ -933,7 +933,7 @@ function _evalScript(reqId, js) {
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
-    js = jsHeader + "\n" + js + "\n" + jsFooter
+    js = jsHeader + js + "\n" + jsFooter
     if (DEBUG) { console.log("evalScript", js) }
     try {
       // @ts-ignore eval (indirect call means scope is global)

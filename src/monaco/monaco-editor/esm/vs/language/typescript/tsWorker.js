@@ -57,7 +57,7 @@ var TypeScriptWorker = /** @class */ (function () {
         var model = this._getModel(fileName);
         if (model) {
             // a true editor model
-            text = model.getValue();
+            text = model.getValue() + '\nexport {};\n';
         }
         else if (fileName in this._extraLibs) {
             // extra lib

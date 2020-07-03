@@ -623,15 +623,6 @@ body.showMessage #editor { bottom: var(--messageHeight); }
       }
     }
 
-    &.scripter-light .margin {
-      & .line-numbers {
-        color: #ccc;
-      }
-      & .current-line ~ .line-numbers {
-        color: #888;
-      }
-    }
-
     & .detected-link {
       /*text-decoration: underline rgba(0, 0, 200, 0.1);*/
       text-decoration: none; /* TODO: support opening links */
@@ -641,17 +632,21 @@ body.showMessage #editor { bottom: var(--messageHeight); }
       /* active indentGuide */
       box-shadow: 1px 0 0 0 #ddd inset !important;
     }
+
+    &.scripter-light {
+      & .margin {
+        & .line-numbers { color: #ccc; }
+        & .current-line ~ .line-numbers { color: #888; }
+      }
+      & .mtk17 { font-weight: 500 } /*keyword*/
+      /*& .mtk29 { font-weight: 440; }*/ /*type.identifier*/
+    }
   }
 }
 
 body.menuVisible #editor {
   left: var(--menuWidth);
 }
-
-/*@supports (font-variation-settings: normal)*/
-/*.monaco-editor .view-line { font-weight: 440; }*/
-.monaco-editor.scripter-light .mtk17 { font-weight: 500 } /*keyword*/
-/*.monaco-editor.scripter-light .mtk29 { font-weight: 440; }*/ /*type.identifier*/
 
 /* decorate runtime error */
 .runtimeErrorDecoration {

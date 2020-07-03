@@ -3,6 +3,7 @@
 //
 // What's declared here is available to scripts in their global namespace.
 //
+declare global {
 
 // symbolic type aliases
 type int   = number
@@ -11,10 +12,10 @@ type byte  = number
 type bool  = boolean
 
 /** Outputs a message to the console and on screen */
-declare function print(...args :any[]) :void
+function print(...args :any[]) :void
 
 /** Throws an error if condition is not thruthy */
-declare function assert(condition :any, ...message :any[]) :void
+function assert(condition :any, ...message :any[]) :void
 
 /** Promise which can be cancelled */
 interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
@@ -36,7 +37,7 @@ interface CancellablePromise<T=void> extends Promise<T> { cancel():void }
  * setTimeout(() => { p.cancel() }, 500)
  * ```
  */
-declare function createCancellablePromise<T>(
+function createCancellablePromise<T>(
   executor :(
     resolve  : (v? :T | PromiseLike<T>) => void,
     reject   : ((reason?:any)=>void),
@@ -45,14 +46,14 @@ declare function createCancellablePromise<T>(
 ) :CancellablePromise<T>
 
 // timer functions
-declare function clearInterval(id?: number): void;
-declare function clearTimeout(id?: number): void;
-declare function setInterval(handler: string|Function, timeout?: number, ...arguments: any[]): number;
-declare function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
+function clearInterval(id?: number): void;
+function clearTimeout(id?: number): void;
+function setInterval(handler: string|Function, timeout?: number, ...arguments: any[]): number;
+function setTimeout(handler: string|Function, timeout?: number, ...arguments: any[]): number;
 
 /** Start a timer that expires after `duration` milliseconds */
-declare function Timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
-declare function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
+function Timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
+function timer(duration :number, handler? :(canceled?:boolean)=>any) :Timer
 interface Timer<T = void> extends CancellablePromise<T> {
   cancel() :void
 
@@ -64,7 +65,7 @@ interface Timer<T = void> extends CancellablePromise<T> {
   catch(onrejected?: ((reason: any) => any|PromiseLike<any>)|undefined|null): Timer<T>;
 }
 
-declare class TimerCancellation extends Error {
+class TimerCancellation extends Error {
   readonly name :"TimerCancellation"
 }
 
@@ -72,7 +73,7 @@ declare class TimerCancellation extends Error {
  * Adds a timeout to a cancellable process.
  * When timeout is reached, "TIMEOUT" is returned instead R.
  */
-declare function withTimeout<
+function withTimeout<
   T extends CancellablePromise<R>,
   R = T extends Promise<infer U> ? U : T
 >(p :T, timeout :number) :CancellablePromise<R|"TIMEOUT">
@@ -82,41 +83,43 @@ declare function withTimeout<
  * `time` is a monotonically-incrementing number of seconds with millisecond precision.
  * Return or throw "STOP" to end animation which resolved the promise.
  */
-declare function animate(f :(time :number) => void|"STOP") :Animation;
+function animate(f :(time :number) => void|"STOP") :Animation;
 interface Animation extends Promise<void> {
   cancel() :void
 }
 
 /** Set to true if the script was canceled by the user */
-declare var canceled :boolean;
+var canceled :boolean;
 
 /** Ignored value */
-declare var _ :any;
+var _ :any;
 
 /**
  * Shows a modal dialog with question and yes/no buttons.
  *
  * Returns true if the user answered "yes".
  */
-declare function confirm(question: string): Promise<bool>;
+function confirm(question: string): Promise<bool>;
 
 /** Presents a message to the user in a disruptive way. */
-declare function alert(message: string): void;
+function alert(message: string): void;
 
 // ------------------------------------------------------------------------------------
 // worker
 
-/** Create a worker */
-declare function createWorker(script :string | ScripterWorkerFun) :ScripterWorker
+/** Data that can be moved from Scripter to a worker */
+type ScripterTransferable = ArrayBuffer;
 
-/** Create a worker, with virtual DOM */
-declare function createWorker(opt :ScripterCreateWorkerOptions & { DOM:true },
-                              script :string | ScripterWorkerDOMFun) :ScripterWorker
+/** Create a worker */
+function createWorker(script :string | ScripterWorkerFun) :ScripterWorker
+
+/** Create a worker, with DOM (runs in iframe instead of Web Worker) */
+function createWorker(opt :ScripterCreateWorkerOptions & { DOM:true },
+                      script :string | ScripterWorkerDOMFun) :ScripterWorker
 
 /** Create a worker, with options */
-declare function createWorker(opt :ScripterCreateWorkerOptions | undefined | null,
-                              script :string | ScripterWorkerFun) :ScripterWorker
-
+function createWorker(opt :ScripterCreateWorkerOptions | undefined | null,
+                      script :string | ScripterWorkerFun) :ScripterWorker
 
 interface ScripterWorker extends Promise<void> {
   /** Event callback invoked when a message arrives from the worker */
@@ -135,10 +138,10 @@ interface ScripterWorker extends Promise<void> {
   onclose? :()=>void
 
   /** Send a message to the worker */
-  postMessage(msg :any, transfer?: Transferable[]) :void
+  postMessage(msg :any, transfer?: ScripterTransferable[]) :void
 
   /** Send a message to the worker (alias for postMessage) */
-  send<T=any>(msg :T, transfer?: Transferable[]) :void  // alias for postMessage
+  send<T=any>(msg :T, transfer?: ScripterTransferable[]) :void  // alias for postMessage
 
   /**
    * Receive a message from the worker. Resolves on the next message received.
@@ -161,9 +164,9 @@ interface ScripterCreateWorkerOptions {
 }
 
 type ScripterWorkerFun = (self :ScripterWorkerEnv) => void|Promise<void>
-type ScripterWorkerDOMFun = (self :ScripterWorkerEnv, window :any & typeof globalThis) => void|Promise<void>
+type ScripterWorkerDOMFun = (self :ScripterWorkerEnv, window :WebDOM.Window) => void|Promise<void>
 
-interface ScripterWorkerEnv extends WindowOrWorkerGlobalScope {
+interface ScripterWorkerEnv extends WebDOM.WindowOrWorkerGlobalScope {
   /** Close this worker */
   close(): void
 
@@ -174,19 +177,19 @@ interface ScripterWorkerEnv extends WindowOrWorkerGlobalScope {
   importScripts(...urls: string[]): Promise<void>
 
   /** Event callback invoked when a message arrives from the main Scripter script */
-  onmessage? :((ev :MessageEvent)=>void) | null
+  onmessage? :((ev :WebDOM.MessageEvent)=>void) | null
 
   /** Event callback invoked when a message error occurs */
-  onmessageerror? :((ev :MessageEvent)=>void) | null
+  onmessageerror? :((ev :WebDOM.MessageEvent)=>void) | null
 
   /** Event callback invoked when an error occurs */
   onerror? :((err :ScripterWorkerError)=>void) | null
 
   /** Send a message to the the main Scripter script */
-  postMessage(msg :any, transfer?: Transferable[]) :void
+  postMessage(msg :any, transfer?: WebDOM.Transferable[]) :void
 
   /** Send a message to the main Scripter script (alias for postMessage) */
-  send<T=any>(msg :T, transfer?: Transferable[]) :void  // alias for postMessage
+  send<T=any>(msg :T, transfer?: WebDOM.Transferable[]) :void  // alias for postMessage
 
   /**
    * Receive a message from the main Scripter script.
@@ -215,7 +218,7 @@ interface ScripterWorkerError {
 // DOM
 
 /** JSX interface for creating Figma nodes */
-declare var DOM :DOM
+var DOM :DOM
 interface DOM {
   /**
    * Create a node.
@@ -266,19 +269,19 @@ interface DOM {
  * Starts the process of fetching a resource from the network, returning a promise
  * which is fulfilled once the response is available.
  */
-declare function fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
+function fetch(input: WebDOM.RequestInfo, init?: WebDOM.RequestInit): Promise<WebDOM.Response>;
 
 /** Shorthand for fetch().then(r => r.text()) */
-declare function fetchText(input: RequestInfo, init?: RequestInit): Promise<string>;
+function fetchText(input: WebDOM.RequestInfo, init?: WebDOM.RequestInit): Promise<string>;
 
 /** Shorthand for fetch().then(r => r.json()) */
-declare function fetchJson(input: RequestInfo, init?: RequestInit): Promise<any>;
+function fetchJson(input: WebDOM.RequestInfo, init?: WebDOM.RequestInit): Promise<any>;
 
 /** Shorthand for fetch().then(r => r.arrayBuffer()).then(b => new Uint8Array(b)) */
-declare function fetchData(input: RequestInfo, init?: RequestInit): Promise<Uint8Array>;
+function fetchData(input: WebDOM.RequestInfo, init?: WebDOM.RequestInit): Promise<Uint8Array>;
 
 /** Shorthand for fetchData().then(data => Img(data)) */
-declare function fetchImg(input: RequestInfo, init?: RequestInit): Promise<Img>;
+function fetchImg(input: WebDOM.RequestInfo, init?: WebDOM.RequestInit): Promise<Img>;
 
 
 // ------------------------------------------------------------------------------------
@@ -317,13 +320,13 @@ interface ImgConstructor {
   (data :ArrayBufferLike|Uint8Array|ArrayLike<number>, optionsOrWidth? :ImgOptions|number): Img<Uint8Array>;
   (url :string, optionsOrWidth? :ImgOptions|number): Img<null>;
 }
-declare var Img: ImgConstructor;
+var Img: ImgConstructor;
 
 
 // ------------------------------------------------------------------------------------
 // path, file, data
 
-declare namespace Path {
+namespace Path {
   /** Returns the filename extension without ".". Returns "" if none. */
   function ext(name :string) :string
 
@@ -351,9 +354,9 @@ declare namespace Path {
  * Inspects the header (first ~20 or so bytes) of data to determine the type of file.
  * Similar to the POSIX "file" program. Returns null if unknown.
  */
-declare function fileType(data :ArrayLike<byte>|ArrayBuffer) :FileTypeInfo|null
+function fileType(data :ArrayLike<byte>|ArrayBuffer) :FileTypeInfo|null
 /** Returns mime type and other information for the file, based on the provided filename. */
-declare function fileType(filename :string) :FileTypeInfo|null
+function fileType(filename :string) :FileTypeInfo|null
 /** Data returned by the fileType function, describing a type of file data */
 interface FileTypeInfo {
   type :string    // mime type
@@ -368,7 +371,7 @@ interface FileTypeInfo {
  * Example: "FF a7 0x9, 4" (whitespace, linebreaks and comma are ignored)
  * If the input is some kind of list, it is converted if needed to a Uint8Array.
  */
-declare function Bytes(input :string|ArrayLike<byte>|ArrayBuffer|Iterable<byte>) :Uint8Array
+function Bytes(input :string|ArrayLike<byte>|ArrayBuffer|Iterable<byte>) :Uint8Array
 
 
 // ------------------------------------------------------------------------------------
@@ -389,36 +392,36 @@ type Shape = BooleanOperationNode
            | VectorNode
 
 /** Get the current selection in Figma */
-declare function selection() :ReadonlyArray<SceneNode>;
+function selection() :ReadonlyArray<SceneNode>;
 /** Get the nth currently-selected node in Figma */
-declare function selection(index :number) :SceneNode|null;
+function selection(index :number) :SceneNode|null;
 
 /** Set the current selection. Non-selectable nodes of n, like pages, are ignored. */
-declare function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>>(n :T) :T;
+function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|null|undefined>>(n :T) :T;
 
 /** Version of Figma plugin API that is currently in use */
-declare var apiVersion :string
+var apiVersion :string
 
 /** Viewport */
-declare var viewport :ViewportAPI
+var viewport :ViewportAPI
 
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
-declare var MIXED :symbol
+var MIXED :symbol
 
 /** Current page. Equivalent to figma.currentPage */
-declare var currentPage :PageNode
+var currentPage :PageNode
 
 /**
  * Add node to current page.
  * Equivalent to `(figma.currentPage.appendChild(n),n)`
  */
-declare function addToPage<N extends SceneNode>(n :N) :N
+function addToPage<N extends SceneNode>(n :N) :N
 
 /**
  * Store data on the user's local machine. Similar to localStorage.
  * Data may disappear if user clears their web browser cache.
  */
-declare var clientStorage: ClientStorageAPI
+var clientStorage: ClientStorageAPI
 
 type NodeProps<N> = Partial<Omit<N,"type">>
 
@@ -426,110 +429,110 @@ type NodeProps<N> = Partial<Omit<N,"type">>
 // Essentially figma.createNodeType + optional assignment of props
 //
 /** Creates a new Page */
-declare function Page(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
+function Page(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
 /** Creates a new Rectangle */
-declare function Rectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
+function Rectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
 /** Creates a new Line */
-declare function Line(props? :NodeProps<LineNode>|null): LineNode;
+function Line(props? :NodeProps<LineNode>|null): LineNode;
 /** Creates a new Ellipse */
-declare function Ellipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
+function Ellipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
 /** Creates a new Polygon */
-declare function Polygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
+function Polygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
 /** Creates a new Star */
-declare function Star(props? :NodeProps<StarNode>|null): StarNode;
+function Star(props? :NodeProps<StarNode>|null): StarNode;
 /** Creates a new Vector */
-declare function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
+function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
 /** Creates a new Text */
-declare function Text(props? :NodeProps<TextNode>|null): TextNode;
+function Text(props? :NodeProps<TextNode>|null): TextNode;
 /** Creates a new BooleanOperation */
-declare function BooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
+function BooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
 /** Creates a new Frame */
-declare function Frame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
+function Frame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
 /** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
-declare function Group(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
-declare function Group(...children :SceneNode[]): GroupNode;
+function Group(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
+function Group(...children :SceneNode[]): GroupNode;
 /** Creates a new Component */
-declare function Component(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
+function Component(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
 /** Creates a new Slice */
-declare function Slice(props? :NodeProps<SliceNode>|null): SliceNode;
+function Slice(props? :NodeProps<SliceNode>|null): SliceNode;
 /** Creates a new PaintStyle */
-declare function PaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
+function PaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
 /** Creates a new TextStyle */
-declare function TextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
+function TextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
 /** Creates a new EffectStyle */
-declare function EffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
+function EffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
 /** Creates a new GridStyle */
-declare function GridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
+function GridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
 
 
 
 // Type guards, nodes
 //
 /** Checks if node is of type Document */
-declare function isDocument(n :BaseNode|null|undefined) :n is DocumentNode;
+function isDocument(n :BaseNode|null|undefined) :n is DocumentNode;
 /** Checks if node is of type Page */
-declare function isPage(n :BaseNode|null|undefined) :n is PageNode;
+function isPage(n :BaseNode|null|undefined) :n is PageNode;
 /** Checks if node is of type Rectangle */
-declare function isRectangle(n :BaseNode|null|undefined) :n is RectangleNode;
+function isRectangle(n :BaseNode|null|undefined) :n is RectangleNode;
 /** Checks if node is of type Rectangle */
-declare function isRect(n :BaseNode|null|undefined) :n is RectangleNode;
+function isRect(n :BaseNode|null|undefined) :n is RectangleNode;
 /** Checks if node is of type Line */
-declare function isLine(n :BaseNode|null|undefined): n is LineNode;
+function isLine(n :BaseNode|null|undefined): n is LineNode;
 /** Checks if node is of type Ellipse */
-declare function isEllipse(n :BaseNode|null|undefined): n is EllipseNode;
+function isEllipse(n :BaseNode|null|undefined): n is EllipseNode;
 /** Checks if node is of type Polygon */
-declare function isPolygon(n :BaseNode|null|undefined): n is PolygonNode;
+function isPolygon(n :BaseNode|null|undefined): n is PolygonNode;
 /** Checks if node is of type Star */
-declare function isStar(n :BaseNode|null|undefined): n is StarNode;
+function isStar(n :BaseNode|null|undefined): n is StarNode;
 /** Checks if node is of type Vector */
-declare function isVector(n :BaseNode|null|undefined): n is VectorNode;
+function isVector(n :BaseNode|null|undefined): n is VectorNode;
 /** Checks if node is of type Text */
-declare function isText(n :BaseNode|null|undefined): n is TextNode;
+function isText(n :BaseNode|null|undefined): n is TextNode;
 /** Checks if node is of type BooleanOperation */
-declare function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
+function isBooleanOperation(n :BaseNode|null|undefined): n is BooleanOperationNode;
 /** Checks if node is of type Frame */
-declare function isFrame(n :BaseNode|null|undefined): n is FrameNode;
+function isFrame(n :BaseNode|null|undefined): n is FrameNode;
 /** Checks if node is of type Group */
-declare function isGroup(n :BaseNode|null|undefined): n is GroupNode;
+function isGroup(n :BaseNode|null|undefined): n is GroupNode;
 /** Checks if node is of type Component */
-declare function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
+function isComponent(n :BaseNode|null|undefined): n is ComponentNode;
 /** Checks if node is of type Component */
-declare function isInstance(n :BaseNode|null|undefined): n is InstanceNode;
+function isInstance(n :BaseNode|null|undefined): n is InstanceNode;
 /** Checks if node is of type Slice */
-declare function isSlice(n :BaseNode|null|undefined): n is SliceNode;
+function isSlice(n :BaseNode|null|undefined): n is SliceNode;
 /** Checks if node is a type of SceneNode */
-declare function isSceneNode(n :BaseNode|null|undefined): n is SceneNode;
+function isSceneNode(n :BaseNode|null|undefined): n is SceneNode;
 /** Checks if node is a type with children */
-declare function isContainerNode(n :BaseNode|null|undefined): n is ContainerNode;
+function isContainerNode(n :BaseNode|null|undefined): n is ContainerNode;
 /** Checks if node is a Shape */
-declare function isShape(n :BaseNode|null|undefined): n is Shape;
+function isShape(n :BaseNode|null|undefined): n is Shape;
 
 /**
  * Returns true if n is a shape with at least one visible image.
  * If a layer has an "image" icon in Figma, this returns true.
  */
-declare function isImage<N extends Shape>(n :N) :n is N & { fills :ReadonlyArray<Paint> }; // fills not mixed
-declare function isImage(n :BaseNode) :n is Shape & { fills :ReadonlyArray<Paint> }; // fills not mixed
+function isImage<N extends Shape>(n :N) :n is N & { fills :ReadonlyArray<Paint> }; // fills not mixed
+function isImage(n :BaseNode) :n is Shape & { fills :ReadonlyArray<Paint> }; // fills not mixed
 
 // Type guards, paints
 //
 /** Checks if paint is an image */
-declare function isImage(p :Paint|null|undefined) :p is ImagePaint;
+function isImage(p :Paint|null|undefined) :p is ImagePaint;
 /** Checks if paint is a gradient */
-declare function isGradient(p :Paint|null|undefined) :p is GradientPaint;
+function isGradient(p :Paint|null|undefined) :p is GradientPaint;
 /** Checks if paint is a solid color */
-declare function isSolidPaint(p :Paint|null|undefined) :p is SolidPaint;
+function isSolidPaint(p :Paint|null|undefined) :p is SolidPaint;
 
 // Type guards, styles
 //
 /** Checks if style is a paint style */
-declare function isPaintStyle(s :BaseStyle|null|undefined) :p is PaintStyle;
+function isPaintStyle(s :BaseStyle|null|undefined) :s is PaintStyle;
 /** Checks if style is a text style */
-declare function isTextStyle(s :BaseStyle|null|undefined) :p is TextStyle;
+function isTextStyle(s :BaseStyle|null|undefined) :s is TextStyle;
 /** Checks if style is a effect style */
-declare function isEffectStyle(s :BaseStyle|null|undefined) :p is EffectStyle;
+function isEffectStyle(s :BaseStyle|null|undefined) :s is EffectStyle;
 /** Checks if style is a grid style */
-declare function isGridStyle(s :BaseStyle|null|undefined) :p is GridStyle;
+function isGridStyle(s :BaseStyle|null|undefined) :s is GridStyle;
 
 interface Color extends RGB { // compatible with RGB interface
   readonly r: number
@@ -544,36 +547,36 @@ interface ColorWithAlpha extends Color, RGBA { // compatible with RGBA interface
 }
 
 /** Create a color with alpha channel. Values should be in range [0-1]. */
-declare function Color(r :number, g: number, b :number, a :number) :ColorWithAlpha;
+function Color(r :number, g: number, b :number, a :number) :ColorWithAlpha;
 
 /** Create a color. Values should be in range [0-1]. */
-declare function Color(r :number, g: number, b :number) :Color;
+function Color(r :number, g: number, b :number) :Color;
 
 /**
  * Create a color from hexadecimal string.
  * hexstr should be in the format "RRGGBB", "RGB" or "HH" for greyscale.
  * Examples: C800A1, C0A, CC
  */
-declare function Color(hexstr :string) :Color;
+function Color(hexstr :string) :Color;
 
 /** Create a color. Values should be in range [0-1]. */
-declare function RGB(r :number, g: number, b :number) :Color;
+function RGB(r :number, g: number, b :number) :Color;
 
 /** Create a color with alpha channel. Values should be in range [0-1]. */
-declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlpha;
+function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlpha;
 
 // common colors
-/** #000000 Color(0   , 0   , 0)   */ declare const BLACK   :Color;
-/** #FFFFFF Color(1   , 1   , 1)   */ declare const WHITE   :Color;
-/** #808080 Color(0.5 , 0.5 , 0.5) */ declare const GREY    :Color;
-/** #808080 Color(0.5 , 0.5 , 0.5) */ declare const GRAY    :Color;
-/** #FF0000 Color(1   , 0   , 0)   */ declare const RED     :Color;
-/** #00FF00 Color(0   , 1   , 0)   */ declare const GREEN   :Color;
-/** #0000FF Color(0   , 0   , 1)   */ declare const BLUE    :Color;
-/** #00FFFF Color(0   , 1   , 1)   */ declare const CYAN    :Color;
-/** #FF00FF Color(1   , 0   , 1)   */ declare const MAGENTA :Color;
-/** #FFFF00 Color(1   , 1   , 0)   */ declare const YELLOW  :Color;
-/** #FF8000 Color(1   , 0.5 , 0)   */ declare const ORANGE  :Color;
+/** #000000 Color(0   , 0   , 0)   */ const BLACK   :Color;
+/** #FFFFFF Color(1   , 1   , 1)   */ const WHITE   :Color;
+/** #808080 Color(0.5 , 0.5 , 0.5) */ const GREY    :Color;
+/** #808080 Color(0.5 , 0.5 , 0.5) */ const GRAY    :Color;
+/** #FF0000 Color(1   , 0   , 0)   */ const RED     :Color;
+/** #00FF00 Color(0   , 1   , 0)   */ const GREEN   :Color;
+/** #0000FF Color(0   , 0   , 1)   */ const BLUE    :Color;
+/** #00FFFF Color(0   , 1   , 1)   */ const CYAN    :Color;
+/** #FF00FF Color(1   , 0   , 1)   */ const MAGENTA :Color;
+/** #FFFF00 Color(1   , 1   , 0)   */ const YELLOW  :Color;
+/** #FF8000 Color(1   , 0.5 , 0)   */ const ORANGE  :Color;
 
 
 // ------------------------------------------------------------------------------------
@@ -581,16 +584,16 @@ declare function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlp
 
 
 /** Returns the first node encountered in scope which the predicate returns */
-declare function findOne<R extends SceneNode>(scope :BaseNode, p :(n :PageNode|SceneNode) => R|false) :R|null
+function findOne<R extends SceneNode>(scope :BaseNode, p :(n :PageNode|SceneNode) => R|false) :R|null
 /** Returns the first node encountered in scope for which predicate returns a truthy value for */
-declare function findOne(scope :DocumentNode, p :(n :PageNode|SceneNode) => boolean|undefined) :PageNode|SceneNode|null
+function findOne(scope :DocumentNode, p :(n :PageNode|SceneNode) => boolean|undefined) :PageNode|SceneNode|null
 /** Returns the first node encountered in scope for which predicate returns a truthy value for */
-declare function findOne(scope :PageNode|SceneNode, p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+function findOne(scope :PageNode|SceneNode, p :(n :SceneNode) => boolean|undefined) :SceneNode|null
 
 /** Returns the first node on the current page which the predicate returns */
-declare function findOne<R extends SceneNode>(p :(n :SceneNode) => R|false) :R|null
+function findOne<R extends SceneNode>(p :(n :SceneNode) => R|false) :R|null
 /** Returns the first node on the current page for which predicate returns a truthy value for */
-declare function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
+function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
 
 
 /**
@@ -600,13 +603,13 @@ declare function findOne(p :(n :SceneNode) => boolean|undefined) :SceneNode|null
  * The predicate is not called for `node` when its a single node,
  * but when `node` is an array, predicate is called for each item in `node`.
  */
-declare function find<R extends BaseNode>(
+function find<R extends BaseNode>(
   node :ContainerNode|ReadonlyArray<BaseNode>,
   predicate :(n :BaseNode) => R|false,
   options? :FindOptions,
 ) :Promise<R[]>
 
-declare function find(
+function find(
   node :ContainerNode|ReadonlyArray<BaseNode>,
   predicate :(n :BaseNode) => boolean|undefined,
   options? :FindOptions,
@@ -619,12 +622,12 @@ declare function find(
  * The predicate is not called for `node` when its a single node,
  * but when `node` is an array, predicate is called for each item in `node`.
  */
-declare function find<R extends BaseNode>(
+function find<R extends BaseNode>(
   predicate :(n :BaseNode) => R|false,
   options? :FindOptions,
 ) :Promise<R[]>
 
-declare function find(
+function find(
   predicate :(n :BaseNode) => boolean|undefined,
   options? :FindOptions,
 ) :Promise<BaseNode[]>
@@ -639,7 +642,7 @@ declare function find(
  *
  * Note: visitor is not called for the initial `node` argument.
  */
-declare function visit(
+function visit(
   node :ContainerNode|ReadonlyArray<ContainerNode>,
   visitor :(n :BaseNode) => any,
 ) :Promise<void>;
@@ -656,10 +659,10 @@ interface FindOptions {
  *
  * Note that the last value may be smaller than end, depending on the value of step.
  */
-declare function range(start :number, end :number, step? :number) :LazySeq<number,number,number>
+function range(start :number, end :number, step? :number) :LazySeq<number,number,number>
 
 /** Returns a sequence of numbers in the range [0–end) */
-declare function range(end :number) :LazySeq<number,number,number>
+function range(end :number) :LazySeq<number,number,number>
 
 /** Sequence which values are computed lazily; as requested */
 interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Iterable<T> {
@@ -672,7 +675,7 @@ interface LazySeq<T, OffsT = T|undefined, LenT = number|undefined> extends Itera
 
 
 // ------------------------------------------------------------------------------------
-declare namespace scripter {
+namespace scripter {
 
   /** Visualize print() results inline in editor. Defaults to true */
   var visualizePrint :bool
@@ -692,7 +695,7 @@ declare namespace scripter {
 
 
 // ------------------------------------------------------------------------------------
-declare namespace libui {
+namespace libui {
 
   /** Presents a short ambient message to the user, at the bottom of the screen */
   function notify(message: string, options?: NotificationOptions): NotificationHandler
@@ -721,7 +724,7 @@ interface UIInputIterator<T> extends AsyncIterable<T> {
 
 
 // ------------------------------------------------------------------------------------
-declare namespace libgeometry {
+namespace libgeometry {
   class Rect {
     x      :number
     y      :number
@@ -731,8 +734,8 @@ declare namespace libgeometry {
     constructor(x :number, y :number, width :number, height :number)
 
     position() :Vec
-    containsPoint(v :Vec)
-    translate(v :Vec)
+    containsPoint(v :Vec) :boolean
+    translate(v :Vec) :Rect
   }
 
   class Vec implements Vector {
@@ -754,7 +757,7 @@ declare namespace libgeometry {
 
 
 // ------------------------------------------------------------------------------------
-declare namespace libvars {
+namespace libvars {
   interface Var<T> {
     value :T
     showSlider(init? :libui.UIRangeInit) :Promise<number>
@@ -771,10 +774,10 @@ declare namespace libvars {
     addVars<T>(count :number, value :T) :Var<T>[]
 
     /** Remove a variable */
-    removeVar(v :Var<any>)
+    removeVar(v :Var<any>) :void
 
     /** Remove all variables */
-    removeAllVars()
+    removeAllVars() :void
 
     /** Read updates. Ends when all vars are removed. */
     updates() :AsyncIterableIterator<void>
@@ -783,7 +786,7 @@ declare namespace libvars {
 
 
 // ------------------------------------------------------------------------------------
-declare namespace Base64 {
+namespace Base64 {
   /** Encode data as base-64 */
   function encode(data :Uint8Array|ArrayBuffer|string) :string
 
@@ -810,3 +813,7 @@ interface AsyncIterable<T> {
 interface AsyncIterableIterator<T> extends AsyncIterator<T> {
   [Symbol.asyncIterator](): AsyncIterableIterator<T>;
 }
+
+
+} // declare global  (build-scriptenv relies on this comment)
+export {}

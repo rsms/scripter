@@ -53,13 +53,21 @@ async function saveScriptMeta(s :ScriptMeta) {
 }
 
 
+enum DirtyState {
+  Clean,
+  Dirty,
+  DirtyImplicit,
+}
+
+
 interface ScriptEventMap {
   "save": Script
+  "delete": Script
 }
 
 export class Script extends EventEmitter<ScriptEventMap> {
   meta :ScriptMeta
-  readOnly :bool = false   // if true, can't be edited
+  isROLib :bool = false   // if true, can't be edited
   _body :string
   _editorViewState :EditorViewState|null = null
 
@@ -67,14 +75,21 @@ export class Script extends EventEmitter<ScriptEventMap> {
   _savedModelVersion :number = 0  // transient editor version
   _currModelVersion :number = 0
 
-  _metaDirty = false
-  _bodyDirty = false
+  _metaDirty :DirtyState = DirtyState.Clean
+  _bodyDirty :DirtyState = DirtyState.Clean
 
-  constructor(meta :ScriptMeta, body :string, editorViewState :EditorViewState|null) {
+  constructor(
+    meta :ScriptMeta,
+    body :string,
+    editorViewState :EditorViewState|null,
+    isROLib? :boolean,
+  ) {
     super()
     this.meta = meta
     this._body = body
     this._editorViewState = editorViewState
+    this.isROLib = !!isROLib
+    this._onAfterLoadBody()
   }
 
   get id() :number { return this.meta.id }
@@ -85,20 +100,25 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
   get modelVersion() :number { return this._currModelVersion }
 
-  get isUserScript() :bool { return !this.readOnly && this.id >= 0 }
+  get isUserScript() :bool { return !this.isROLib && this.id >= 0 }
 
   get body() :string { return this._body }
   set body(v :string) {
     this._body = v
-    this._bodyDirty = true
+    this._bodyDirty = DirtyState.Dirty
     this._currModelVersion = 0
+    this._onAfterLoadBody()
     this.scheduleSave()
   }
 
   updateBody(text :string, modelVersion :number) {
     this._body = text
     this._currModelVersion = modelVersion
-    this._bodyDirty = this._currModelVersion != this._savedModelVersion
+    // this._onAfterLoadBody()
+    this._bodyDirty = (
+      this._currModelVersion != this._savedModelVersion ? DirtyState.Dirty :
+                                                          DirtyState.Clean
+    )
     this.scheduleSave()
   }
 
@@ -110,7 +130,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     }
     if (this.meta.name !== v) {
       this.meta.name = v
-      this._metaDirty = true
+      this._metaDirty = DirtyState.Dirty
       this.scheduleSave()
     }
   }
@@ -137,7 +157,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
   requireValidGUID() :string {
     if (!this.meta.guid) {
       this.meta.guid = guid.gen()
-      this._metaDirty = true
+      this._metaDirty = DirtyState.Dirty
       this.scheduleSave()
     }
     return this.meta.guid
@@ -193,7 +213,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
         this.meta.id = id
         scriptBody.put(this._body, id)
       }) as any as Promise<void>
-    } else if (!this._bodyDirty && !this._metaDirty) {
+    } else if (this._bodyDirty == DirtyState.Clean && this._metaDirty == DirtyState.Clean) {
       // no changes
       return Promise.resolve()
     } else {
@@ -202,14 +222,17 @@ export class Script extends EventEmitter<ScriptEventMap> {
       // assign GUID if missing
       if (!this.meta.guid) {
         this.meta.guid = guid.gen()
-        this._metaDirty = true
+        this._metaDirty = DirtyState.DirtyImplicit
       }
 
-      let metaDirty = this._metaDirty
-      let bodyDirty = this._bodyDirty
+      let metaDirty = this._metaDirty != DirtyState.Clean
+      let bodyDirty = this._bodyDirty != DirtyState.Clean
       if (bodyDirty || metaDirty) {
-        this.meta.modifiedAt = new Date()
-        metaDirty = true
+        if (this._bodyDirty == DirtyState.Dirty || this._metaDirty == DirtyState.Dirty) {
+          // update timestamp as dirty is from user action
+          this.meta.modifiedAt = new Date()
+          metaDirty = true
+        }
         p = db.modify(["scripts", "scriptBody"], async (scripts, scriptBody) => {
           if (metaDirty) { scripts.put(this.meta) }
           if (bodyDirty) { scriptBody.put(this._body, this.id) }
@@ -223,8 +246,8 @@ export class Script extends EventEmitter<ScriptEventMap> {
     }
 
     // clear dirty flags
-    this._bodyDirty = false
-    this._metaDirty = false
+    this._bodyDirty = DirtyState.Clean
+    this._metaDirty = DirtyState.Clean
 
     return p.then(() => {
       this.triggerEvent("save", this)
@@ -254,6 +277,21 @@ export class Script extends EventEmitter<ScriptEventMap> {
     })
   }
 
+  _onAfterLoadBody() :void {
+    if (!this._body || this.isROLib) {
+      return
+    }
+    // dlog("Script patch body", this.name, {isROLib: this.isROLib}, this)
+    const header = `(/*SCRIPTER*/async function __scripter_script_main(){\n`
+    const footer = `\n})()/*SCRIPTER*/` // no ending newline
+    if (!this._body.startsWith(header)) {
+      this._body = header + this._body
+    }
+    if (!this._body.endsWith(footer)) {
+      this._body = this._body + footer
+    }
+  }
+
 
   async load() :Promise<boolean> {
     let [meta, body, viewState] = await db.read(["scripts", "scriptBody", "scriptViewState"],
@@ -267,6 +305,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     this.meta = meta as ScriptMeta
     this._body = body
     this._editorViewState = (viewState as EditorViewState|undefined) || null
+    this._onAfterLoadBody()
     return true
   }
 
@@ -284,6 +323,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     )
     this._body = body
     this._editorViewState = (viewState as EditorViewState|undefined) || null
+    this._onAfterLoadBody()
     return true
   }
 
@@ -296,6 +336,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
         scriptViewState.delete(this.id)
       }
     )
+    this.triggerEvent("delete", this)
     this.meta = createScriptMeta({})
     this._body = ""
     this._editorViewState = null
@@ -307,8 +348,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
       {...this.meta, tags: [].concat(this.meta.tags)},
       this._body,
       this._editorViewState, // intentionally a ref. (immutable)
+      this.isROLib,
     )
-    s.readOnly = this.readOnly
+    s.isROLib = this.isROLib
     return s
   }
 
@@ -335,8 +377,12 @@ export class Script extends EventEmitter<ScriptEventMap> {
   //   return this.create({}, defaultScriptBody)
   // }
 
-  static create(meta :Partial<ScriptMeta> = {}, body :string = "") :Script {
-    return new Script(createScriptMeta(meta), body, null)
+  static create(meta :Partial<ScriptMeta> = {}, body :string = "", isROLib? :boolean) :Script {
+    if (!meta.guid) {
+      // since July 2020 all scripts must have a GUID
+      meta = { ...meta, guid: guid.gen() }
+    }
+    return new Script(createScriptMeta(meta), body, null, isROLib)
   }
 
   static async load(id :number) :Promise<Script|null> {

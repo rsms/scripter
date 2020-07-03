@@ -22,7 +22,6 @@ import { UIInput } from "./ui-input"
 import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 import savedScripts from "./saved-scripts"
 import * as workerTemplate from "./worker-template"
-import jsdomInfo from "./jsdom_info"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version

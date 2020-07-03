@@ -141,8 +141,8 @@ return {
     }),
 
     new CopyPlugin([
-      { from: 'figma-*.d.ts', to: outdir + "/" },
-      { from: '../common/scripter-env.d.ts', to: outdir + "/" },
+      { from: 'figma.d.ts', to: outdir + "/" },
+      // { from: '../common/scripter-env.d.ts', to: outdir + "/" },
       { from: '../../node_modules/source-map/lib/mappings.wasm',
           to: `${outdir}/source-map-${SOURCE_MAP_VERSION}-mappings.wasm`, toType: "file" },
       // { from: '../common/scripter-env.js', to: outdir + "/", transform(data, path) {

@@ -15,12 +15,14 @@ import { URI } from './uri.js';
 import { equalsIgnoreCase } from './strings.js';
 import { Schemas } from './network.js';
 import { isLinux, isWindows } from './platform.js';
+import * as scripter from '../../editor/scripter.js'
 export function hasToIgnoreCase(resource) {
     // A file scheme resource is in the same platform as code, so ignore case for non linux platforms
     // Resource can be from another platform. Lowering the case as an hack. Should come from File system provider
     return resource && resource.scheme === Schemas.file ? !isLinux : true;
 }
 export function basenameOrAuthority(resource) {
+    let s = scripter.basenameOrAuthority(resource);if (s) { return s }
     return basename(resource) || resource.authority;
 }
 /**

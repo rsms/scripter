@@ -70,6 +70,7 @@ echo "import '../editor/editor.api.js';"                  > "$contribJsFile"
 echo "import './typescript/typescript.contribution.js';" >> "$contribJsFile"
 
 # Patch lib
+cp -v src/monaco/scripter.js src/monaco/monaco-editor/esm/vs/editor/scripter.js
 echo node misc/patch-monaco-editor.js
 node misc/patch-monaco-editor.js
 

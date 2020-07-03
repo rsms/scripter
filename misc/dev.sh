@@ -9,7 +9,6 @@ cd "$(dirname "$0")/.."
 source misc/util.sh
 rootdir=$PWD
 
-# figplug=../figplug/bin/figplug.g
 figplug=./node_modules/.bin/figplug
 
 if (which lsof >/dev/null); then
@@ -71,15 +70,13 @@ $figplug build -v -g -w src/figma-plugin:build/figma-plugin &
 pids+=( $! )
 
 # app
-node misc/build-worker-template.js
-bash misc/build-jsdom.sh
+bash misc/build-app.pre.sh "$rootdir/build/dev"
 pushd src/app >/dev/null
 webpack --mode=development --display=minimal --cache --watch &
 pids+=( $! )
 popd >/dev/null
 
 # web server
-mkdir -p "$rootdir/build/dev"
 rm -f "$rootdir/build/dev/res"
 ln -s ../../docs/res "$rootdir/build/dev/res"
 node "$rootdir/misc/serve.js" "$rootdir/build/dev" 8009

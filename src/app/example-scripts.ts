@@ -1,13 +1,17 @@
 import { isMac } from "./util"
 
 interface ExampleScript {
-  id   :number
+  guid :string
   name :string
   code :string
 }
 
-function s(id :number, name :string, code :string) :ExampleScript {
-  return { id: -id, name, code: code.replace(/^\s*\n|\n\s*$/, "") }
+function s(guid :string, name :string, code :string) :ExampleScript {
+  return {
+    guid: "examples/" + guid,
+    name,
+    code: code.replace(/^\s*\n|\n\s*$/, ""),
+  }
 }
 
 function kb(mac :string, other :string) {
@@ -35,7 +39,7 @@ export default (samples => {
 })([
 
 
-s(100, "Introduction", `
+s("intro", "Introduction", `
 /**
 Hello hi and welcome to Scripter.
 
@@ -92,7 +96,7 @@ Keyboard shortcuts
 //------------------------------------------------------------------------------------------------
 
 
-s(200, "Figma/Create rectangles", `
+s("figma/rects", "Figma/Create rectangles", `
 // Create some rectangles on the current page
 let rectangles = range(0, 5).map(i =>
   Rectangle({ x: i * 150, fills: [ ORANGE.paint ] }))
@@ -102,7 +106,7 @@ viewport.scrollAndZoomIntoView(setSelection(rectangles))
 `),
 
 
-s(201, "Figma/Trim whitespace", `
+s("figma/trim-ws", "Figma/Trim whitespace", `
 // Select some text and run this script to trim away linebreaks and space.
 for (let n of selection()) {
   if (isText(n)) {
@@ -112,7 +116,7 @@ for (let n of selection()) {
 `),
 
 
-s(202, "Figma/Trim line indentation", `
+s("figma/trim-line-indent", "Figma/Trim line indentation", `
 // Select some text and run this script to trim away whitespace from the beginning of lines
 for (let n of selection()) {
   if (isText(n)) {
@@ -122,7 +126,7 @@ for (let n of selection()) {
 `),
 
 
-s(203, "Figma/Select all images", `
+s("figma/select-all-images", "Figma/Select all images", `
 let images = await find(n => isImage(n) && n)
 setSelection(images)
 
@@ -148,7 +152,7 @@ if (isRect(n)) {
 `),
 
 
-s(204, "Figma/Set images to fit", `
+s("figma/set-images-fit", "Figma/Set images to fit", `
 // Loop over images in the selection
 for (let shape of await find(selection(), n => isImage(n) && n)) {
   // Update image paints to use "FIT" scale mode
@@ -161,7 +165,7 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 //------------------------------------------------------------------------------------------------
 
 
-s(300, "Basics/Working with paths", `
+s("basics/paths", "Basics/Working with paths", `
 // The Path library provides functions for working
 // with pathnames.
 let path = "/foo/bar/baz.png"
@@ -175,7 +179,7 @@ print(Path.split(path))
 `),
 
 
-s(301, "Basics/Working with files", `
+s("basics/files", "Basics/Working with files", `
 // Scripter doesn't support interfacing with your file system,
 // but it does provide functions for working with file data.
 
@@ -189,7 +193,7 @@ print(fileType([0xFF, 0xD8, 0xFF])) // JPEG image data
 `),
 
 
-s(302, "Basics/Showing images", `
+s("basics/images", "Basics/Showing images", `
 // The Img function and class can be used to describe images
 // and load image data for a few common image types.
 // Passing an Img to print vizualizes the image.
@@ -232,7 +236,7 @@ print(im1, [im1])
 `),
 
 
-s(303, "Basics/Timers", `
+s("basics/timers", "Basics/Timers", `
 // Timers allows waiting for some time to pass
 // or to execute some code after a delay.
 await timer(200)
@@ -261,7 +265,7 @@ timer(200, canceled => {
 
 
 
-s(304, "Basics/Ranges", `
+s("basics/range", "Basics/Ranges", `
 // The range() function creates a sequence of numbers in the
 // range [start–end), incrementing in steps. Steps defaults to 1.
 print(range(1, 10))
@@ -314,7 +318,7 @@ try {
 
 
 
-s(305, "Basics/JSX", `
+s("basics/jsx", "Basics/JSX", `
 /**
  * Scripter supports JSX for creating nodes.
  * JSX tags map 1:1 to Scripter's node constructor functions,
@@ -360,7 +364,7 @@ g.remove()
 //------------------------------------------------------------------------------------------------
 
 
-s(400, "UI input/Dialogs & Messaging", `
+s("ui/dialogs", "UI input/Dialogs & Messaging", `
 const { notify } = libui
 
 // alert(message) shows a message dialog.
@@ -380,7 +384,7 @@ notify("Notification", { timeout: 2000 })
 
 
 
-s(401, "UI input/Range sliders", `
+s("ui/range-slider", "UI input/Range sliders", `
 // Example of using interactive range slider to move a rectangle
 const { rangeInput } = libui
 
@@ -406,7 +410,7 @@ try {
 `),
 
 
-s(402, "UI input/Async generators", `
+s("ui/async-gen", "UI input/Async generators", `
 // Async generator functions allows creation of iterators which
 // may take some amount of time to produce their results.
 //
@@ -428,7 +432,7 @@ for await (const meows of meowGenerator(10)) {
 //------------------------------------------------------------------------------------------------
 
 
-s(500, "HTTP/Fetch", `
+s("http/fetch", "HTTP/Fetch", `
 // fetch can be used to fetch resources across the interwebs.
 // It's the standard fetch API you might already be used to.
 let r = await fetch("https://jsonplaceholder.typicode.com/users/1")
@@ -442,7 +446,7 @@ print(await fetchData("https://scripter.rsms.me/icon.png"))
 `),
 
 
-s(501, "HTTP/Figma API", `
+s("http/figma", "HTTP/Figma API", `
 // This script demonstrates accessing the Figma HTTP API
 //
 // First, generate an access token for yourself using the
@@ -471,7 +475,7 @@ async function fetchFigmaFile(fileKey :string) :Promise<any> {
 //------------------------------------------------------------------------------------------------
 
 
-s(600, "Advanced/Timeout", `
+s("advanced/timeout", "Advanced/Timeout", `
 // Example of using withTimeout for limiting the time
 // of a long-running process.
 
@@ -495,7 +499,7 @@ function getFromSlowInternet() :CancellablePromise<Object> {
 `),
 
 
-s(601, "Advanced/Tick tock, tick tock, tick tock", `
+s("advanced/tick-tock", "Advanced/Tick tock, tick tock, tick tock", `
 // Demonstrates continously-running scripts.
 // This loops forever until you restart or
 // stop the script.
@@ -507,7 +511,7 @@ for (let i = 1; true; i++) {
 `),
 
 
-s(602, "Advanced/Animation", `
+s("advanced/animation", "Advanced/Animation", `
 // Example of using animate()
 // Moves a rectangle around in a "figure eight" pattern.
 let r = addToPage(Rectangle({ fills:[ORANGE.paint], rotation: 45 }))

@@ -9,6 +9,7 @@ import {
 type ScripterWorkerFun = scriptenv.ScripterWorkerFun
 type ScripterWorkerError = scriptenv.ScripterWorkerError
 type ScripterCreateWorkerOptions = scriptenv.ScripterCreateWorkerOptions
+type ScripterTransferable = scriptenv.ScripterTransferable
 
 interface ScripterWorker extends scriptenv.ScripterWorker {
   _onmessage(msg :WorkerMessageMsg) :void
@@ -110,7 +111,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
     )
 
     let js = script.toString()
-    let sendq :{data:any,transfer?:Transferable[]}[] = []
+    let sendq :{data:any,transfer?:ScripterTransferable[]}[] = []
     let workerId = ""
     let recvp :Promise<any>|null = null
     let recvr = { resolve: (m:any)=>{}, reject: (reason?:any)=>{} }
@@ -132,11 +133,11 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       workerPromiseReject = reject
     }) as any as ScripterWorker
 
-    w.postMessage = (data :any, transfer?: Transferable[]) => {
+    w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
       checkTerminated()
       sendq.push({ data, transfer })
     }
-    w.send = (data :any, transfer?: Transferable[]) => {
+    w.send = (data :any, transfer?: ScripterTransferable[]) => {
       w.postMessage(data, transfer)
     }
     w.recv = () :Promise<any> => {
@@ -236,7 +237,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       if (w.onerror && res.error) {
         return (w as any).onerror(new _WorkerError(res.error))
       }
-      w.postMessage = (data :any, transfer?: Transferable[]) => {
+      w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
         checkTerminated()
         sendMsg<WorkerMessageMsg>({
           type: "worker-message",

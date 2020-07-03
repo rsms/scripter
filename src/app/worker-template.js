@@ -1,4 +1,4 @@
-(function (_postMessage, importScripts, _close) {
+(function (_postMessage, importScripts, _close, window) {
   let recvp, recvres, recvrej
   let msgq = []
   function recv() {
@@ -68,7 +68,7 @@
         },
       })
       return w
-    })() )
+    })(), window)
     if (r instanceof Promise) {
       r.catch(__onerror)
     }
@@ -88,4 +88,5 @@
     typeof __scripterClose != "undefined" ? __scripterClose :
     self.close.bind(self)
   ),
+  typeof window != "undefined" ? window : self,
 )

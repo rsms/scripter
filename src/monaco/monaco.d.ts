@@ -8,7 +8,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-declare let MonacoEnvironment: Environment | undefined;
+declare let MonacoEnvironment: monaco.Environment | undefined;
 
 
     export type Thenable<T> = PromiseLike<T>;

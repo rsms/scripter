@@ -13,7 +13,15 @@ let b = (
   "\n" +
   "export type ScriptEnv = typeof scriptenv\n" +
   "declare namespace scriptenv {\n" +
-  a.replace(/\n\s*declare/g, "\n") +
+
+  // a.replace(/\n\s*declare/g, "\n") +
+
+  a.replace(/declare\s*global\s*\{/, "\n")
+   .replace(/\}\s*\/\/\s*declare\s*global[^\n\r]*/, "\n")
+   .replace(/export\s*\{\};?/, "\n")
+   .replace(/\/\/\/\s*<[^\r\n]+/, "\n")
+   +
+
   "}\n"
 )
 

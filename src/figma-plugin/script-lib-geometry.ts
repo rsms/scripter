@@ -10,14 +10,14 @@ export class Rect {
     return new Vec(this.x, this.y)
   }
 
-  containsPoint(v :Vec) {
+  containsPoint(v :Vec) :boolean {
     return (
       v.x >= this.x && v.x <= this.x + this.width &&
       v.y >= this.y && v.y <= this.y + this.width
     )
   }
 
-  translate(v :Vec) {
+  translate(v :Vec) :Rect {
     return new Rect(this.x + v.x, this.y + v.y, this.width, this.height)
   }
 

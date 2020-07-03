@@ -10,9 +10,7 @@ rm -rf docs/app.* docs/resources.* docs/source-map-*.wasm
 
 spawn_monaco_build "$rootdir/docs" && echo "monaco is up-to-date" || true
 
-node misc/build-worker-template.js &
-bash misc/build-jsdom.sh
-wait
+bash misc/build-app.pre.sh "docs"
 
 echo "building ./src/app -> ./docs"
 pushd src/app > /dev/null
@@ -34,11 +32,9 @@ _JS_
 SOURCE_MAP_VERSION=$(node -p 'require("source-map/package.json").version')
 
 cp -f src/app/figma-*.d.ts \
-      src/common/scripter-env.d.ts \
       docs/
 
 cp -f node_modules/source-map/lib/mappings.wasm \
       docs/source-map-${SOURCE_MAP_VERSION}-mappings.wasm
-
 
 echo "✓ done"

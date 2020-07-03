@@ -8,6 +8,7 @@ import { startsWithIgnoreCase, rtrim, startsWith } from './strings.js';
 import { Schemas } from './network.js';
 import { isLinux, isWindows } from './platform.js';
 import { isEqual, basename, relativePath } from './resources.js';
+import * as scripter from '../../editor/scripter.js'
 /**
  * @deprecated use LabelService instead
  */
@@ -50,6 +51,7 @@ export function getPathLabel(resource, userHomeProvider, rootProvider) {
     return res;
 }
 export function getBaseLabel(resource) {
+    let s = scripter.getBaseLabel(resource); if (s) { return s }
     if (!resource) {
         return undefined;
     }

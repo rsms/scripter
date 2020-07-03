@@ -66,7 +66,7 @@ export function create_libvars(libui :LibUI) {
       return vars
     }
 
-    removeVar(v :Var<any>) {
+    removeVar(v :Var<any>) :void {
       this.vars.delete(v)
       if (this.vars.size == 0) {
         this.nextUpdateResolve(false)  // end iteration
@@ -74,7 +74,7 @@ export function create_libvars(libui :LibUI) {
       }
     }
 
-    removeAllVars() {
+    removeAllVars() :void {
       this.nextUpdateResolve(false)  // end iteration
       clearTimeout(this.updateTimer) ; this.updateTimer = null
     }

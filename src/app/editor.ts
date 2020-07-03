@@ -1,6 +1,5 @@
 import * as monaco from "../monaco/monaco"
 import "./editor-themes"  // for side-effects
-import resources from "./resources"
 import { Script, ScriptMeta } from "./script"
 import { EventEmitter } from "./event"
 import { db } from "./data"
@@ -16,9 +15,38 @@ import { LoadScriptMsg } from "../common/messages"
 
 const ts = monaco.languages.typescript
 
+// some extensions to monaco, defined in src/monaco/monaco-editor/esm/vs/editor/scripter.js
+declare var __scripterMonaco : {
+  patchEditorService(
+    openCodeEditor:(input :OpenCodeEditorInput, editor :MonacoEditor)=>Promise<MonacoEditor|null>
+  ) :void
+  patchEditorModelResolverService(
+    findModel:(editor :MonacoEditor, resource :monaco.Uri) => EditorModel|null
+  ) :void
+  patchUriLabelService(
+    // returns a label for a resource.
+    // Shows up as a tool tip and small text next to the filename
+    getUriLabel:(resource :monaco.Uri, options? :{relative?:boolean}) => string
+  ) :void
+  patchBasenameOrAuthority(f? :(resource :monaco.Uri) => string|null|undefined)
+}
+interface OpenCodeEditorInput {
+  resource? :monaco.Uri
+  options? : {
+    selection :monaco.IRange,
+  }
+}
+
 
 type EditorModel = monaco.editor.ITextModel
 type EditorOptions = monaco.editor.IEditorOptions
+type MonacoEditor = monaco.editor.IStandaloneCodeEditor
+
+
+interface ScriptProgram {
+  code      :string
+  sourceMap :string
+}
 
 
 const kLocked = Symbol("Locked")
@@ -47,8 +75,8 @@ const defaultOptions :EditorOptions = {
   smoothScrolling: true, // animate scrolling to a position
 
   // fontLigatures: true,
-  // showUnused: true,  // fade out unused variables
-  folding: false,
+  showUnused: false,  // fade out unused variables
+  folding: false,  // must be off since July 2020 (messes with hidden wrapper)
   cursorBlinking: "smooth", // solid | blink | smooth | phase
   renderLineHighlight: "none",
   renderWhitespace: "selection", // none | boundary | selection | all (default: none)
@@ -136,7 +164,6 @@ const typescriptCompilerOptions = {
   allowUnusedLabels: true,
   removeComments: true,
   module: ts.ModuleKind.CommonJS,
-  // lib: [ "es2018", "dom" ],
   sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
   strictNullChecks: true,
 
@@ -177,15 +204,17 @@ interface EditorStateEvents {
   "decorationchange": undefined
 }
 
+const kScript = Symbol("script")
+
 
 export class EditorState extends EventEmitter<EditorStateEvents> {
   readonly defaultFontSize = defaultFontSize
 
-  editor :monaco.editor.IStandaloneCodeEditor
+  editor :MonacoEditor
   options :EditorOptions = {...defaultOptions}
 
-  editorPromise :Promise<monaco.editor.IStandaloneCodeEditor>
-  _editorPromiseResolve: (e:monaco.editor.IStandaloneCodeEditor)=>void
+  editorPromise :Promise<MonacoEditor>
+  _editorPromiseResolve: (e:MonacoEditor)=>void
 
   viewZones = new ViewZones(this)
 
@@ -207,7 +236,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   constructor() {
     super()
-    this.editorPromise = new Promise<monaco.editor.IStandaloneCodeEditor>(resolve => {
+    this.editorPromise = new Promise<MonacoEditor>(resolve => {
       this._editorPromiseResolve = resolve
     })
   }
@@ -224,7 +253,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   onCurrentScriptSave = (_ :Script) => {
     dlog("script saved")
     this._currentScriptId = this._currentScript.id  // may have been assigned one
-    config.lastOpenScript = this._currentScript.id
+    // config.lastOpenScript = this._currentScript.id
+    config.lastOpenScriptGUID = this._currentScript.guid
     // menu.updateScriptList()
     if (this._currentScript.modelVersion == 0) {
       // change caused not by the editor but by something else. Update editor when ready.
@@ -237,47 +267,82 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
   }
 
-  modelCache :{[id:string]:EditorModel} = {}
+  //models = new Map<Script,EditorModel>()
 
-  setCurrentScript(script :Script) :EditorModel {
+  getModel(script :Script) :EditorModel {
     if (this._currentScript === script) {
       return this._currentModel
     }
+    let uri = this.modelURIForScript(script)
+    let model = monaco.editor.getModel(uri)
+    if (model) {
+      dlog(`editor/getModel: using exising model for ${uri}`)
+      return model
+    }
+    dlog(`editor/getModel: creating new model for ${uri}`)
+    model = monaco.editor.createModel(script.body, "typescript", uri)
+    model.updateOptions({
+      tabSize: 2,
+      indentSize: 2,
+      insertSpaces: true,
+      trimAutoWhitespace: true,
+    })
+    model[kScript] = script
+
+    let onDeleteScript = (script :Script) => {
+      this.disposeModel(script)
+      script.removeListener("delete", onDeleteScript)
+    }
+    script.on("delete", onDeleteScript)
+
+    // init new model right away so that we receive events for things like TS feedback
+    this.initEditorModel(model)
+    return model
+  }
+
+  disposeModel(script :Script) {
+    // monaco.editor.getModels()
+    let uri = this.modelURIForScript(script)
+    let model = monaco.editor.getModel(uri)
+    if (!model) {
+      console.warn(`editor/disposeModel ${script}: no active model`)
+      return
+    }
+    if (this._currentModel === model) {
+      console.warn(`editor/disposeModel attempting to dispose active model (ignoring)`)
+      return
+    }
+    dlog(`editor/disposeModel ${script}`)
+    model.dispose()
+  }
+
+  modelURIForScript(script :Script) :monaco.Uri {
+    let filename = script.guid
+    if (!filename.endsWith(".d.ts")) {
+      filename = "scripter." + filename + ".tsx"
+    }
+    return monaco.Uri.file(filename)
+    // return monaco.Uri.from({scheme:"scripter", path:filename})
+  }
+
+  setCurrentScript(script :Script) :EditorModel {
+    let model = this.getModel(script)
+    if (model === this._currentModel) {
+      return model
+    }
+
     if (this._currentScript) {
       this._currentScript.removeListener("save", this.onCurrentScriptSave)
-    }
-
-    let filename = script.guid
-    if (!filename) {
-      if (script.id != 0) {
-        filename = `__id${script.id}`
-      } else {
-        filename = `__model${this._nextModelId++}`
-      }
-    }
-    let modelUri = monaco.Uri.from({scheme:"scripter", path:`${filename}.tsx`})
-    let model = monaco.editor.getModel(modelUri)
-
-    if (!model) {
-      model = monaco.editor.createModel(script.body, "typescript", modelUri)
-      model.updateOptions({
-        tabSize: 2,
-        indentSize: 2,
-        insertSpaces: true,
-        trimAutoWhitespace: true,
-      })
-      // init new model right away so that we receive events for things like TS feedback
-      initEditorModel(model)
     }
 
     this._currentModel = model
 
     if (this.editor) {
-      // path taken in all cases but during initial initialization
+      // path taken in all cases except during app initialization
       this.clearAllMetaInfo()
       this.setModel(model)
       this.updateOptions({
-        readOnly: script.readOnly,
+        readOnly: script.isROLib,
       })
       let layoutAndFocus = () => {
         this.editor.layout()
@@ -289,13 +354,17 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         this.restoreViewState()
         setTimeout(layoutAndFocus, 1)
         setTimeout(layoutAndFocus, 100)
+        this.hideScriptWrapper()
       })
+
+      this.hideScriptWrapper()
     }
 
     this._currentScript = script
     this._currentScriptId = script.id
     this._currentScript.on("save", this.onCurrentScriptSave)
-    config.lastOpenScript = script.id
+    // config.lastOpenScript = script.id
+    config.lastOpenScriptGUID = script.guid
 
     return model
   }
@@ -304,16 +373,19 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   setModel(model :EditorModel) {
     let prevModel = this.editor.getModel()
     if (prevModel !== model) {
-      // Note: Monaco only has a single TypeScript instance, so we can't have multiple
-      // models in Scripter as they would share scope, which causes errors like
-      // "can not redeclare x". So, we disposeany previous model before setting a new one.
-      // Disposing of a model causes the TypeScript instance to "forget".
-      if (prevModel) {
-        prevModel.dispose()
-      }
+      // // Note: Monaco only has a single TypeScript instance, so we can't have multiple
+      // // models in Scripter as they would share scope, which causes errors like
+      // // "can not redeclare x". So, we dispose any previous model before setting a new one.
+      // // Disposing of a model causes the TypeScript instance to "forget".
+      // if (prevModel) {
+      //   prevModel.dispose()
+      // }
       this.editor.setModel(model)
     }
     this._currentModel = model
+    if (this.editor) {
+      this.hideScriptWrapper()
+    }
   }
 
 
@@ -353,6 +425,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   async openScriptByID(id :number) :Promise<Script|null> {
+    if (DEBUG) {
+      console.warn("legacy access to editor/openScriptByID")
+    }
     if (this._currentScript && this._currentScript.id == id) {
       this.editor.focus()
       return this._currentScript
@@ -368,7 +443,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   async openScriptByGUID(guid :string) :Promise<Script|null> {
-    if (!guid || typeof guid != "string") {
+    if (!guid) {
+      return null
+    }
+    if (typeof guid != "string") {
       throw new Error("invalid guid")
     }
     if (this._currentScript && this._currentScript.guid == guid) {
@@ -460,7 +538,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       wordWrap:                config.wordWrap ? "on" : "off",
       quickSuggestions:        config.quickSuggestions,
       quickSuggestionsDelay:   config.quickSuggestionsDelay,
-      folding:                 config.codeFolding,
+      //folding:                 config.codeFolding,
       renderWhitespace:        config.showWhitespace ? "all" : "selection",
       renderControlCharacters: config.showWhitespace,
       renderIndentGuides:      config.indentGuides,
@@ -516,7 +594,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     if (this.runDebounceTimer !== null) { return }
     this.runDebounceTimer = setTimeout(()=>{ this.runDebounceTimer = null }, 100)
 
-    if (this._currentScript.readOnly) {
+    if (this._currentScript.isROLib) {
       return
     }
 
@@ -591,8 +669,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     try {
       lockModel(model)
-      let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
-      let tsclient = await tsworker(model.uri)
+      let tsworkerForModel = await monaco.languages.typescript.getTypeScriptWorker()
+      let tsclient = await tsworkerForModel(model.uri)
       result = await tsclient.getEmitOutput(model.uri.toString()) as EmitOutput
     } finally {
       unlockModel(model)
@@ -903,6 +981,65 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // --------------------------------------------------------------------------------------------
   // editor initialization
 
+
+  async monacoOpenCodeEditor(
+    input :OpenCodeEditorInput,
+    editor :MonacoEditor,
+  ) :Promise<MonacoEditor|null> {
+    // This function is called by the Monaco EditorService when a user requests to switch
+    // to a file, for example via "Jump to Definition".
+
+    if (editor !== this.editor) {
+      dlog("monacoOpenCodeEditor got unexpected editor object (!== this.editor)", editor)
+      return null
+    }
+    //dlog("onOpenCodeEditor", input, editor)
+    if (!input.resource) {
+      return null
+    }
+
+    let model = monaco.editor.getModel(input.resource)
+    if (!model) {
+      return null
+    }
+
+    let script = model[kScript] as Script|undefined
+    if (!script) {
+      return null
+    }
+
+    this.setCurrentScript(script)
+
+    // this block lifted from monaco's StandaloneCodeEditorServiceImpl:
+    let selection = (input.options && input.options.selection) || null
+    if (selection) {
+      // dlog("set selection in model", model.uri.toString())
+      let setSelection = () => {
+        if (typeof selection.endLineNumber === 'number' &&
+            typeof selection.endColumn === 'number'
+        ) {
+          editor.setSelection(selection);
+          editor.revealRangeInCenter(selection, monaco.editor.ScrollType.Immediate);
+        } else {
+          let pos = {
+            lineNumber: selection.startLineNumber,
+            column: selection.startColumn
+          }
+          editor.setPosition(pos);
+          editor.revealPositionInCenter(pos, monaco.editor.ScrollType.Immediate)
+        }
+      }
+      setSelection()
+      // workaround for bug in monaco where if the position of a model has been set
+      // recently without edits, then "Immediate" mode setPosition has no effect in same
+      // runloop frame. Oh, web technology...
+      setTimeout(setSelection, 1)
+    }
+
+    return editor
+  }
+
+
   async init() {
     this.initTypescript()  // intentionally not awaiting
 
@@ -913,13 +1050,55 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // setup options from config
     this.updateOptionsFromConfig()
 
+    // Monaco is created to be a stand-alone single editor, but really it is VSCode, a
+    // full-featured multi-file editor. Patch the StaticServices.codeEditorService component of
+    // monaco.
+    // Note: With Monaco v0.20.0 there appears to be a bug in the meachnics underlying the
+    // third argument "override" to editor.create. Internally (StaticServices.init) a Map is used
+    // instead of an object with keys that are wrapped in functions with a toString method.
+    // That implementation assumes the toString method is called implicitly by the map container,
+    // but the new Map object keys on any object! This means that services can not be overridden.
+    // Thus, we patch the prototype of the editor service instead of using service overrides.
+    __scripterMonaco.patchEditorService(this.monacoOpenCodeEditor.bind(this))
+    // This patch enables "Find All References"
+    __scripterMonaco.patchEditorModelResolverService((editor, uri) => {
+      return monaco.editor.getModel(uri)
+    })
+    // returns a label for a resource.
+    // Shows up as a tool tip and small text next to the filename
+    __scripterMonaco.patchUriLabelService((uri, options) => {
+      let model = monaco.editor.getModel(uri)
+      if (model) {
+        let script = model[kScript] as Script|undefined
+        if (script) {
+          return script.name
+        }
+      }
+      if (uri.scheme === 'file') {
+        return uri.fsPath
+      }
+      return uri.path
+    })
+    // Show script names instead of their filenames
+    __scripterMonaco.patchBasenameOrAuthority(uri => {
+      if (uri && uri.path.indexOf("scripter.") != -1) {
+        let model = monaco.editor.getModel(uri)
+        let script = model[kScript] as Script|undefined
+        if (script) {
+          return script.name
+        }
+      }
+    })
+
     // create editor
     this.editor = monaco.editor.create(document.getElementById('editor')!, {
       model,
       theme: 'scripter-light',
       ...this.options,
-      readOnly: script.readOnly,
+      readOnly: script.isROLib,
     })
+
+    this.hideScriptWrapper()
 
     this.initEditorActions()
 
@@ -927,7 +1106,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.restoreViewState()
 
     // initialize model
-    initEditorModel(model)
+    this.initEditorModel(model)
 
     // layout and focus
     const layoutAndFocus = () => {
@@ -941,6 +1120,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     // initialize event handlers
     this.initEditorEventHandlers()
+
+    // load libs
+    for (let s of scriptsData.referenceScripts) {
+      this.getModel(s)
+    }
 
     // // if we made a new script for the first time, save it immediately
     // if (this._currentScript.id == 0) {
@@ -957,33 +1141,24 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       requestAnimationFrame(() => { menu.scrollToActiveItem() })
     })
 
-    // monaco.languages.registerCodeActionProvider("typescript", {
-    //   provideCodeActions( model: monaco.editor.ITextModel,
-    //     range: monaco.Range,
-    //     context: monaco.languages.CodeActionContext,
-    //     token: monaco.CancellationToken,
-    //   ): ( monaco.languages.Command | monaco.languages.CodeAction)[]
-    //      | Promise<(monaco.languages.Command | monaco.languages.CodeAction)[]>
-    //   {
-    //     print("hola!", context, range)
-    //     return []
-    //   }
-    // })
-
     // // DEBUG print compiled JS code
     // compileCurrentScript().then(r => print(r.outputFiles[0].text))
 
-    // ;(async () => {
-    //   let model = editor.getModel()
-    //   let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
-    //   let tsclient = await tsworker(model.uri)
-    //   print("tsworker", tsworker)
-    //   print("tsclient", tsclient)
-    //   print("tsclient.getCompilerOptionsDiagnostics()",
-    //     await tsclient.getCompilerOptionsDiagnostics())
-    //   print("tsclient.getSemanticDiagnostics()", await tsclient.getSemanticDiagnostics())
-    //   print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings())
-    // })()
+    // DEBUG ts
+    ;(async () => {
+      let model = this.editor.getModel()
+      let tsworker = await monaco.languages.typescript.getTypeScriptWorker()
+      let tsclient = await tsworker(model.uri)
+      print("tsworker", tsworker)
+      print("tsclient", tsclient)
+
+      let uri = model.uri.toString()
+      print("tsclient.getCompilerOptionsDiagnostics()",
+        await tsclient.getCompilerOptionsDiagnostics(uri))
+
+      print("tsclient.getSemanticDiagnostics()", await tsclient.getSemanticDiagnostics(uri))
+      // print("tsclient.getCompilationSettings()", await tsclient.getCompilationSettings(uri))
+    })()
 
     this.isInitialized = true
     this.triggerEvent("init")
@@ -992,6 +1167,40 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this._editorPromiseResolve(this.editor)
     ;(this as any)._editorPromiseResolve = null
   } // init()
+
+
+  hideScriptWrapper() {
+    dlog("this.hideScriptWrapper()")
+    // Sad hack to work around isolating scripts.
+    // Many many hours went into finding a better solution than this.
+    // Ultimately this is the simples and most reliable approach. Monaco synchronizes
+    // state with the TS worker, so simply patching the code in the TS worker would cause
+    // the editor to go bananas.
+    if (DEBUG) {
+      if (!(this.editor as any).setHiddenAreas) {
+        console.error("MONACO issue: editor.setHiddenAreas not found!")
+      }
+    }
+    let hiddenAreas :monaco.IRange[] = []
+    if (!this._currentScript.isROLib) {
+      let model = this._currentModel
+      hiddenAreas = [
+        {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 1,
+          endColumn: 1,
+        },
+        {
+          startLineNumber: model.getLineCount(),
+          startColumn: 1,
+          endLineNumber: model.getLineCount(),
+          endColumn: 1,
+        }
+      ]
+    }
+    ;(this.editor as any).setHiddenAreas(hiddenAreas)
+  }
 
 
   initEditorActions() {
@@ -1147,158 +1356,167 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   async initTypescript() {
-    let tsconfig = monaco.languages.typescript.typescriptDefaults
-    tsconfig.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
-    tsconfig.setCompilerOptions(typescriptCompilerOptions)
-    let [figmaDTS, scripterEnvDTS] = await Promise.all([
-      resources["figma.d.ts"], resources["scripter-env.d.ts"]
-    ])
-    tsconfig.addExtraLib(figmaDTS, "scripter:figma.d.ts")
-    tsconfig.addExtraLib(scripterEnvDTS, "scripter:scripter-env.d.ts")
-    // tsconfig.setDiagnosticsOptions({noSemanticValidation:true})
+    let ts = monaco.languages.typescript.typescriptDefaults
+    ts.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
+    ts.setCompilerOptions(typescriptCompilerOptions)
+    // ts.addExtraLib(figmaDTS, "scripter:figma.d.ts")
+    // ts.addExtraLib(scripterEnvDTS, "scripter:scripter-env.d.ts")
+    // ts.addExtraLib(figmaDTS, "defaultLib:lib.es6.d.ts")
+
+    // ts.setDiagnosticsOptions({noSemanticValidation:true})
+    ts.setEagerModelSync(true)
+    ts.onDidChange(e => {
+      dlog("ts onDidChange", e)
+    })
   }
+
+
+  initEditorModel(model :EditorModel) {
+    // filter out some errors
+    let lastSeenMarkers :monaco.editor.IMarker[] = []
+    let onDidChangeDecorationsCallbackRunning = false
+
+    model.onWillDispose(() => {
+      model.onDidChangeDecorations(() => {})
+      model.onWillDispose(() => {})
+      editor.invalidateDiagnostics(model)
+    })
+
+    model.onDidChangeDecorations(async ev => {
+      if (onDidChangeDecorationsCallbackRunning) {
+        // print("onDidChangeDecorations: onDidChangeDecorationsCallbackRunning -- ignore")
+        return
+      }
+      onDidChangeDecorationsCallbackRunning = true
+      try {
+
+      // print("model.onDidChangeDecorations", ev)
+      // let decs = model.getAllDecorations(0/* 0 = owner id of primary editor */)
+      // if (decs.length == 0) {
+      //   return
+      // }
+      // print("decs", decs)
+
+      // check if markers have changed
+      let markers = monaco.editor.getModelMarkers({ owner: "typescript" })
+      if (markers.length == 0 || markers === lastSeenMarkers) {
+        return
+      }
+      if (markers.length == lastSeenMarkers.length) {
+        let diff = false
+        for (let i = 0; i < markers.length; i++) {
+          if (markers[i] !== lastSeenMarkers[i]) {
+            diff = true
+            break
+          }
+        }
+        if (!diff) {
+          // print("no change to markers")
+          return
+        }
+      }
+      lastSeenMarkers = markers
+
+      // okay, markers did change.
+      // filter out certain diagnostics
+
+      const filterRe = /['"]?return['"]? statement can only be used within a function body/i
+
+      let initialLen = markers.length
+      let semdiag :any[]|null = null
+      let origIndex = 0
+      for (let i = 0; i < markers.length; origIndex++) {
+        let m = markers[i]
+        if (filterRe.test(m.message)) {
+          markers.splice(i, 1)
+          continue
+        }
+
+        // await at top level is tricky to identify as the same TS code is used for both
+        // top-level and function-level, the latter which is a valid error in Scripter.
+        if (m.message.indexOf("'await'") != -1) {
+          if (semdiag === null) {
+            // request diagnostics from TypeScript
+            semdiag = await editor.getSemanticDiagnostics(model)
+          }
+          // here, we rely on the fact that markers in Monaco are ordered the same as
+          // semantic diagnostics in TypeScript, which _might_ not be true.
+          let diag :any
+          for (let d of semdiag) {
+            if (d.messageText == m.message) {
+              diag = d
+              break
+            }
+          }
+          if (diag && diag.code == 1308 && !diag.relatedInformation) {
+            // TS1308 is "'await' expression is only allowed within an async function."
+            // when this is at the top-level, there's no related information.
+            markers.splice(i, 1)
+            continue
+          }
+        } else if (m.message.indexOf("'for-await-of'") != -1) {
+          // top-level for-await-of e.g. "for await (let r of asyncIterable()) { ... }"
+          markers.splice(i, 1)
+          continue
+        }
+
+        // keep
+        i++
+      }
+      // print("markers", markers, initialLen != markers.length)
+      if (initialLen != markers.length) {
+        monaco.editor.setModelMarkers(model, "typescript", markers)
+      }
+
+      // TODO: consider enriching the hover thingy.
+      // The following _adds_ information to a hover card.
+      // monaco.languages.registerHoverProvider('typescript', {
+      //   provideHover: function (model, position) {
+      //     // note: can return a promise
+      //     // return null
+      //     dlog("position", position)
+      //     return {
+      //       range: new monaco.Range(
+      //         position.lineNumber, position.column,
+      //         position.lineNumber, position.column + 999,
+      //         // 1, 1,
+      //         // model.getLineCount(), model.getLineMaxColumn(model.getLineCount())
+      //       ),
+      //       contents: [
+      //         { value: '**SOURCE**' },
+      //         { value: '```html\nHELLO <WORLD>\n```' }
+      //       ]
+      //     }
+      //   }
+      // })
+
+      } finally {
+        onDidChangeDecorationsCallbackRunning = false
+      }
+    }) // onDidChangeDecorations
+  } // initEditorModel()
 
 }
 
 export const editor = new EditorState()
 
 
-export function initEditorModel(model :EditorModel) {
-  // filter out some errors
-  let lastSeenMarkers :monaco.editor.IMarker[] = []
-  let onDidChangeDecorationsCallbackRunning = false
-
-  model.onWillDispose(() => {
-    model.onDidChangeDecorations(() => {})
-    model.onWillDispose(() => {})
-    editor.invalidateDiagnostics(model)
-  })
-
-  model.onDidChangeDecorations(async ev => {
-    if (onDidChangeDecorationsCallbackRunning) {
-      // print("onDidChangeDecorations: onDidChangeDecorationsCallbackRunning -- ignore")
-      return
-    }
-    onDidChangeDecorationsCallbackRunning = true
-    try {
-
-    // print("model.onDidChangeDecorations", ev)
-    // let decs = model.getAllDecorations(0/* 0 = owner id of primary editor */)
-    // if (decs.length == 0) {
-    //   return
-    // }
-    // print("decs", decs)
-
-    // check if markers have changed
-    let markers = monaco.editor.getModelMarkers({ owner: "typescript" })
-    if (markers.length == 0 || markers === lastSeenMarkers) {
-      return
-    }
-    if (markers.length == lastSeenMarkers.length) {
-      let diff = false
-      for (let i = 0; i < markers.length; i++) {
-        if (markers[i] !== lastSeenMarkers[i]) {
-          diff = true
-          break
-        }
-      }
-      if (!diff) {
-        // print("no change to markers")
-        return
-      }
-    }
-    lastSeenMarkers = markers
-
-    // okay, markers did change.
-    // filter out certain diagnostics
-
-    const filterRe = /['"]?return['"]? statement can only be used within a function body/i
-
-    let initialLen = markers.length
-    let semdiag :any[]|null = null
-    let origIndex = 0
-    for (let i = 0; i < markers.length; origIndex++) {
-      let m = markers[i]
-      if (filterRe.test(m.message)) {
-        markers.splice(i, 1)
-        continue
-      }
-
-      // await at top level is tricky to identify as the same TS code is used for both
-      // top-level and function-level, the latter which is a valid error in Scripter.
-      if (m.message.indexOf("'await'") != -1) {
-        if (semdiag === null) {
-          // request diagnostics from TypeScript
-          semdiag = await editor.getSemanticDiagnostics(model)
-        }
-        // here, we rely on the fact that markers in Monaco are ordered the same as
-        // semantic diagnostics in TypeScript, which _might_ not be true.
-        let diag :any
-        for (let d of semdiag) {
-          if (d.messageText == m.message) {
-            diag = d
-            break
-          }
-        }
-        if (diag && diag.code == 1308 && !diag.relatedInformation) {
-          // TS1308 is "'await' expression is only allowed within an async function."
-          // when this is at the top-level, there's no related information.
-          markers.splice(i, 1)
-          continue
-        }
-      } else if (m.message.indexOf("'for-await-of'") != -1) {
-        // top-level for-await-of e.g. "for await (let r of asyncIterable()) { ... }"
-        markers.splice(i, 1)
-        continue
-      }
-
-      // keep
-      i++
-    }
-    // print("markers", markers, initialLen != markers.length)
-    if (initialLen != markers.length) {
-      monaco.editor.setModelMarkers(model, "typescript", markers)
-    }
-
-    // TODO: consider enriching the hover thingy.
-    // The following _adds_ information to a hover card.
-    // monaco.languages.registerHoverProvider('typescript', {
-    //   provideHover: function (model, position) {
-    //     // note: can return a promise
-    //     // return null
-    //     dlog("position", position)
-    //     return {
-    //       range: new monaco.Range(
-    //         position.lineNumber, position.column,
-    //         position.lineNumber, position.column + 999,
-    //         // 1, 1,
-    //         // model.getLineCount(), model.getLineMaxColumn(model.getLineCount())
-    //       ),
-    //       contents: [
-    //         { value: '**SOURCE**' },
-    //         { value: '```html\nHELLO <WORLD>\n```' }
-    //       ]
-    //     }
-    //   }
-    // })
-
-    } finally {
-      onDidChangeDecorationsCallbackRunning = false
-    }
-  })
-}
-
-
 
 async function loadLastOpenedScript() :Promise<Script> {
   let script :Script|null = null
-  if (config.lastOpenScript != 0) {
-    try {
+
+  let guid = config.lastOpenScriptGUID
+  try {
+    if (guid != "") {
+      script = await scriptsData.getScriptByGUID(guid)
+    } else if (config.lastOpenScript != 0) {
+      // try legacy numeric id
       script = await scriptsData.getScript(config.lastOpenScript)
-    } catch (err) {
-      console.error(`failed to reopen last open script:`, err.stack)
     }
+  } catch (err) {
+    console.error(`failed to reopen last open script:`, err.stack)
   }
+
   if (!script) {
     if (scriptsData.scripts.length) {
       let id = 0

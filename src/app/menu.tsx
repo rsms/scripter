@@ -298,13 +298,13 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  onChange={this.onChangeSettingNum} />
            <span>ms</span>
         </label>
-        <label title="Enables code folding; a way to collapse blocks of code">
+        {/*<label title="Enables code folding; a way to collapse blocks of code">
           <input type="checkbox"
                  name="config.codeFolding"
                  checked={config.codeFolding}
                  onChange={this.onChangeSettingBool} />
           Code folding
-        </label>
+        </label>*/}
         <label title="Enables a minimap for navigating large scripts">
           <input type="checkbox"
                  name="config.minimap"
@@ -372,11 +372,12 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       if (menu.closeOnSelection) {
         menu.toggle()
       }
-      editor.openScriptByID(s.id)
+      dlog("menu/open-script", s)
+      editor.openScriptByGUID(s.guid)
       scrollIntoView(ev.target as HTMLElement)
     }
     attrs.onMouseDown = onMouseDown
-    if (!s.readOnly && s.id >= 0) {
+    if (!s.isROLib && s.id >= 0) {
       // allow renaming of editable files which are either unsaved (id==0) or saved (id>0).
       // however, do not allow renaming of editable example files (id<0).
       attrs.onDoubleClick = ev => {
@@ -401,12 +402,12 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
     }
     if (s.id > 0 && confirm(confirmMessage)) {
       // TODO: move this logic to editor or maybe script-data?
-      let otherScriptToOpen = scriptsData.scriptAfterOrBefore(s.id)
+      let otherScriptToOpen = scriptsData.scriptAfterOrBefore(s.guid)
       if (!otherScriptToOpen) {
         // deleted last script -- we must always have one script, so make a new one
         editor.newScript()
       } else {
-        editor.openScriptByID(otherScriptToOpen.id)
+        editor.openScriptByGUID(otherScriptToOpen.guid)
       }
       s.delete()
     }
@@ -445,7 +446,7 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
 
   let buttons :JSX.Element[] = []
 
-  if (!isEditing && !s.readOnly) {
+  if (!isEditing && !s.isROLib) {
     async function onClickPlayButton(ev :React.MouseEvent<HTMLDivElement>) {
       ev.preventDefault()
       ev.stopPropagation()

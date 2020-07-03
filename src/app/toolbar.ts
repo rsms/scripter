@@ -154,9 +154,9 @@ class ToolbarUI {
     })
     const updateClearButton = () => {
       let cl = this.clearButton.classList
-      let readOnly = !editor.currentScript || editor.currentScript.readOnly
-      cl.toggle("hidden", readOnly)
-      if (!readOnly) {
+      let isROLib = !editor.currentScript || editor.currentScript.isROLib
+      cl.toggle("hidden", isROLib)
+      if (!isROLib) {
         cl.toggle(
           "unavailable",
           editor.viewZones.count == 0 && editor.editorDecorationIds.length == 0
@@ -184,8 +184,8 @@ class ToolbarUI {
       }
     })
     const updateRunButton = () => {
-      let readOnly = !editor.currentScript || editor.currentScript.readOnly
-      this.runButton.classList.toggle("hidden", readOnly)
+      let isROLib = !editor.currentScript || editor.currentScript.isROLib
+      this.runButton.classList.toggle("hidden", isROLib)
     }
     updateRunButton()
 

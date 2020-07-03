@@ -74,20 +74,20 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
     })
 
-    let seenExampleIds = new Set<number>()
-    const mkExample = (id :number, name :string, code :string) => {
-      if (id >= 0) {
-        throw new Error(`invalid example script id ${id}`)
+    let seenExampleGUIDs = new Set<string>()
+    let nextExampleID = -100000
+
+    const mkExample = (guid :string, name :string, code :string, isROLib :boolean) => {
+      if (seenExampleGUIDs.has(guid)) {
+        throw new Error(`duplicate example script guid:${guid}`)
       }
-      if (seenExampleIds.has(id)) {
-        throw new Error(`duplicate example script id ${id}`)
-      }
-      seenExampleIds.add(id)
+      seenExampleGUIDs.add(guid)
       return Script.create({
-        id,
+        id: nextExampleID++,
+        guid,
         name: name,
         modifiedAt: new Date("2000-01-01 00:00:00"),
-      }, code)
+      }, code, isROLib)
     }
 
     for (let category of Object.keys(exampleScripts)) {
@@ -96,11 +96,12 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
         this.exampleScripts[category] = cat = []
       }
       for (let exampleScript of exampleScripts[category]) {
-        // id [-10000000..-20000000) is reserved for externalExampleFiles
-        if (exampleScript.id <= -10000000 && exampleScript.id > -20000000) {
-          throw new Error(`reserved example script id ${exampleScript.id}`)
-        }
-        let s = mkExample(exampleScript.id, exampleScript.name, exampleScript.code)
+        let s = mkExample(
+          exampleScript.guid,
+          exampleScript.name,
+          exampleScript.code,
+          /*isROLib*/false
+        )
         if (!this.defaultSampleScript) {
           this.defaultSampleScript = s
         }
@@ -108,15 +109,10 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
     }
 
-    let externalExampleFiles :[number,string,string][] = [
-      [-10000000, "figma.d.ts", "Figma API"],
-      [-10000001, "scripter-env.d.ts", "Scripter API"],
-    ]
-    Promise.all(externalExampleFiles.map(name => resources[name[1]])).then(codes => {
-      for (let i = 0; i < codes.length; i++) {
-        let [id, , name] = externalExampleFiles[i]
-        let s = mkExample(id, name, codes[i])
-        s.readOnly = true
+    Promise.all(resources.map(r => r.body)).then(bodyContents => {
+      for (let i = 0; i < bodyContents.length; i++) {
+        let r = resources[i]
+        let s = mkExample(r.filename, r.name, bodyContents[i], /*isROLib*/true)
         this.referenceScripts.push(s)
       }
       this.finalizeChanges()
@@ -131,6 +127,9 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
 
 
   async getScript(id :number) :Promise<Script> {
+    if (DEBUG) {
+      console.warn("legacy access to script-data/getScript")
+    }
     let s = this.scriptsById.get(id)
     if (s) {
       if (s.id < 0) {
@@ -182,9 +181,9 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   }
 
 
-  scriptAfterOrBefore(id :number) :Script|null {
+  scriptAfterOrBefore(guid :string) :Script|null {
     for (let i = 0, z = this.scripts.length; i < z; i++) {
-      if (this.scripts[i].id == id) {
+      if (this.scripts[i].guid == guid) {
         let s = this.scripts[i + 1] || this.scripts[i - 1]
         if (s) {
           return s
@@ -257,6 +256,8 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
           continue
         }
         byGUID.set(s.meta.guid, s)
+      } else {
+        s.requireValidGUID()
       }
 
       let a = byID.get(s.meta.id)

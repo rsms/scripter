@@ -13,14 +13,15 @@ class Data {
   // if said function returns undefined, the values is removed from local storage.
   //
   //                    DEFAULT VALUE
-  lastOpenScript        :number = 0
+  lastOpenScript        :number = 0  // DEPRECATED(lastOpenScriptGUID)
+  lastOpenScriptGUID    :string = ""
   editorViewState       :monaco.editor.ICodeEditorViewState|null = null
   menuVisible           :bool = false
   uiScale               :number = 1
   showLineNumbers       :bool = false
   wordWrap              :bool = true
   monospaceFont         :bool = true
-  codeFolding           :bool = false
+  // codeFolding           :bool = false
   showWhitespace        :bool = false
   indentGuides          :bool = true
   minimap               :bool = false
@@ -77,6 +78,9 @@ class Config extends EventEmitter<ConfigEvents> {
   get lastOpenScript() :number { return this.data.lastOpenScript }
   set lastOpenScript(v :number) { if (v != 0) { this._set("lastOpenScript", v) } }
 
+  get lastOpenScriptGUID() :string { return this.data.lastOpenScriptGUID }
+  set lastOpenScriptGUID(v :string) { this._set("lastOpenScriptGUID", v) }
+
   // @DEPRECATED -> uiScale
   get uiScale() :number { return this.data.uiScale }
   set uiScale(v :number) { this._set("uiScale", v) }
@@ -93,8 +97,8 @@ class Config extends EventEmitter<ConfigEvents> {
   get monospaceFont() :bool { return this.data.monospaceFont }
   set monospaceFont(v :bool) { this._set("monospaceFont", v) }
 
-  get codeFolding() :bool { return this.data.codeFolding }
-  set codeFolding(v :bool) { this._set("codeFolding", v) }
+  // get codeFolding() :bool { return this.data.codeFolding }
+  // set codeFolding(v :bool) { this._set("codeFolding", v) }
 
   get showWhitespace() :bool { return this.data.showWhitespace }
   set showWhitespace(v :bool) { this._set("showWhitespace", v) }
