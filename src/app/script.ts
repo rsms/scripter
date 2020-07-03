@@ -89,7 +89,6 @@ export class Script extends EventEmitter<ScriptEventMap> {
     this._body = body
     this._editorViewState = editorViewState
     this.isROLib = !!isROLib
-    this._onAfterLoadBody()
   }
 
   get id() :number { return this.meta.id }
@@ -101,6 +100,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
   get modelVersion() :number { return this._currModelVersion }
 
   get isUserScript() :bool { return !this.isROLib && this.id >= 0 }
+  get isMutable() :bool { return this.isUserScript }
 
   get body() :string { return this._body }
   set body(v :string) {
@@ -114,12 +114,16 @@ export class Script extends EventEmitter<ScriptEventMap> {
   updateBody(text :string, modelVersion :number) {
     this._body = text
     this._currModelVersion = modelVersion
-    // this._onAfterLoadBody()
     this._bodyDirty = (
       this._currModelVersion != this._savedModelVersion ? DirtyState.Dirty :
                                                           DirtyState.Clean
     )
     this.scheduleSave()
+  }
+
+  updateBodyNoDirty(text :string, modelVersion :number) {
+    this._body = text
+    this._currModelVersion = modelVersion
   }
 
   get name() :string { return this.meta.name }
@@ -191,17 +195,18 @@ export class Script extends EventEmitter<ScriptEventMap> {
         return Promise.resolve()
       }
 
-      // assign GUID if missing
+      // check GUID
       if (!this.meta.guid) {
+        console.warn(`unsaved script missing GUID; generating & assigning one`)
         this.meta.guid = guid.gen()
       }
 
       print(`save/create script ${JSON.stringify(this.meta.name)}`)
 
-      if (this.meta.id < 0) {
-        // example
-        this.meta.name = "Copy of " + this.meta.name
-      }
+      // if (this.meta.id < 0) {
+      //   // example
+      //   this.meta.name = "Copy of " + this.meta.name
+      // }
 
       this.meta.modifiedAt = new Date()
       this.meta.createdAt = this.meta.modifiedAt
@@ -219,8 +224,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
     } else {
       // update
 
-      // assign GUID if missing
+      // check GUID
       if (!this.meta.guid) {
+        console.warn(`existing script#${this.meta.id} missing GUID; generating & assigning one`)
         this.meta.guid = guid.gen()
         this._metaDirty = DirtyState.DirtyImplicit
       }
@@ -343,15 +349,28 @@ export class Script extends EventEmitter<ScriptEventMap> {
   }
 
 
-  clone() :Script {
-    let s = new Script(
+  // returns an exact copy, with same id and guid
+  mutableCopy() :Script {
+    return new Script(
       {...this.meta, tags: [].concat(this.meta.tags)},
       this._body,
       this._editorViewState, // intentionally a ref. (immutable)
       this.isROLib,
     )
-    s.isROLib = this.isROLib
-    return s
+  }
+
+
+  // returns a copy that has a zero id and a new guid
+  duplicate(meta :Partial<ScriptMeta> = {}) :Script {
+    return new Script(
+      { ...this.meta, tags: [].concat(this.meta.tags),  // deep copy
+        id: 0, guid: guid.gen(),  // default override
+        ...meta,                  // caller override
+      },
+      this._body,
+      this._editorViewState, // intentionally a ref. (immutable)
+      this.isROLib,
+    )
   }
 
 
@@ -382,7 +401,9 @@ export class Script extends EventEmitter<ScriptEventMap> {
       // since July 2020 all scripts must have a GUID
       meta = { ...meta, guid: guid.gen() }
     }
-    return new Script(createScriptMeta(meta), body, null, isROLib)
+    const s = new Script(createScriptMeta(meta), body, null, isROLib)
+    s._onAfterLoadBody()
+    return s
   }
 
   static async load(id :number) :Promise<Script|null> {

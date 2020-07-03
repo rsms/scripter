@@ -224,6 +224,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   _nextModelId = 0
   _saveViewStateTimer :any = null
 
+  readonly hiddenAreas :ReadonlyArray<monaco.Range> = []  // maintained by updateHiddenAreas
+
   editorDecorationIds = []
   decorationCallbacks = new Map<string,DecoratedTextChangedCallback>()
 
@@ -253,9 +255,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   onCurrentScriptSave = (_ :Script) => {
     dlog("script saved")
     this._currentScriptId = this._currentScript.id  // may have been assigned one
-    // config.lastOpenScript = this._currentScript.id
-    config.lastOpenScriptGUID = this._currentScript.guid
+    config.lastOpenScriptGUID = this._currentScript.guid  // in case GUID changed
     // menu.updateScriptList()
+
     if (this._currentScript.modelVersion == 0) {
       // change caused not by the editor but by something else. Update editor when ready.
       let scriptId = this._currentScriptId
@@ -354,10 +356,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         this.restoreViewState()
         setTimeout(layoutAndFocus, 1)
         setTimeout(layoutAndFocus, 100)
-        this.hideScriptWrapper()
+        this.updateHiddenAreas()
       })
 
-      this.hideScriptWrapper()
+      this.updateHiddenAreas()
     }
 
     this._currentScript = script
@@ -384,7 +386,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
     this._currentModel = model
     if (this.editor) {
-      this.hideScriptWrapper()
+      this.updateHiddenAreas()
     }
   }
 
@@ -409,7 +411,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // Attempts to open script.
   // Returns null if another open action won the natural race condition.
   async openScript(script :Script) :Promise<Script|null> {
-    if (this._currentScript.id == script.id || this._currentScriptId == script.id) {
+    if (this._currentScript.guid == script.guid || this._currentScriptId == script.id) {
       this.editor.focus()
       return this._currentScript
     }
@@ -1098,7 +1100,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       readOnly: script.isROLib,
     })
 
-    this.hideScriptWrapper()
+    this.updateHiddenAreas()
 
     this.initEditorActions()
 
@@ -1169,8 +1171,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   } // init()
 
 
-  hideScriptWrapper() {
-    dlog("this.hideScriptWrapper()")
+  updateHiddenAreas() {
+    dlog("editor/updateHiddenAreas()")
     // Sad hack to work around isolating scripts.
     // Many many hours went into finding a better solution than this.
     // Ultimately this is the simples and most reliable approach. Monaco synchronizes
@@ -1181,25 +1183,20 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         console.error("MONACO issue: editor.setHiddenAreas not found!")
       }
     }
-    let hiddenAreas :monaco.IRange[] = []
+    let hiddenAreas :monaco.Range[] = []
     if (!this._currentScript.isROLib) {
       let model = this._currentModel
+      let lastLine = model.getLineCount()
       hiddenAreas = [
-        {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: 1,
-          endColumn: 1,
-        },
-        {
-          startLineNumber: model.getLineCount(),
-          startColumn: 1,
-          endLineNumber: model.getLineCount(),
-          endColumn: 1,
-        }
+        // Range(startLineNumber, startColumn, endLineNumber, endColumn)
+        new monaco.Range(1, 1, 1, 1),
+        new monaco.Range(lastLine, 1, lastLine, 1),
       ]
+      // make sure cursor is not inside these areas
     }
+    ;(this as any).hiddenAreas = hiddenAreas  // since readonly for outside
     ;(this.editor as any).setHiddenAreas(hiddenAreas)
+    this.adjustSelection()
   }
 
 
@@ -1255,6 +1252,48 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
+  adjustSelection() {
+    const hiddenAreas = this.hiddenAreas
+    if (hiddenAreas.length == 0 || !this.editor) {
+      return
+    }
+    // Note: This assumes hiddenAreas.length == 2
+
+    let sels = this.editor.getSelections() // Selection[] | null;
+    if (!sels || sels.length == 0) {
+      return
+    }
+
+    let [header, footer] = hiddenAreas
+    let changed = false
+    for (let i = 0; i < sels.length; i++) {
+      let sel = sels[i]
+      if (sel.startLineNumber <= header.endLineNumber ||
+          sel.endLineNumber <= header.endLineNumber
+      ) {
+        // inside header
+        let line = header.endLineNumber + 1
+        sels[i] = new monaco.Selection(line, 1, line, 1)
+        changed = true
+      } else if (sel.startLineNumber >= footer.startLineNumber ||
+                 sel.endLineNumber >= footer.startLineNumber
+      ) {
+        // inside footer
+        let line = footer.startLineNumber - 1
+        sels[i] = new monaco.Selection(line, 1, line, 1)
+        changed = true
+      }
+    }
+
+    if (changed) {
+      dlog("patch selection to leave out header and footer", sels)
+      this.editor.setSelections(sels)
+    }
+
+    hiddenAreas[0].containsRange({} as any as monaco.IRange)
+  }
+
+
   initEditorEventHandlers() {
     const editor = this.editor
 
@@ -1262,23 +1301,43 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let isRestoringModel = false
 
     editor.onDidChangeModelContent((e: monaco.editor.IModelContentChangedEvent) :void => {
-      // getAlternativeVersionId is a version number that tracks undo/redo.
+      // Note: getAlternativeVersionId is a version number that tracks undo/redo.
       // i.e. version=1; edit -> version=2; undo -> version=1.
       if (!isRestoringModel && !this._isSwitchingModel) {
-        this._currentScript.updateBody(
-          this._currentModel.getValue(),
-          this._currentModel.getAlternativeVersionId()
-        )
-      }
-    })
+        const script = this._currentScript
+        if (script.isUserScript) {
+          script.updateBody(
+            this._currentModel.getValue(),
+            this._currentModel.getAlternativeVersionId()
+          )
+        } else {
+          // create a new script that is a duplicate
+          let s2 = script.duplicate({
+            name: "Copy of " + script.name
+          })
 
-    editor.onDidChangeCursorPosition((e: monaco.editor.ICursorPositionChangedEvent) :void => {
-      if (!isRestoringViewState && !isRestoringModel) {
-        this.setNeedsSaveViewState()
+          // apply the edit to the new user script copy, but use the "no dirty" variant of
+          // the updateBody function. This has the effect that a new _unsaved_ script is added
+          // containing the edits that triggered this code here to run.
+          s2.updateBodyNoDirty(
+            this._currentModel.getValue(),
+            this._currentModel.getAlternativeVersionId()
+          )
+
+          // undo the edit in the example script model
+          isRestoringModel = true
+          editor.trigger('', 'undo', {})
+          isRestoringModel = false
+
+          // set the new duplicate script
+          this.setCurrentScript(s2)
+        }
       }
     })
 
     editor.onDidChangeCursorSelection((e: monaco.editor.ICursorSelectionChangedEvent) :void => {
+      // possibly correct for hiddenAreas
+      this.adjustSelection()
       if (!isRestoringViewState && !isRestoringModel) {
         this.setNeedsSaveViewState()
       }

@@ -132,9 +132,9 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     }
     let s = this.scriptsById.get(id)
     if (s) {
-      if (s.id < 0) {
+      if (!s.isMutable) {
         // return a copy of a demo script so it can be safely mutated
-        return s.clone()
+        s = s.mutableCopy()
       }
       await s.loadIfEmpty()
       return s
@@ -148,9 +148,9 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
     if (!s) {
       return null
     }
-    if (s.id < 0) {
+    if (!s.isMutable) {
       // return a copy of a demo script so it can be safely mutated
-      return s.clone()
+      s = s.mutableCopy()
     }
     await s.loadIfEmpty()
     return s
