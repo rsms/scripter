@@ -12,6 +12,7 @@ import toolbar from "./toolbar"
 import { print, dlog, isMac } from "./util"
 import { menu } from "./menu"
 import { LoadScriptMsg } from "../common/messages"
+import resources from "./resources"
 
 const ts = monaco.languages.typescript
 
@@ -64,13 +65,13 @@ const defaultOptions :EditorOptions = {
 
   lineDecorationsWidth: 16, // margin on left side, in pixels
 
-  lineNumbers: "off", // lineNumbers: (lineNumber: number) => "•",
+  lineNumbers: "off",
   lineNumbersMinChars: 3,
 
   wordWrap: "off", // off | on | bounded | wordWrapColumn
   wrappingIndent: "same", // none | same | indent | deepIndent
 
-  scrollBeyondLastLine: true,
+  scrollBeyondLastLine: false,
   scrollBeyondLastColumn: 2,
   smoothScrolling: true, // animate scrolling to a position
 
@@ -224,6 +225,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   _currentScriptId :number|null = -1
   _nextModelId = 0
   _saveViewStateTimer :any = null
+  _lineNumberOffset = 0 // for hiddenAreas
 
   readonly hiddenAreas :ReadonlyArray<monaco.Range> = []  // maintained by updateHiddenAreas
 
@@ -242,6 +244,12 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.editorPromise = new Promise<MonacoEditor>(resolve => {
       this._editorPromiseResolve = resolve
     })
+  }
+
+
+  fmtLineNumber(lineNumber: number) :string {
+    // offset by 1 because of the hidden
+    return (lineNumber - this._lineNumberOffset).toString(10)
   }
 
 
@@ -537,7 +545,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   updateOptionsFromConfig() {
     let options :EditorOptions = {
-      lineNumbers:             config.showLineNumbers ? "on" : "off",
+      lineNumbers:             config.showLineNumbers ? this.fmtLineNumber.bind(this) : "off",
       wordWrap:                config.wordWrap ? "on" : "off",
       quickSuggestions:        config.quickSuggestions,
       quickSuggestionsDelay:   config.quickSuggestionsDelay,
@@ -819,6 +827,8 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
     this.changeObservationEnabled = true
     this.editor.onDidChangeModelContent((e: monaco.editor.IModelContentChangedEvent) => {
+      this.updateHiddenAreas()
+
       if (e.isFlush) {
         // is reset
         this.clearAllMetaInfo()
@@ -1125,6 +1135,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     this.initEditorEventHandlers()
 
     // load libs
+    await scriptsData.libLoadPromise
     for (let s of scriptsData.referenceScripts) {
       this.getModel(s)
     }
@@ -1185,6 +1196,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       }
     }
     let hiddenAreas :monaco.Range[] = []
+    this._lineNumberOffset = 0
     if (!this._currentScript.isROLib) {
       let model = this._currentModel
       let lastLine = model.getLineCount()
@@ -1193,7 +1205,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
         new monaco.Range(1, 1, 1, 1),
         new monaco.Range(lastLine, 1, lastLine, 1),
       ]
-      // make sure cursor is not inside these areas
+      this._lineNumberOffset = 1
     }
     ;(this as any).hiddenAreas = hiddenAreas  // since readonly for outside
     ;(this.editor as any).setHiddenAreas(hiddenAreas)
@@ -1269,19 +1281,16 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let changed = false
     for (let i = 0; i < sels.length; i++) {
       let sel = sels[i]
-      if (sel.startLineNumber <= header.endLineNumber ||
-          sel.endLineNumber <= header.endLineNumber
-      ) {
+
+      if (sel.startLineNumber <= header.endLineNumber) {
         // inside header
-        let line = header.endLineNumber + 1
-        sels[i] = new monaco.Selection(line, 1, line, 1)
+        sels[i] = sel = sel.setStartPosition(header.endLineNumber + 1, 1)
         changed = true
-      } else if (sel.startLineNumber >= footer.startLineNumber ||
-                 sel.endLineNumber >= footer.startLineNumber
-      ) {
+      }
+
+      if (sel.endLineNumber >= footer.startLineNumber) {
         // inside footer
-        let line = footer.startLineNumber - 1
-        sels[i] = new monaco.Selection(line, 1, line, 1)
+        sels[i] = sel = sel.setEndPosition(footer.startLineNumber - 1, 1)
         changed = true
       }
     }
@@ -1419,15 +1428,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     let ts = monaco.languages.typescript.typescriptDefaults
     ts.setMaximumWorkerIdleTime(1000 * 60 * 60 * 24) // kill worker after 1 day
     ts.setCompilerOptions(typescriptCompilerOptions)
-    // ts.addExtraLib(figmaDTS, "scripter:figma.d.ts")
-    // ts.addExtraLib(scripterEnvDTS, "scripter:scripter-env.d.ts")
-    // ts.addExtraLib(figmaDTS, "defaultLib:lib.es6.d.ts")
-
     // ts.setDiagnosticsOptions({noSemanticValidation:true})
     ts.setEagerModelSync(true)
-    ts.onDidChange(e => {
-      dlog("ts onDidChange", e)
-    })
+    // ts.onDidChange(e => {
+    //   dlog("ts onDidChange", e)
+    // })
   }
 
 

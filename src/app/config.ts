@@ -21,9 +21,9 @@ class Data {
   showLineNumbers       :bool = false
   wordWrap              :bool = true
   monospaceFont         :bool = true
-  // codeFolding           :bool = false
+  // codeFolding           :bool = false  // do not enable! messes with hiddenAreas
   showWhitespace        :bool = false
-  indentGuides          :bool = true
+  indentGuides          :bool = false
   minimap               :bool = false
   quickSuggestions      :bool = true
   quickSuggestionsDelay :number = 500 // ms

@@ -7,7 +7,7 @@ import { exportAllScripts } from "./script-export"
 import { editor } from "./editor"
 import { EventEmitter } from "./event"
 import { config } from "./config"
-import { dlog } from "./util"
+import { dlog, isMac } from "./util"
 import { WindowSize } from "../common/messages"
 
 
@@ -147,6 +147,18 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     if (input.name.startsWith(configPrefix)) {
       let value :any = input.type == "checkbox" ? input.checked : input.value
       ;(config as any)[input.name.substr(configPrefix.length)] = value
+    }
+  }
+
+  onChangeSettingPercent = (ev :any) => {
+    ev.persist()
+    let input = ev.target as HTMLInputElement
+    const configPrefix = "config."
+    if (input.name.startsWith(configPrefix)) {
+      let value = parseFloat(input.value)
+      if (!isNaN(value)) {
+        ;(config as any)[input.name.substr(configPrefix.length)] = (Math.round(value) / 100)
+      }
     }
   }
 
@@ -337,11 +349,24 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           <option value={"XLARGE,XLARGE"} >XL×XL window</option>
           </select>
         </label>
-        <label className="extra-actions">
+        <label
+          title={`Scale of the Scripter editor text size (${isMac ? "⌘+/-" : "Ctrl+/-"})`}
+          >
+          <div className="icon text-size" />
+          {/* Note: Sync min & max with values in app.ts uiScaleSteps */}
+          <input type="number"
+                 step="10"
+                 min="50" max="300"
+                 name="config.uiScale"
+                 value={Math.round(config.uiScale * 100)}
+                 onChange={this.onChangeSettingPercent} />
+           <span>%</span>
+        </label>
+        <div className="group extra-actions">
           <button disabled={state.isExportingScripts}
                   onClick={state.isExportingScripts ? ()=>{} : this.onExportAllScripts}
                   >{state.isExportingScripts ? "Exporting..." : "Export all scripts"}</button>
-        </label>
+        </div>
       </div>
     </div>
     )

@@ -295,6 +295,9 @@ function initTitle(host) {
 
   // update title when it was changed elsewhere, like in a different tab
   let updateTitle = () => {
+    if (!editor.currentScript) {
+      return
+    }
     let newTitle = editor.currentScript.name
     if (editSession.active) {
       // when title is actively edited, don't change the value of the input but instead

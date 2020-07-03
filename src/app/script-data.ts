@@ -24,6 +24,7 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
   scriptsById   = new Map<number,Script>()  // same order as scripts
   scriptsByGUID = new Map<string,Script>()
   refreshPromise :Promise<void>|null = null
+  readonly libLoadPromise :Promise<void>  // resolved when all libs have loaded
 
   constructor(db :xdb.Database) {
     super()
@@ -109,7 +110,13 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
     }
 
-    Promise.all(resources.map(r => r.body)).then(bodyContents => {
+    if (this.db.isOpen) {
+      this.refresh()
+    } else {
+      this.finalizeChanges()
+    }
+
+    this.libLoadPromise = Promise.all(resources.map(r => r.body)).then(bodyContents => {
       for (let i = 0; i < bodyContents.length; i++) {
         let r = resources[i]
         let s = mkExample(r.filename, r.name, bodyContents[i], /*isROLib*/true)
@@ -117,12 +124,6 @@ class ScriptsData extends EventEmitter<ScriptsDataEvents> {
       }
       this.finalizeChanges()
     })
-
-    if (this.db.isOpen) {
-      this.refresh()
-    } else {
-      this.finalizeChanges()
-    }
   }
 
 
