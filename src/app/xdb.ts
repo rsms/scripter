@@ -169,12 +169,12 @@ export class Database extends EventEmitter<DatabaseEventMap> {
     }
 
     let db = this
-    let delayedTransactions :DelayedTransaction[] = []
+    let delayedTransactions :DelayedTransaction<any>[] = []
 
-    this.transaction = function(mode: IDBTransactionMode, ...stores :string[]) :Transaction {
+    this.transaction = function(mode: IDBTransactionMode, ...stores :string[]) :Transaction<any> {
       let resolve :()=>void
       let reject  :(e:Error)=>void
-      let t = new DelayedTransaction((_resolve, _reject) => {
+      let t = new DelayedTransaction<any>((_resolve, _reject) => {
         resolve = _resolve
         reject = _reject
       })
@@ -281,8 +281,8 @@ export class Database extends EventEmitter<DatabaseEventMap> {
 
   // getStore starts a new transaction in mode on the named store.
   // You can access the transaction via ObjectStore.transaction.
-  getStore(store :string, mode :IDBTransactionMode) :ObjectStore {
-    return this.transaction(mode, store).objectStore(store)
+  getStore<T=any>(store :string, mode :IDBTransactionMode) :ObjectStore<T> {
+    return this.transaction<T>(mode, store).objectStore(store)
   }
 
 
@@ -294,8 +294,8 @@ export class Database extends EventEmitter<DatabaseEventMap> {
   // It's usually better to use read() or modify() instead of transaction() as those methods
   // handle transaction promise as part of operation promises.
   //
-  transaction(mode: IDBTransactionMode, ...stores :string[]) :Transaction {
-    return createTransaction(this, this.db.transaction(stores, mode))
+  transaction<T=any>(mode: IDBTransactionMode, ...stores :string[]) :Transaction<T> {
+    return createTransaction<T>(this, this.db.transaction(stores, mode))
   }
 
 
@@ -334,7 +334,7 @@ export class Database extends EventEmitter<DatabaseEventMap> {
   //     },
   //   )
   //
-  modify(stores :string[], ...f :((...s:ObjectStore[])=>Promise<any>)[]) :Promise<any[]> {
+  modify(stores :string[], ...f :((...s:ObjectStore<any>[])=>Promise<any>)[]) :Promise<any[]> {
     let t = this.transaction("readwrite", ...stores)
     let sv = stores.map(name => t.objectStore(name))
     return Promise.all([ t, ...f.map(f => f(...sv)) ]).then(r => (r.shift(), r))
@@ -352,7 +352,7 @@ export class Database extends EventEmitter<DatabaseEventMap> {
   //     (_, u) => u.get("robin@lol.cat")
   //   )
   //
-  read(stores :string[], ...f :((...s:ObjectStore[])=>Promise<any>)[]) :Promise<any[]> {
+  read(stores :string[], ...f :((...s:ObjectStore<any>[])=>Promise<any>)[]) :Promise<any[]> {
     let t = this.transaction("readonly", ...stores)
     let sv = stores.map(name => t.objectStore(name))
     return Promise.all(f.map(f => f(...sv)))  // note: ignore transaction promise
@@ -360,8 +360,8 @@ export class Database extends EventEmitter<DatabaseEventMap> {
 
 
   // get a single object from store. See ObjectStore.get
-  get(store :string, query :IDBValidKey|IDBKeyRange) :Promise<any|null> {
-    return this.getStore(store, "readonly").get(query)
+  get<T=any>(store :string, query :IDBValidKey|IDBKeyRange) :Promise<T|null> {
+    return this.getStore<T>(store, "readonly").get(query)
   }
 
   // getAll retrieves multiple values from store. See ObjectStore.getAll
@@ -402,7 +402,7 @@ export class UpgradeTransaction {
   readonly prevVersion :number
   readonly nextVersion :number
 
-  _t  :Transaction  // the one transaction all upgrade operations share
+  _t  :Transaction<any>  // the one transaction all upgrade operations share
   db :Database
 
   constructor(db :Database, t :IDBTransaction, prevVersion :number, nextVersion :number) {
@@ -422,14 +422,14 @@ export class UpgradeTransaction {
   }
 
   // getStore retrieves the names object store
-  getStore(name :string) :ObjectStore {
+  getStore<T=any>(name :string) :ObjectStore<T> {
     return this._t.objectStore(name)
   }
 
   // createStore creates a new object store
-  createStore(name :string, params? :IDBObjectStoreParameters) :ObjectStore {
+  createStore<T=any>(name :string, params? :IDBObjectStoreParameters) :ObjectStore<T> {
     let os = this.db.db.createObjectStore(name, params)
-    return new ObjectStore(this.db, os, this._t)
+    return new ObjectStore<T>(this.db, os, this._t)
   }
 
   // deleteStore deletes the object store with the given name
@@ -439,7 +439,7 @@ export class UpgradeTransaction {
 }
 
 
-export class Transaction extends Promise<void> {
+export class Transaction<T> extends Promise<void> {
   readonly db :Database
   transaction :IDBTransaction  // underlying transaction object
 
@@ -454,16 +454,16 @@ export class Transaction extends Promise<void> {
     this.transaction.abort()
   }
 
-  objectStore(name :string) :ObjectStore {
-    return new ObjectStore(this.db, this.transaction.objectStore(name), this)
+  objectStore(name :string) :ObjectStore<T> {
+    return new ObjectStore<T>(this.db, this.transaction.objectStore(name), this)
   }
 }
 
 
-export class ObjectStore {
+export class ObjectStore<T> {
   readonly db            :Database
   readonly store         :IDBObjectStore
-  readonly transaction   :Transaction   // associated transaction
+  readonly transaction   :Transaction<T>   // associated transaction
 
   // autoIncrement is true if the store has a key generator
   get autoIncrement() :boolean { return this.store.autoIncrement }
@@ -475,7 +475,7 @@ export class ObjectStore {
   get name() :string { return this.store.name }
   set name(name :string) { this.store.name = name }
 
-  constructor(db :Database, store :IDBObjectStore, transaction: Transaction) {
+  constructor(db :Database, store :IDBObjectStore, transaction: Transaction<T>) {
     this.db = db
     this.store = store
     this.transaction = transaction
@@ -559,8 +559,8 @@ export class ObjectStore {
   }
 
   // getIndex retrieves the named index.
-  getIndex(name :string) :Index {
-    return new Index(this, this.store.index(name))
+  getIndex<IT=T>(name :string) :Index<IT> {
+    return new Index<IT>(this, this.store.index(name))
   }
 
   _promise<R,T extends IDBRequest = IDBRequest>(f :()=>IDBRequest<R>) :Promise<R> {
@@ -573,11 +573,11 @@ export class ObjectStore {
 }
 
 
-class Index {
-  readonly store :ObjectStore
+class Index<T> {
+  readonly store :ObjectStore<T>
   readonly index :IDBIndex
 
-  constructor(store :ObjectStore, index :IDBIndex) {
+  constructor(store :ObjectStore<T>, index :IDBIndex) {
     this.store = store
     this.index = index
   }
@@ -596,11 +596,11 @@ class Index {
     return this._promise(() => this.index.count(key))
   }
 
-  get(key :IDBValidKey|IDBKeyRange) :Promise<any|undefined> {
+  get(key :IDBValidKey|IDBKeyRange) :Promise<T|undefined> {
     return this._promise(() => this.index.get(key))
   }
 
-  getAll(query? :IDBValidKey|IDBKeyRange, count? :number) :Promise<any[]> {
+  getAll(query? :IDBValidKey|IDBKeyRange, count? :number) :Promise<T[]> {
     return this._promise(() => this.index.getAll(query, count))
   }
 
@@ -617,13 +617,13 @@ class Index {
 
 
 // used for zero-downtime database re-opening
-class DelayedTransaction extends Transaction {
+class DelayedTransaction<T> extends Transaction<T> {
   _db      :Database
   _mode    :IDBTransactionMode
   _stores  :string[]
   _resolve :()=>void
   _reject  :(e:Error)=>void
-  _delayed :DelayedObjectStore[] = []
+  _delayed :DelayedObjectStore<T>[] = []
 
   _flushDelayed() {
     // print("DelayedTransaction _flushDelayed")
@@ -646,10 +646,10 @@ class DelayedTransaction extends Transaction {
     ;(this as any).aborted = true
   }
 
-  objectStore(name :string) :ObjectStore {
+  objectStore(name :string) :ObjectStore<T> {
     let info = this._db._lastSnapshot.storeInfo.get(name)!
     if (!info) { throw new Error("object store not found") }
-    let os = new DelayedObjectStore(
+    let os = new DelayedObjectStore<T>(
       this._db,
       {
         name,
@@ -673,7 +673,7 @@ interface DelayedObjectStoreAction<R> {
 }
 
 
-class DelayedObjectStore extends ObjectStore {
+class DelayedObjectStore<T> extends ObjectStore<T> {
   _delayed :DelayedObjectStoreAction<any>[] = []
 
   _flushDelayed() {
@@ -799,7 +799,7 @@ class DelayedObjectStore extends ObjectStore {
 
 
 
-function activateDelayedTransaction(t :DelayedTransaction) {
+function activateDelayedTransaction<T=any>(t :DelayedTransaction<T>) {
   let tr = t.transaction
   let resolve = t._resolve ; (t as any)._resolve = undefined
   let reject  = t._reject  ; (t as any)._reject = undefined
@@ -815,10 +815,10 @@ function activateDelayedTransaction(t :DelayedTransaction) {
   }
 }
 
-function createTransaction(db :Database, tr :IDBTransaction) :Transaction {
+function createTransaction<T=any>(db :Database, tr :IDBTransaction) :Transaction<T> {
   // Note: For complicated reasons related to Promise implementation in V8, we
   // can't customize the Transaction constructor.
-  var t = new Transaction((resolve, reject) => {
+  var t = new Transaction<T>((resolve, reject) => {
     tr.oncomplete = () => { resolve() }
     tr.onerror = () => { reject(tr.error) }
     tr.onabort = () => {

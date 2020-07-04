@@ -157,7 +157,7 @@ class Config extends EventEmitter<ConfigEvents> {
     let migrate :([string,()=>void])[] = []
     await db.read(["config"], ...keys.map(k =>
       // callback function for each value
-      (s :xdb.ObjectStore) => s.get(k).then(v => {
+      (s :xdb.ObjectStore<any>) => s.get(k).then(v => {
         let handler = this.data[k]
         if (handler && typeof handler == "function") {
           if (v !== undefined) {
