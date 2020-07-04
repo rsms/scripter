@@ -67,7 +67,7 @@ interface ScriptEventMap {
 
 export class Script extends EventEmitter<ScriptEventMap> {
   meta :ScriptMeta
-  isROLib :bool = false   // if true, can't be edited
+  isROLib :boolean = false   // if true, can't be edited
   _body :string
   _editorViewState :EditorViewState|null = null
 
@@ -99,8 +99,12 @@ export class Script extends EventEmitter<ScriptEventMap> {
 
   get modelVersion() :number { return this._currModelVersion }
 
-  get isUserScript() :bool { return !this.isROLib && this.id >= 0 }
-  get isMutable() :bool { return this.isUserScript }
+  get isUserScript() :boolean { return !this.isROLib && this.id >= 0 }
+  get isMutable() :boolean { return this.isUserScript }
+
+  get isLoaded() :boolean {
+    return this.meta && this.meta.name && this.body != ""
+  }
 
   get body() :string { return this._body }
   set body(v :string) {
@@ -154,7 +158,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     )
   }
 
-  isSavedInFigma() :bool {
+  isSavedInFigma() :boolean {
     return this.guid && savedScripts.hasGUID(this.guid)
   }
 
@@ -263,7 +267,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
   }
 
 
-  saveToFigma(options :{ createIfMissing :bool }) {
+  saveToFigma(options :{ createIfMissing :boolean }) {
     this.requireValidGUID()
     if (this.id == 0) {
       if (this._body.length == 0) {
@@ -315,8 +319,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
     return true
   }
 
-
-  async loadIfEmpty() :Promise<bool> {
+  async loadIfEmpty() :Promise<boolean> {
     if (!this.meta || !this.meta.name) {
       return this.load()  // full load
     }
@@ -331,6 +334,16 @@ export class Script extends EventEmitter<ScriptEventMap> {
     this._editorViewState = (viewState as EditorViewState|undefined) || null
     this._onAfterLoadBody()
     return true
+  }
+
+
+  // alternative to loadIfEmpty that calls cb immediately if script is loaded,
+  // instead of in a future runloop frame as is always the case with promises.
+  whenLoaded(cb :()=>void) :void {
+    if (this.isLoaded) {
+      return cb()
+    }
+    this.loadIfEmpty().then(cb)
   }
 
 

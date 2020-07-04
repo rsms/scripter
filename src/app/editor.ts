@@ -354,6 +354,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       return model
     }
 
+    if (!script.isLoaded) {
+      console.warn("editor/setCurrentScript with not-yet-loaded script", script)
+    }
+
     if (this._currentScript) {
       this._currentScript.removeListener("save", this.onCurrentScriptSave)
     }
@@ -1016,6 +1020,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   // history & file navigation
 
   readonly navigationHistory = new NavigationHistory<EditorHistoryEntry>()
+  historyLoadVersion = 0  // used to avoid races to unloaded scripts
 
   async initHistory() {
     // load preexisting history
@@ -1043,14 +1048,28 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       }
     })
 
-    // when built in debug mode, visualize the history stack as it changes
-    if (DEBUG) this.navigationHistory.on("change", () => {
-      dlog(`current history stack: (cursor=${this.navigationHistory.cursor})\n` +
-        this.navigationHistory.stack.map((e, i) => {
-        let s = i == this.navigationHistory.cursor ? ">" : " "
-        return `${s} stack[${i}] = ${e.scriptGUID}`
-      }).join("\n"))
+    // // when built in debug mode, visualize the history stack as it changes
+    // if (DEBUG) this.navigationHistory.on("change", () => {
+    //   dlog(`current history stack: (cursor=${this.navigationHistory.cursor})\n` +
+    //     this.navigationHistory.stack.map((e, i) => {
+    //     let s = i == this.navigationHistory.cursor ? ">" : " "
+    //     return `${s} stack[${i}] = ${e.scriptGUID}`
+    //   }).join("\n"))
+    // })
+  }
+
+  historySwitchToScript(guid :string) :boolean {
+    let script = scriptsData.scriptsByGUID.get(guid)
+    if (!script) {
+      return false
+    }
+    let v = ++this.historyLoadVersion
+    script.whenLoaded(() => {
+      if (this.historyLoadVersion == v) {
+        this.setCurrentScript(script)
+      }
     })
+    return true
   }
 
   historyBack() {
@@ -1063,9 +1082,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       if (!e) {
         break
       }
-      let script = scriptsData.scriptsByGUID.get(e.scriptGUID)
-      if (script) {
-        this.setCurrentScript(script)
+      if (this.historySwitchToScript(e.scriptGUID)) {
         break
       }
       // else "keep going back" until there's is back entry with a valid script
@@ -1082,9 +1099,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       if (!e) {
         break
       }
-      let script = scriptsData.scriptsByGUID.get(e.scriptGUID)
-      if (script) {
-        this.setCurrentScript(script)
+      if (this.historySwitchToScript(e.scriptGUID)) {
         break
       }
       // else "keep going forward" until there's is back entry with a valid script
