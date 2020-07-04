@@ -1,4 +1,3 @@
-/// <reference path="figma.d.ts" />
 //
 // The Scripter environment.
 //
@@ -114,13 +113,17 @@ type ScripterTransferable = ArrayBuffer;
 /** Create a worker */
 function createWorker(script :string | ScripterWorkerFun) :ScripterWorker
 
-/** Create a worker, with DOM (runs in iframe instead of Web Worker) */
-function createWorker(opt :ScripterCreateWorkerOptions & { DOM:true },
-                      script :string | ScripterWorkerDOMFun) :ScripterWorker
+/** Create an iframe-based worker, with a full DOM */
+function createWorker(
+  opt :ScripterCreateWorkerOptions & { iframe:ScripterWorkerIframeConfig|true },
+  script :string | ScripterWorkerDOMFun
+) :ScripterWorker
 
 /** Create a worker, with options */
-function createWorker(opt :ScripterCreateWorkerOptions | undefined | null,
-                      script :string | ScripterWorkerFun) :ScripterWorker
+function createWorker(
+  opt :ScripterCreateWorkerOptions | undefined | null,
+  script :string | ScripterWorkerFun
+) :ScripterWorker
 
 interface ScripterWorker extends Promise<void> {
   /** Event callback invoked when a message arrives from the worker */
@@ -161,13 +164,19 @@ interface ScripterCreateWorkerOptions {
    * This is useful for making certain libraries work which depend on DOM features,
    * like for example the popular D3 library.
    */
-  DOM?: boolean
+  iframe?: ScripterWorkerIframeConfig | boolean | null
 }
 
 type ScripterWorkerFun = (self :ScripterWorkerEnv) => void|Promise<void>
-type ScripterWorkerDOMFun = (self :ScripterWorkerEnv, window :WebDOM.Window) => void|Promise<void>
+type ScripterWorkerDOMFun = (self :ScripterWorkerDOMEnv) => void|Promise<void>
 
-interface ScripterWorkerEnv extends WebDOM.WindowOrWorkerGlobalScope {
+type WebDOMInterface = typeof WebDOM
+type WebWorkerEnvInterface = typeof WebWorkerEnv
+
+type ScripterWorkerDOMEnv = ScripterWorkerBaseEnv & WebDOMInterface
+type ScripterWorkerEnv = ScripterWorkerBaseEnv & WebWorkerEnvInterface
+
+interface ScripterWorkerBaseEnv {
   /** Close this worker */
   close(): void
 
@@ -205,6 +214,11 @@ interface ScripterWorkerEnv extends WebDOM.WindowOrWorkerGlobalScope {
    * Async when DOM is used. Blocking in pure web workers.
    */
   importCommonJS(url :string) :Promise<any>
+}
+
+interface ScripterWorkerIframeConfig {
+  /** If true, show the iframe rather than hiding it */
+  visible? :boolean
 }
 
 interface ScripterWorkerError {
