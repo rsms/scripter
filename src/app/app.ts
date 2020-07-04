@@ -16,6 +16,47 @@ import toolbar from "./toolbar"
 import { isMac, dlog } from "./util"
 import * as warningMessage from "./warning-message"
 import "../common/filetype"
+import { EventEmitter } from "./event"
+
+
+interface AppEvents {
+  "close": undefined
+}
+
+const app = new class App extends EventEmitter<AppEvents> {
+  constructor() {
+    super()
+    window.addEventListener("unload", () => {
+      this.triggerEvent("close")
+    })
+  }
+
+  zoomIn() {
+    let v = config.uiScale
+    for (let step of uiScaleSteps) {
+      if (v <= step[0]) {
+        config.uiScale = step[1]
+        break
+      }
+    }
+  }
+
+  zoomOut() {
+    let v = config.uiScale
+    for (let step of uiScaleSteps) {
+      if (v <= step[1]) {
+        config.uiScale = step[0]
+        break
+      }
+    }
+  }
+
+  resetZoom() {
+    config.uiScale = 1
+  }
+}
+
+export default app
 
 
 const uiScaleSteps = (steps => {
@@ -40,32 +81,9 @@ const uiScaleSteps = (steps => {
 ])
 
 
-const uiScale = {
-  zoomIn() {
-    let v = config.uiScale
-    for (let step of uiScaleSteps) {
-      if (v <= step[0]) {
-        config.uiScale = step[1]
-        break
-      }
-    }
-  },
-  zoomOut() {
-    let v = config.uiScale
-    for (let step of uiScaleSteps) {
-      if (v <= step[1]) {
-        config.uiScale = step[0]
-        break
-      }
-    }
-  },
-  resetZoom() {
-    config.uiScale = 1
-  },
-}
-
-
 function setupKeyboardHandlers() {
+  // Note: figma-plugin-bridge.ts adds additional keyboard bindings, like meta-alt-P
+
   const maybeHandleCmdKeypress = (ev :KeyboardEvent, key :string) :any => {
 
     // run script
@@ -113,13 +131,13 @@ function setupKeyboardHandlers() {
       }
     }
 
-    // uiScale
+    // UI scale
     if (key == "=" || key == "+") {
-      uiScale.zoomIn()
+      app.zoomIn()
     } else if (key == "-") {
-      uiScale.zoomOut()
+      app.zoomOut()
     } else if (key == "0") {
-      uiScale.resetZoom()
+      app.resetZoom()
     }
 
     // dlog("KeyboardEvent", ev, key)
