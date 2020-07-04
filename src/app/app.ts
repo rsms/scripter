@@ -66,7 +66,7 @@ const uiScale = {
 
 
 function setupKeyboardHandlers() {
-  const maybeHandleKeypress = (ev :KeyboardEvent, key :string) :any => {
+  const maybeHandleCmdKeypress = (ev :KeyboardEvent, key :string) :any => {
 
     // run script
     if (key == "Enter" || key == "r") {
@@ -95,6 +95,24 @@ function setupKeyboardHandlers() {
       return menu.toggle(), true
     }
 
+    // history
+    if (ev.shiftKey) {
+      if (ev.code == "BracketLeft") {
+        return editor.historyBack(), true
+      }
+      if (ev.code == "BracketRight") {
+        return editor.historyForward(), true
+      }
+    }
+    if (isMac) {
+      if (ev.ctrlKey && ev.code == "Minus") {
+        if (ev.shiftKey) {
+          return editor.historyForward(), true
+        }
+        return editor.historyBack(), true
+      }
+    }
+
     // uiScale
     if (key == "=" || key == "+") {
       uiScale.zoomIn()
@@ -103,11 +121,29 @@ function setupKeyboardHandlers() {
     } else if (key == "0") {
       uiScale.resetZoom()
     }
+
+    // dlog("KeyboardEvent", ev, key)
+  }
+
+  const maybeHandleAltKeypress = (ev :KeyboardEvent, key :string) :any => {
+    // on Windows and Linux alt-arrowkey is commonly used by e.g. Firefox for history nav
+    if (!isMac) {
+      if (key == "ArrowLeft") {
+        return editor.historyBack(), true
+      }
+      if (key == "ArrowRight") {
+        return editor.historyForward(), true
+      }
+    }
+    // dlog("KeyboardEvent", ev, key)
   }
 
   window.addEventListener("keydown", ev => {
     // print(ev.key, ev.keyCode, ev.metaKey, ev.ctrlKey)
-    if ((ev.metaKey || ev.ctrlKey) && maybeHandleKeypress(ev, ev.key)) {
+    if ((ev.metaKey || ev.ctrlKey) && maybeHandleCmdKeypress(ev, ev.key)) {
+      ev.preventDefault()
+      ev.stopPropagation()
+    } else if (ev.altKey && maybeHandleAltKeypress(ev, ev.key)) {
       ev.preventDefault()
       ev.stopPropagation()
     }

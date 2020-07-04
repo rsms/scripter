@@ -13,6 +13,8 @@ class ToolbarUI {
   clearButton :HTMLElement
   menuButton  :HTMLElement
   saveButton  :HTMLElement
+  backButton  :HTMLElement
+  fwdButton   :HTMLElement
 
   stopCallbacks = new Set<()=>void>()
   isRunning :bool = false
@@ -140,6 +142,28 @@ class ToolbarUI {
     }
     updateSaveButton()
     savedScripts.on("change", updateSaveButton)
+
+    // history back and forward buttons
+    this.backButton = this.el.querySelector('.button.history-back') as HTMLElement
+    this.backButton.addEventListener("click", ev => {
+      editor.historyBack()
+      editor.focus()
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+    this.fwdButton = this.el.querySelector('.button.history-forward') as HTMLElement
+    this.fwdButton.addEventListener("click", ev => {
+      editor.historyForward()
+      editor.focus()
+      ev.preventDefault()
+      ev.stopPropagation()
+    }, {passive:false,capture:true})
+    const updateHistoryButtons = () => {
+      this.backButton.classList.toggle("unavailable", !editor.navigationHistory.canGoBack())
+      this.fwdButton.classList.toggle("unavailable", !editor.navigationHistory.canGoForward())
+    }
+    editor.navigationHistory.on("change", updateHistoryButtons)
+    updateHistoryButtons()
 
 
     // clear button

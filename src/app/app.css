@@ -126,16 +126,18 @@ code b, pre b, tt b { font-weight:540 }
 
 
 .button {
-  &.new         { background-image: url("./icon-add.svg") }
-  &.menu        { background-image: url('./icon-menu.svg') }
-  &.run         { background-image: url('./icon-play.svg') }
-  &.run.running { background-image: url("./icon-stop.svg") }
-  &.clear       { background-image: url('./icon-clear.svg') }
-  &.save        { background-image: url('./icon-save.svg') }
+  &.new             { background-image: url("./icon-add.svg") }
+  &.menu            { background-image: url('./icon-menu.svg') }
+  &.run             { background-image: url('./icon-play.svg') }
+  &.run.running     { background-image: url("./icon-stop.svg") }
+  &.clear           { background-image: url('./icon-clear.svg') }
+  &.save            { background-image: url('./icon-save.svg') }
+  &.history-back    { background-image: url('./icon-history-back.svg') }
+  &.history-forward { background-image: url('./icon-history-forward.svg') }
 }
 
 #toolbar {
-  --numButtonsOnSide: 3;  /* max # buttons on either side */
+  --numButtonsOnSide: 4;  /* max # buttons on either side */
   --buttonGroupWidth: calc(var(--toolbarHeight) * var(--numButtonsOnSide));
   --hoverBGColor: rgba(0,0,0,0.07);
 
@@ -228,6 +230,7 @@ code b, pre b, tt b { font-weight:540 }
     }
     &.unavailable {
       opacity:0.2;
+      pointer-events: none;
       &:hover { background-color: inherit; }
     }
     &.hidden {
@@ -515,7 +518,7 @@ body.windowWidthSmall #toolbar .title.focus {
       & input[type="number"] {
         width:50px;
         /*min-width:48px;*/
-        margin: 0 4px 0 0;
+        margin: 0 4px;
         border-radius: 2px;
         padding: 0 4px;
         height: calc(var(--menuItemHeight) - 4px);

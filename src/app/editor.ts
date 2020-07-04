@@ -13,6 +13,7 @@ import { print, dlog, isMac } from "./util"
 import { menu } from "./menu"
 import { LoadScriptMsg } from "../common/messages"
 import resources from "./resources"
+import { NavigationHistory, HistoryEntry } from "./history"
 
 const ts = monaco.languages.typescript
 
@@ -49,6 +50,10 @@ interface ScriptProgram {
   sourceMap :string
 }
 
+interface EditorHistoryEntry extends HistoryEntry {
+  readonly scriptGUID :string
+}
+
 
 const kLocked = Symbol("Locked")
 const kOnUnlock = Symbol("OnUnlock")
@@ -56,8 +61,8 @@ const kOnUnlock = Symbol("OnUnlock")
 
 const defaultFontSize = 12  // sync with --editorFontSize in app.css
 
-const varspaceFontFamily  = "iaw-quattro-var, iaw-quattro, monospace"
-const monospaceFontFamily = "jbmono, monospace"
+const varspaceFontFamily  = "iaw-quattro-var, iaw-quattro, monospace, 'Inter var'"
+const monospaceFontFamily = "jbmono, monospace, 'Inter var'"
 
 // default monaco editor options
 const defaultOptions :EditorOptions = {
@@ -74,6 +79,7 @@ const defaultOptions :EditorOptions = {
   scrollBeyondLastLine: false,
   scrollBeyondLastColumn: 2,
   smoothScrolling: true, // animate scrolling to a position
+  useTabStops: true,
 
   // fontLigatures: true,
   showUnused: false,  // fade out unused variables
@@ -293,9 +299,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     dlog(`editor/getModel: creating new model for ${uri}`)
     model = monaco.editor.createModel(script.body, "typescript", uri)
     model.updateOptions({
-      tabSize: 2,
-      indentSize: 2,
-      insertSpaces: true,
+      tabSize: config.tabSize,
+      indentSize: config.tabSize,
+      insertSpaces: !config.useTabs,
       trimAutoWhitespace: true,
     })
     model[kScript] = script
@@ -334,6 +340,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
     return monaco.Uri.file(filename)
     // return monaco.Uri.from({scheme:"scripter", path:filename})
+  }
+
+  setCurrentScriptFromUserAction(script :Script) {
+    this.setCurrentScript(script)
+    this.historyPush()
   }
 
   setCurrentScript(script :Script) :EditorModel {
@@ -406,7 +417,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   async switchToScript(script :Script) :Promise<Script> {
     let editor = await this.editorPromise  // wait for editor to initialize
     this.stopCurrentScript()
-    this.setCurrentScript(script)
+    this.setCurrentScriptFromUserAction(script)
     return this._currentScript
   }
 
@@ -543,7 +554,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     }
   }
 
-  updateOptionsFromConfig() {
+  getEffectiveOptions() :EditorOptions {
     let options :EditorOptions = {
       lineNumbers:             config.showLineNumbers ? this.fmtLineNumber.bind(this) : "off",
       wordWrap:                config.wordWrap ? "on" : "off",
@@ -566,7 +577,16 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       options.disableMonospaceOptimizations = true
       document.body.classList.add("font-ligatures")
     }
-    this.updateOptions(options)
+    return options
+  }
+
+  updateOptionsFromConfig() {
+    this.updateOptions(this.getEffectiveOptions())
+    this.currentModel.updateOptions({
+      tabSize: config.tabSize,
+      indentSize: config.tabSize,
+      insertSpaces: !config.useTabs,
+    })
   }
 
   updateOptions(options :EditorOptions) :boolean {
@@ -992,7 +1012,58 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   // --------------------------------------------------------------------------------------------
-  // editor initialization
+  // history & file navigation
+
+  readonly navigationHistory = new NavigationHistory<EditorHistoryEntry>()
+
+  historyBack() {
+    if (!this.navigationHistory.canGoBack()) {
+      return
+    }
+    while (1) {
+      let e = this.navigationHistory.goBack()
+      dlog("editor/historyBack; this.navigationHistory.goBack() =>", e)
+      if (!e) {
+        break
+      }
+      let script = scriptsData.scriptsByGUID.get(e.scriptGUID)
+      if (script) {
+        this.setCurrentScript(script)
+        break
+      }
+      // else "keep going back" until there's is back entry with a valid script
+    }
+  }
+
+  historyForward() {
+    if (!this.navigationHistory.canGoForward()) {
+      return
+    }
+    while (1) {
+      let e = this.navigationHistory.goForward()
+      dlog("editor/historyForward; this.navigationHistory.goForward() =>", e)
+      if (!e) {
+        break
+      }
+      let script = scriptsData.scriptsByGUID.get(e.scriptGUID)
+      if (script) {
+        this.setCurrentScript(script)
+        break
+      }
+      // else "keep going forward" until there's is back entry with a valid script
+    }
+  }
+
+  historyPush() {
+    let e = this.navigationHistory.currentEntry
+    if (!e || e.scriptGUID != this._currentScript.guid) {
+      e = { scriptGUID: this._currentScript.guid }
+      dlog("editor/historyPush =>", e)
+      this.navigationHistory.push(e)
+    } else {
+      dlog("editor/historyPush ignore (script already current)")
+    }
+  }
 
 
   async monacoOpenCodeEditor(
@@ -1021,7 +1092,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       return null
     }
 
-    this.setCurrentScript(script)
+    this.setCurrentScriptFromUserAction(script)
 
     // this block lifted from monaco's StandaloneCodeEditorServiceImpl:
     let selection = (input.options && input.options.selection) || null
@@ -1053,12 +1124,27 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
+  // --------------------------------------------------------------------------------------------
+  // editor initialization
+
+
   async init() {
     this.initTypescript()  // intentionally not awaiting
+
+    if (DEBUG) {
+      this.navigationHistory.on("change", () => {
+        dlog(`current history stack: (cursor=${this.navigationHistory.cursor})\n` +
+          this.navigationHistory.stack.map((e, i) => {
+          let s = i == this.navigationHistory.cursor ? ">" : " "
+          return `${s} stack[${i}] = ${e.scriptGUID}`
+        }).join("\n"))
+      })
+    }
 
     // load past code buffer
     let script = await loadLastOpenedScript()
     let model = this.setCurrentScript(script)
+    this.historyPush()
 
     // setup options from config
     this.updateOptionsFromConfig()
@@ -1340,7 +1426,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           isRestoringModel = false
 
           // set the new duplicate script
-          this.setCurrentScript(s2)
+          this.setCurrentScriptFromUserAction(s2)
         }
       }
     })

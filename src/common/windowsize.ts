@@ -17,7 +17,7 @@ export function height(ws :WindowSize) :number {
   case WindowSize.SMALL:  return 300
   case WindowSize.MEDIUM: return 500
   case WindowSize.LARGE:  return 700
-  case WindowSize.XLARGE: return 900
+  case WindowSize.XLARGE: return 2000  // Figma will limit to available window height
   default:
     console.error(`[plugin] unexpected windowHeight ${ws}`)
     return 500

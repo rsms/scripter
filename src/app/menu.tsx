@@ -146,7 +146,17 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
     const configPrefix = "config."
     if (input.name.startsWith(configPrefix)) {
       let value :any = input.type == "checkbox" ? input.checked : input.value
-      ;(config as any)[input.name.substr(configPrefix.length)] = value
+      ;(config as any)[input.name.substr(configPrefix.length)] = !!value
+    }
+  }
+
+  onChangeSettingBoolNeg = (ev :any) => {
+    ev.persist()
+    let input = ev.target as HTMLInputElement
+    const configPrefix = "config."
+    if (input.name.startsWith(configPrefix)) {
+      let value :any = input.type == "checkbox" ? input.checked : input.value
+      ;(config as any)[input.name.substr(configPrefix.length)] = !value
     }
   }
 
@@ -285,6 +295,13 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  onChange={this.onChangeSettingBool} />
           Indentation guides
         </label>
+        <label title="Enables a minimap for navigating large scripts">
+          <input type="checkbox"
+                 name="config.minimap"
+                 checked={config.minimap}
+                 onChange={this.onChangeSettingBool} />
+          Minimap
+        </label>
         <label title="Enables information cards shown when hovering over code snippets">
           <input type="checkbox"
                  name="config.hoverCards"
@@ -310,19 +327,22 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
                  onChange={this.onChangeSettingNum} />
            <span>ms</span>
         </label>
-        {/*<label title="Enables code folding; a way to collapse blocks of code">
+
+        <label title="Pressing the TAB key inserts SPACE characters instead of TAB">
           <input type="checkbox"
-                 name="config.codeFolding"
-                 checked={config.codeFolding}
-                 onChange={this.onChangeSettingBool} />
-          Code folding
-        </label>*/}
-        <label title="Enables a minimap for navigating large scripts">
-          <input type="checkbox"
-                 name="config.minimap"
-                 checked={config.minimap}
-                 onChange={this.onChangeSettingBool} />
-          Minimap
+                 name="config.useTabs"
+                 checked={!config.useTabs}
+                 onChange={this.onChangeSettingBoolNeg} />
+          TAB inserts spaces
+        </label>
+        <label>
+          Tab size:
+          <input type="number"
+                 step="1"
+                 min="1" max="8"
+                 name="config.tabSize"
+                 value={config.tabSize}
+                 onChange={this.onChangeSettingNum} />
         </label>
         <label title="Size of Scripter window">
           <div className="icon window" />
@@ -331,22 +351,22 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
           <option value={"SMALL,SMALL"}  >S×S  window</option>
           <option value={"SMALL,MEDIUM"} >S×M  window</option>
           <option value={"SMALL,LARGE"}  >S×L  window</option>
-          <option value={"SMALL,XLARGE"} >S×XL window</option>
+          <option value={"SMALL,XLARGE"} >S×MAX window</option>
 
           <option value={"MEDIUM,SMALL"} >M×S  window</option>
           <option value={"MEDIUM,MEDIUM"}>M×M  window</option>
           <option value={"MEDIUM,LARGE"} >M×L  window</option>
-          <option value={"MEDIUM,XLARGE"}>M×XL window</option>
+          <option value={"MEDIUM,XLARGE"}>M×MAX window</option>
 
           <option value={"LARGE,SMALL"}  >L×S  window</option>
           <option value={"LARGE,MEDIUM"} >L×M  window</option>
           <option value={"LARGE,LARGE"}  >L×L  window</option>
-          <option value={"LARGE,XLARGE"} >L×XL window</option>
+          <option value={"LARGE,XLARGE"} >L×MAX window</option>
 
-          <option value={"XLARGE,SMALL"}  >XL×S  window</option>
-          <option value={"XLARGE,MEDIUM"} >XL×M  window</option>
-          <option value={"XLARGE,LARGE"}  >XL×L  window</option>
-          <option value={"XLARGE,XLARGE"} >XL×XL window</option>
+          <option value={"XLARGE,SMALL"}  >XL×S   window</option>
+          <option value={"XLARGE,MEDIUM"} >XL×M   window</option>
+          <option value={"XLARGE,LARGE"}  >XL×L   window</option>
+          <option value={"XLARGE,XLARGE"} >XL×MAX window</option>
           </select>
         </label>
         <label

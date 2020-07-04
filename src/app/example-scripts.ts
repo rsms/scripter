@@ -77,17 +77,19 @@ Editor basics
 • Rename a script "" (nothing) to delete it.
 
 Keyboard shortcuts
- ${kb("⌘ ↩    ",     "Ctrl+Return")      }  runs the current script
- ${kb("⇧ ⌘ ↩ ",    "Ctrl+Shift+Return") }  stop a running script
- ${kb("⌥ ⌘ P ",     "Ctrl+Alt+P")        }  closes Scripter
- ${kb("⌃ M    ",     "Ctrl+M")            }  toggles the menu
- ${kb("⌘ +    ",     "Ctrl+Plus")         }  increases text size
- ${kb("⌘ −    ",     "Ctrl+Minus")        }  decreases text size
- ${kb("⌘ 0    ",     "Ctrl+0")            }  resets text size
- ${kb("F1      ",    "F1")                }  opens the VS Code commander
- ${kb("⌘ F12  ",     "Ctrl+F12")          }  goes to defintion of selected symbol
- ${kb("⇧ F12  ",     "Shift+F12")         }  show references to selected symbol
- ${kb("⇧ ⌘ O ",     "Ctrl+Shift+O")      }  quick navigator
+  Runs the current script                ${kb("⌘↩",    "Ctrl+Return")}
+  Stop a running script                  ${kb("⇧⌘↩",  "Ctrl+Shift+Return")}
+  Closes Scripter                        ${kb("⌥⌘P",   "Ctrl+Alt+P")}
+  Toggle the menu                        ${kb("⌃M",     "Ctrl+M")}
+  Increases text size                    ${kb("⌘+",     "Ctrl+Plus")}
+  Decreases text size                    ${kb("⌘−",     "Ctrl+Minus")}
+  Resets text size                       ${kb("⌘0",     "Ctrl+0")}
+  Opens quick commander                  ${kb("F1 ",     "F1")} or ${kb(" ⇧⌘P", "Ctrl+Shift+P")}
+  Goes to defintion of selected symbol   ${kb("⌘F12 ",  "Ctrl+F12")} or ${kb(" F12", "F12")}
+  Show references to selected symbol     ${kb("⇧F12",   "Shift+F12")}
+  Quick navigator                        ${kb("⇧⌘O",   "Ctrl+Shift+O")}
+  Go back in history                     ${kb("⇧⌘[ ",  "Ctrl+Shift+[")} or ${kb(" ⌃-", "Alt+←")}
+  Go forward in history                  ${kb("⇧⌘] ",  "Ctrl+Shift+]")} or ${kb(" ⌃⇧-",   "Alt+→")}
 
 */
 `),

@@ -30,6 +30,8 @@ class Data {
   hoverCards            :bool = true
   fontLigatures         :bool = false
   windowSize            :[WindowSize,WindowSize] = [WindowSize.MEDIUM,WindowSize.MEDIUM]
+  useTabs               :bool = true  // TAB for indentation instead of space?
+  tabSize               :number = 2
 
   // -------------------------------------------------
   // Deprecated data properties.
@@ -123,6 +125,12 @@ class Config extends EventEmitter<ConfigEvents> {
 
   get windowSize() :[WindowSize,WindowSize] { return this.data.windowSize }
   set windowSize(v :[WindowSize,WindowSize]) { this._set("windowSize", v) }
+
+  get useTabs() :bool { return this.data.useTabs }
+  set useTabs(v :bool) { this._set("useTabs", v) }
+
+  get tabSize() :number { return this.data.tabSize }
+  set tabSize(v :number) { this._set("tabSize", v) }
 
 
   // -----------------------------------------------------------------
