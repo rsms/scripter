@@ -1,12 +1,7 @@
-import { EventEmitter } from "./event"
+/*
+Navigation history
 
-interface NavigationHistoryEvents {
-  "change": undefined
-}
-
-export interface HistoryEntry {}
-
-/* Illustrated example of how NavigationHistory works:
+Illustrated example of how NavigationHistory works:
 
 stack  = [].length = 0
 cursor = -1
@@ -40,6 +35,18 @@ forward()
 
 
 */
+import { EventEmitter } from "./event"
+
+interface NavigationHistoryEvents {
+  "change": undefined
+}
+
+export interface HistoryEntry {}
+
+export interface NavigationHistorySnapshot<E> {
+  readonly stack :E[]
+  readonly cursor :number
+}
 
 export class NavigationHistory<E extends HistoryEntry>
        extends EventEmitter<NavigationHistoryEvents> {
@@ -80,7 +87,22 @@ export class NavigationHistory<E extends HistoryEntry>
       this.stack.length = this.cursor + 1  // clip length, in case there were many entries
     } else {
       this.stack.push(e)
+      if (this.stack.length > 100) {
+        // limit to 100 entries
+        this.stack.shift()
+      }
     }
+    this.triggerEvent("change")
+  }
+
+  createSnapshot() :NavigationHistorySnapshot<E> {
+    return { stack: this.stack.slice(), cursor: this.cursor }
+  }
+
+  restoreSnapshot(s :NavigationHistorySnapshot<E>) {
+    this.stack.length = 0
+    this.stack.splice(0, 0, ...s.stack)
+    this.cursor = s.cursor
     this.triggerEvent("change")
   }
 }
