@@ -1,4 +1,3 @@
-/// <reference no-default-lib="true"/>
 declare namespace WebDOM {
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.

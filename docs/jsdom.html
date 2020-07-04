@@ -1,0 +1,29 @@
+<head>
+  <meta charset="utf-8">
+  <script type="text/javascript" src="jsdom.js"></script>
+</head>
+<body>
+<script>(async ()=>{
+
+let workerURL = URL.createObjectURL(new Blob([ '(',
+  (() => {
+    console.log("hi")
+
+    // BigInt = function BigInt() {}
+    // SharedArrayBuffer = function SharedArrayBuffer() {}
+    // SharedArrayBuffer.prototype.byteLength = 0
+    importScripts('http://localhost:8122/jsdom.js')
+    console.log(self.jsdom)
+
+  }).toString(),
+  ')()' ],
+  { type: 'application/javascript' })
+)
+
+let w = new Worker(workerURL)
+URL.revokeObjectURL(workerURL)
+
+// console.log(require("jsdom"))
+
+})()</script>
+</body>
