@@ -54,6 +54,7 @@ print("Your viewport:", viewport.bounds)
 /**
 There are more examples in the menu ☰.
 Open the menu using the ☰ button in the bottom left corner.
+Create a new script using the + button in the top toolbar.
 
 This editor provides automatic completions of all available functionality, including the Figma API.
 Type "figma." to start exploring the API.

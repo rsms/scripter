@@ -22,6 +22,7 @@ import { UIInput } from "./ui-input"
 import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 import savedScripts from "./saved-scripts"
 import * as workerTemplate from "./worker-template"
+import { scriptenv } from "../figma-plugin/scriptenv"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version
@@ -157,6 +158,9 @@ function worker_iframeInit() {
 }
 
 
+type ScripterWorkerIframeConfig = scriptenv.ScripterWorkerIframeConfig
+
+
 class IFrameWorker implements ScripterWorkerI {
   readonly workerId :string
   readonly frame :HTMLIFrameElement
@@ -169,7 +173,7 @@ class IFrameWorker implements ScripterWorkerI {
   ready = false
   closed = false
 
-  constructor(workerId :string, scriptBody :string) {
+  constructor(workerId :string, scriptBody :string, config :ScripterWorkerIframeConfig) {
     this.workerId = workerId
     this.frame = document.createElement("iframe")
     const frame = this.frame
@@ -183,13 +187,25 @@ class IFrameWorker implements ScripterWorkerI {
 
     const S = frame.style
     S.position = "fixed"
-    S.zIndex = "-1"
-    S.left = "10px"
-    S.top = "10px"
-    S.width = "800px"
-    S.height = "600px"
-    S.visibility = "hidden"
-    S.pointerEvents = "none"
+
+    if (config.visible) {
+      S.zIndex = "9"
+      S.bottom = "10px"
+      S.top = "200px"
+      S.left = "10px"
+      S.right = "10px"
+      S.border = "2px solid black"
+      S.borderRadius = "2px"
+    } else {
+      S.zIndex = "-1"
+      S.left = "0px"
+      S.top = "0px"
+      S.width = "800px"
+      S.height = "600px"
+      S.visibility = "hidden"
+      S.pointerEvents = "none"
+    }
+
     document.body.appendChild(frame)
 
     iframeWorkers.set(frame.contentWindow, this)
@@ -271,11 +287,14 @@ function rpc_worker_create(req :WorkerCreateRequestMsg) {
     dlog("App todo create worker", req)
 
     let workerId = (workerIdGen++).toString(36)
-    let worker = (
+    let worker :ScripterWorkerI
+    if (req.iframe) {
       // launch an iframe-based worker
-      req.jsdom ? new IFrameWorker(workerId, req.js) :
-      worker_createWebWorker(workerId, req.js)
-    )
+      let config :ScripterWorkerIframeConfig = typeof req.iframe == "object" ? req.iframe : {}
+      worker = new IFrameWorker(workerId, req.js, config)
+    } else {
+      worker = worker_createWebWorker(workerId, req.js)
+    }
 
     workers.set(workerId, worker)
 

@@ -30,10 +30,6 @@ _JS_
 
 # for some reason, the webpack CopyPlugin fails, so we do it manually:
 SOURCE_MAP_VERSION=$(node -p 'require("source-map/package.json").version')
-
-cp -f src/app/figma.d.ts \
-      docs/
-
 cp -f node_modules/source-map/lib/mappings.wasm \
       docs/source-map-${SOURCE_MAP_VERSION}-mappings.wasm
 

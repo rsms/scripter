@@ -288,7 +288,7 @@ export class Script extends EventEmitter<ScriptEventMap> {
   }
 
   _onAfterLoadBody() :void {
-    if (!this._body || this.isROLib) {
+    if (this.isROLib) {
       return
     }
     // dlog("Script patch body", this.name, {isROLib: this.isROLib}, this)

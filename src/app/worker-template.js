@@ -1,4 +1,4 @@
-(function (_postMessage, importScripts, _close, window) {
+(function (_postMessage, importScripts, _close, globalObj) {
   let recvp, recvres, recvrej
   let msgq = []
   function recv() {
@@ -10,7 +10,7 @@
     }
     return recvp
   }
-  self.addEventListener("message", ev => {
+  globalObj.addEventListener("message", ev => {
     if (recvp) {
       recvp = null
       recvres(ev.data)
@@ -18,7 +18,7 @@
       msgq.push(ev.data)
     }
   });
-  self.addEventListener("messageerror", ev => {
+  globalObj.addEventListener("messageerror", ev => {
     if (recvp) { recvp = null ; recvrej(ev.data) }
   });
 
@@ -26,7 +26,7 @@
     return _postMessage({data,transfer},transfer)
   }
   function print(...msg) { console.log(...msg) }
-  function send() { return postMessage.apply(self, arguments) }
+  function send() { return postMessage.apply(globalObj, arguments) }
   function close() {
     postMessage({type:"__scripter_close"})
     _close()
@@ -42,7 +42,7 @@
 
   try {
     let r = ($__JS__)( (() => {
-      let w = Object.create(self)
+      let w = Object.create(globalObj)
       w.send = w.postMessage = postMessage
       w.recv = recv
       w.close = close
@@ -50,25 +50,25 @@
       w.importScripts = importScripts
 
       w.importCommonJS = url => {
-        self.exports = {}
-        self.module = {id:"scripter", exports:self.exports}
+        globalObj.exports = {}
+        globalObj.module = {id:"scripter", exports:globalObj.exports}
         return importScripts(url).then(() => {
-          let exports = self.module.exports
-          delete self.module
-          delete self.exports
+          let exports = globalObj.module.exports
+          delete globalObj.module
+          delete globalObj.exports
           return exports
         })
       }
 
       Object.defineProperties(w, {
         onmessage: {
-          get() { return self.onmessage },
-          set(f) { self.onmessage = f },
+          get() { return globalObj.onmessage },
+          set(f) { globalObj.onmessage = f },
           enumerable: true,
         },
       })
       return w
-    })(), window)
+    })())
     if (r instanceof Promise) {
       r.catch(__onerror)
     }
@@ -76,7 +76,9 @@
     __onerror(err)
   }
 })(
+  // _postMessage  (note: worker-frame-template provides a wrapped version)
   postMessage,
+  // importScripts
   (
     typeof __scripterImportScripts != "undefined" ? __scripterImportScripts :
     (importScripts => (...urls) => {
@@ -84,9 +86,11 @@
       return Promise.resolve()
     })(self.importScripts.bind(self))
   ),
+  // _close
   (
     typeof __scripterClose != "undefined" ? __scripterClose :
     self.close.bind(self)
   ),
+  // globalObj
   typeof window != "undefined" ? window : self,
 )

@@ -227,12 +227,6 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
       )}
     </div>
 
-    /*
-    <div className="section">
-      <div className="button new" title="New script" onClick={this.onNewScript}></div>
-    </div>
-    */
-
     return (
     <div>
       {state.scripts.length > 0 ?
@@ -244,7 +238,7 @@ export class MenuUI extends React.Component<MenuProps,MenuState> {
         null
       }
       {examples}
-      <h3>References</h3>
+      <h3>API reference</h3>
       <ul>
       {state.referenceScripts.map(s =>
         <MenuItem key={s.id} script={s} isActive={currentScriptId == s.id} /> )}
@@ -473,8 +467,12 @@ function MenuItem(props :MenuItemProps) :JSX.Element {
       // This means that if we create a new script, which starts out empty, and then
       // rename it, the name is saved only in memory and the script is not persisted
       // until some edit is done to the body.
-      s.name = newName
-      s.scheduleSave()
+      if (s.name != newName) {
+        s.name = newName
+        // even though setting the name implies scheduleSave, we save immediately
+        // so that the UI updates quickly (e.g. window title.)
+        s.save()
+      }
     }
     setIsEditing(false)
   }

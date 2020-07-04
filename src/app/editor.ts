@@ -637,7 +637,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // stop any currently-running script
     this.stopCurrentScript()
 
-    warningMessage.hide()
     this.clearAllMetaInfo()
 
     let stopCallback = () => {
@@ -733,6 +732,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   clearAllMetaInfo() {
+    warningMessage.hide()
     this.clearAllDecorations()
     this.viewZones.clearAll()
     this.clearHoverCards()
@@ -1322,6 +1322,11 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
     // Ultimately this is the simples and most reliable approach. Monaco synchronizes
     // state with the TS worker, so simply patching the code in the TS worker would cause
     // the editor to go bananas.
+    //
+    // IMPORTANT: This function MUST NOT MODIFY THE MODEL CONTENTS.
+    //            If it does, it would cause an infinite loop.
+    //            If this is ever needed, change onDidChangeModelContent as appropriate.
+    //
     if (DEBUG) {
       if (!(this.editor as any).setHiddenAreas) {
         console.error("MONACO issue: editor.setHiddenAreas not found!")
@@ -1475,6 +1480,7 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           this.setCurrentScriptFromUserAction(s2)
         }
       }
+      this.updateHiddenAreas()
     })
 
     editor.onDidChangeCursorSelection((e: monaco.editor.ICursorSelectionChangedEvent) :void => {

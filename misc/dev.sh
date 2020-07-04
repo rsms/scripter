@@ -79,4 +79,4 @@ popd >/dev/null
 # web server
 rm -f "$rootdir/build/dev/res"
 ln -s ../../docs/res "$rootdir/build/dev/res"
-node "$rootdir/misc/serve.js" "$rootdir/build/dev" 8009
+node node_modules/.bin/serve-http -p 8009 -no-log "$rootdir/build/dev"

@@ -1,3 +1,5 @@
+import { scriptenv } from "../figma-plugin/scriptenv"
+
 export interface SourcePos {
   line   :number
   column :number
@@ -181,9 +183,9 @@ export interface UIInputResponseMsg extends TransactionalMsg {
 // worker
 
 export interface WorkerCreateRequestMsg extends TransactionalMsg {
-  type   :"worker-create-req"
-  js     :string
-  jsdom? :boolean
+  type    :"worker-create-req"
+  js      :string
+  iframe? :scriptenv.ScripterWorkerIframeConfig | boolean | null
 }
 
 export interface WorkerCreateResponseMsg extends TransactionalMsg {

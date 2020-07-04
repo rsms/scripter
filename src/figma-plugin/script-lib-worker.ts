@@ -1,5 +1,4 @@
-import { ScriptEnv } from "./scriptenv"
-import { scriptenv } from "./scriptenv"
+import { ScriptEnv, scriptenv } from "./scriptenv"
 import { rpc, sendMsg } from "./rpc"
 import {
   WorkerCreateRequestMsg, WorkerCreateResponseMsg,
@@ -206,7 +205,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       "worker-create-req", "worker-create-res",
     {
       js,
-      jsdom: opt.DOM,
+      iframe: opt.iframe,
     }).then(res => {
       dlog("Worker created", res)
 
