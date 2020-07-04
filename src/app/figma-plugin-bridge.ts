@@ -578,15 +578,8 @@ export function init() {
   }
 
   function onKeydown(ev :KeyboardEvent, key :string) :bool|undefined {
-    if (key == "Escape") {
-      if (!ev.metaKey && !ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
-        if (ev.timeStamp - lastEscapeKeypress <= escapeToCloseThreshold) {
-          closePlugin()
-          return true
-        }
-        lastEscapeKeypress = ev.timeStamp
-      }
-    } else if (ev.keyCode == 80 /*P*/ && (ev.metaKey || ev.ctrlKey) && ev.altKey) {
+    // Note: Rest of app key bindings are in app.ts
+    if (ev.code == "KeyP" && (ev.metaKey || ev.ctrlKey) && ev.altKey) {
       // meta-alt-P
       closePlugin()
       return true
