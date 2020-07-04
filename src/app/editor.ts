@@ -13,7 +13,8 @@ import { print, dlog, isMac } from "./util"
 import { menu } from "./menu"
 import { LoadScriptMsg } from "../common/messages"
 import resources from "./resources"
-import { NavigationHistory, HistoryEntry } from "./history"
+import { NavigationHistory, HistoryEntry, NavigationHistorySnapshot } from "./history"
+import app from "./app"
 
 const ts = monaco.languages.typescript
 
@@ -1016,6 +1017,42 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   readonly navigationHistory = new NavigationHistory<EditorHistoryEntry>()
 
+  async initHistory() {
+    // load preexisting history
+    type Snapshot = NavigationHistorySnapshot<EditorHistoryEntry>
+    const snap = await db.get<Snapshot>("history", "navigationHistory")
+    if (snap) {
+      dlog("editor restoring navigationHistory", snap)
+      this.navigationHistory.restoreSnapshot(snap)
+    }
+
+    // save history
+    let storeTimer :any = null
+    let storeNow = () => {
+      clearTimeout(storeTimer)
+      storeTimer = null
+      const snap = this.navigationHistory.createSnapshot()
+      db.put("history", snap, "navigationHistory").then(() => {
+        dlog("editor saved navigationHistory")
+      })
+    }
+    app.on("close", storeNow)
+    this.navigationHistory.on("change", () => {
+      if (storeTimer === null) {
+        storeTimer = setTimeout(storeNow, 300)
+      }
+    })
+
+    // when built in debug mode, visualize the history stack as it changes
+    if (DEBUG) this.navigationHistory.on("change", () => {
+      dlog(`current history stack: (cursor=${this.navigationHistory.cursor})\n` +
+        this.navigationHistory.stack.map((e, i) => {
+        let s = i == this.navigationHistory.cursor ? ">" : " "
+        return `${s} stack[${i}] = ${e.scriptGUID}`
+      }).join("\n"))
+    })
+  }
+
   historyBack() {
     if (!this.navigationHistory.canGoBack()) {
       return
@@ -1130,21 +1167,15 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
   async init() {
     this.initTypescript()  // intentionally not awaiting
-
-    if (DEBUG) {
-      this.navigationHistory.on("change", () => {
-        dlog(`current history stack: (cursor=${this.navigationHistory.cursor})\n` +
-          this.navigationHistory.stack.map((e, i) => {
-          let s = i == this.navigationHistory.cursor ? ">" : " "
-          return `${s} stack[${i}] = ${e.scriptGUID}`
-        }).join("\n"))
-      })
-    }
+    const initHistoryPromise = this.initHistory()
 
     // load past code buffer
     let script = await loadLastOpenedScript()
     let model = this.setCurrentScript(script)
-    this.historyPush()
+
+    // add the script to history. Note that this has no effect if the current script
+    // is already at the top of the history stack.
+    initHistoryPromise.then(() => this.historyPush())
 
     // setup options from config
     this.updateOptionsFromConfig()

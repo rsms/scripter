@@ -3,7 +3,7 @@ import * as xdb from "./xdb"
 
 const print = console.log.bind(console)
 
-const DB_VERSION = 1
+const DB_VERSION = 2
 export const db = new xdb.Database("scripter", DB_VERSION)
 
 // let dbPromiseResolve :(v:xdb.Database)=>void
@@ -41,15 +41,11 @@ export async function initData() {
       t.createStore("scriptViewState")
     }
 
-    // let rec = await scripts.get("hello")
-    // let store2 = t.createStore("scripts2", { keyPath: "name" })
-
-    // print("db upgrade complete")
+    if (t.prevVersion < 2) {
+      // history holds history data (like navigationHistory)
+      t.createStore("history")
+    }
   })
-  // .then(() => dbPromiseResolve(db)).catch(e => {
-  //   dbPromiseReject(e)
-  //   throw e
-  // })
 
   // print("opened database")
 
