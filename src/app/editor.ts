@@ -1316,7 +1316,6 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
 
   updateHiddenAreas() {
-    dlog("editor/updateHiddenAreas()")
     // Sad hack to work around isolating scripts.
     // Many many hours went into finding a better solution than this.
     // Ultimately this is the simples and most reliable approach. Monaco synchronizes
@@ -1480,7 +1479,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
           this.setCurrentScriptFromUserAction(s2)
         }
       }
-      this.updateHiddenAreas()
+      if (e.isFlush) {
+        this.updateHiddenAreas()
+      }
     })
 
     editor.onDidChangeCursorSelection((e: monaco.editor.ICursorSelectionChangedEvent) :void => {

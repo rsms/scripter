@@ -158,12 +158,194 @@ function worker_iframeInit() {
 }
 
 
+interface UserWindowConfig {
+  x?        :number
+  y?        :number
+  width?    :number
+  height?   :number
+  title?    :string
+  onClose?  :()=>void  // adds a close button with this fn as its click handler
+  moveable? :boolean
+  onMove?   :(x :number, y :number) => void
+}
+
+
+// simple DOM element builder
+function EL<T extends HTMLElement>(
+  name        :string,
+  attrs?      :{[k:string]:any},
+  ...children :any[]
+) :T {
+  let el = document.createElement(name)
+  if (attrs) for (let k in attrs) {
+    if (k == "style") {
+      Object.assign(el.style, attrs[k])
+    } else if (k == "className") {
+      el.className = attrs[k]
+    } else {
+      el.setAttribute(k, attrs[k])
+    }
+  }
+  for (let n of children) {
+    if (n instanceof Node) {
+      el.appendChild(n)
+    } else if (n !== undefined && n !== null) {
+      el.appendChild(document.createTextNode(String(n)))
+    }
+  }
+  return el as T
+}
+
+
+const kUserWindowTitleHeight = 24  // keep in sync with app.css
+
+
+class UserWindow {
+  readonly domRoot :HTMLDivElement
+  readonly title :HTMLDivElement
+  readonly config :UserWindowConfig
+  readonly frame = { x: 0, y: 0, width: 300, height: 200 }
+
+  constructor(body :HTMLElement, config? :UserWindowConfig) {
+    let closeButton :HTMLElement|null = null
+    this.config = config || (config = {})
+    if (config.onClose) {
+      closeButton = EL("div", { className: "close-button" })
+      closeButton.onclick = config.onClose
+    }
+    if (config.width !== undefined) { this.frame.width = config.width }
+    if (config.height !== undefined) { this.frame.height = config.height }
+    this.frame.x = (config.x !== undefined) ? config.x : this._centerOnScreenX()
+    this.frame.y = (config.y !== undefined) ? config.y : this._centerOnScreenY()
+
+    this._clampFrame()
+    const frame = this.frame
+
+    this.domRoot = EL("div",
+      {
+        className: "user-window",
+        style: {
+          transform: `translate3d(${frame.x}px,${frame.y}px,0)`,
+          width:     frame.width + "px",
+          height:    frame.height + "px",
+        },
+      },
+      EL("div", { className: "titlebar" },
+        this.title = EL("div", { className: "title" }, config.title || ""),
+        closeButton,
+      ),
+      body,
+    )
+
+    if (config.moveable) {
+      this.enableMove()
+    } else if (config.onMove) {
+      console.warn("UserWindow config.onMove is set but config.movable is not -- mistake?")
+    }
+  }
+
+  _clampFrame() {
+    const maxX = window.innerWidth - 50
+    const maxY = window.innerHeight - kUserWindowTitleHeight
+    this.frame.width = Math.min(window.innerWidth - 8, this.frame.width)
+    this.frame.height = Math.min(window.innerHeight - 8, this.frame.height)
+    this.frame.x = Math.min(maxX, Math.max(4, this.frame.x))
+    this.frame.y = Math.min(maxY, Math.max(4, this.frame.y))
+  }
+
+  _setPosition(x :number, y :number) {
+    this.frame.x = x
+    this.frame.y = y
+    this._clampFrame()
+    this.domRoot.style.transform = `translate3d(${this.frame.x}px, ${this.frame.y}px, 0)`
+  }
+
+  _centerOnScreenX() :number {
+    return Math.round((window.innerWidth - this.frame.width) * 0.5)
+  }
+  _centerOnScreenY() :number {
+    return Math.round((window.innerHeight - this.frame.height) * 0.4)
+  }
+
+  setPosition(x :number, y :number) {
+    if (this.config.moveable) {
+      this._setPosition(x, y)
+      this.config.onMove && this.config.onMove(this.frame.x, this.frame.y)
+    }
+  }
+
+  centerOnScreen() {
+    this._setPosition(this._centerOnScreenX(), this._centerOnScreenY())
+    this.config.onMove && this.config.onMove(this.frame.x, this.frame.y)
+  }
+
+  enableMove() {
+    let currentX = 0
+    let currentY = 0
+    let initialX = 0
+    let initialY = 0
+
+    const onpointermove = (e :PointerEvent) => {
+      e.preventDefault()
+      currentX = e.clientX - initialX
+      currentY = e.clientY - initialY
+      this._setPosition(currentX, currentY)
+    }
+
+    const onpointerdown = (e :PointerEvent) => {
+      initialX = e.clientX - this.frame.x
+      initialY = e.clientY - this.frame.y
+      if (this.title.setPointerCapture) {
+        this.title.setPointerCapture(e.pointerId)
+      }
+      document.addEventListener("pointermove", onpointermove, {capture:true})
+    }
+
+    const onpointerup = (e :PointerEvent) => {
+      if (this.title.releasePointerCapture) {
+        this.title.releasePointerCapture(e.pointerId)
+      }
+      document.removeEventListener("pointermove", onpointermove, {capture:true})
+      if (this.config.onMove) {
+        this.config.onMove(this.frame.x, this.frame.y)
+      }
+    }
+
+    this.title.addEventListener("pointerdown", onpointerdown, false)
+    this.title.addEventListener("pointerup", onpointerup, false)
+  }
+}
+
+
+// // DEBUG show window during development
+// setTimeout(function xx() {
+//   let e = document.createElement("iframe")
+//   e.src = "https://rsms.me/"
+//   let w = new UserWindow(e, {
+//     x: 40,
+//     y: 40,
+//     width: 600,
+//     height: 500,
+//     title: "Worker",
+//     moveable: true,
+//     onClose() {
+//       document.body.removeChild(w.domRoot)
+//     },
+//     onMove(x :number, y :number) {
+//       dlog("onMove", x, y)
+//     },
+//   })
+//   document.body.appendChild(w.domRoot)
+// }, 1000)
+
+
 type ScripterWorkerIframeConfig = scriptenv.ScripterWorkerIframeConfig
 
 
 class IFrameWorker implements ScripterWorkerI {
   readonly workerId :string
-  readonly frame :HTMLIFrameElement
+  readonly frame    :HTMLIFrameElement
+  readonly domRoot  :HTMLElement
   readonly recvq :{ message :any, transfer? :Transferable[] }[] = []
 
   onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
@@ -185,28 +367,46 @@ class IFrameWorker implements ScripterWorkerI {
       this.onerror(err as any as ErrorEvent) // FIXME
     }
 
-    const S = frame.style
-    S.position = "fixed"
+    const edbounds = window.document.getElementById("editor").getBoundingClientRect()
+    let width = (
+      config.width !== undefined ? Math.round(config.width) :
+      edbounds.width - 40
+    )
+    let height = (
+      config.height !== undefined ? Math.round(config.height) :
+      Math.round(edbounds.height / 2) - 20
+    )
 
     if (config.visible) {
-      S.zIndex = "9"
-      S.bottom = "10px"
-      S.top = "200px"
-      S.left = "10px"
-      S.right = "10px"
-      S.border = "2px solid black"
-      S.borderRadius = "2px"
+      // visible, interactive iframe in an iframe-win container
+      if (config.height !== undefined) {
+        // add title height, since user size is requested size of the content, not window.
+        height += kUserWindowTitleHeight
+      }
+      let win = new UserWindow(frame, {
+        width,
+        height,
+        title:  config.name || `Worker ${iframeWorkers.size + 1}`,
+        moveable: true,
+        onClose: () => { this.close() },
+      })
+      document.body.appendChild(win.domRoot)
+      this.domRoot = win.domRoot
     } else {
-      S.zIndex = "-1"
-      S.left = "0px"
-      S.top = "0px"
-      S.width = "800px"
-      S.height = "600px"
-      S.visibility = "hidden"
-      S.pointerEvents = "none"
+      // hidden iframe on body
+      Object.assign(frame.style, {
+        position: "fixed",
+        zIndex: "-1",
+        left: "0px",
+        top: "0px",
+        width: width + "px",
+        height: height + "px",
+        visibility: "hidden",
+        pointerEvents: "none",
+      })
+      document.body.appendChild(frame)
+      this.domRoot = frame
     }
-
-    document.body.appendChild(frame)
 
     iframeWorkers.set(frame.contentWindow, this)
 
@@ -237,6 +437,7 @@ class IFrameWorker implements ScripterWorkerI {
     if (ev.data === "__scripter_iframe_ready") {
       this.ready || this.onReady()
     } else if (ev.data === "__scripter_iframe_close") {
+      // closed itself
       this.terminate()
     } else {
       this.onmessage(ev)
@@ -244,7 +445,6 @@ class IFrameWorker implements ScripterWorkerI {
   }
 
   postMessage(message :any, transfer? :Transferable[]) :void {
-    dlog("postmessage to iframe", message)
     if (this.ready) {
       this.frame.contentWindow.postMessage(message, "*", transfer)
     } else {
@@ -252,15 +452,22 @@ class IFrameWorker implements ScripterWorkerI {
     }
   }
 
+  close() {
+    worker_onclose(this.workerId)
+    this.terminate()
+  }
+
   terminate() :void {
+    dlog("figma-plugin-bridge/IFrameWorker.terminate. this.closed:", this.closed)
     if (this.closed) {
       return
     }
     this.closed = true
     iframeWorkers.delete(this.frame.contentWindow)
-    this.frame.parentElement.removeChild(this.frame)
+    this.domRoot.parentElement.removeChild(this.domRoot)
     this.frame.src = "about:blank"
     ;(this as any).frame = null
+    ;(this as any).domRoot = null
   }
 }
 
@@ -393,7 +600,10 @@ function worker_ctrl(msg :WorkerCtrlMsg) {
     return
   }
   let worker = worker_get(msg)
-  if (!worker) { return }
+  if (!worker) {
+    dlog("figma-plugin-bridge/worker_ctrl ignoring unknown worker#" + msg.workerId)
+    return
+  }
   worker.terminate()
   worker_onclose(msg.workerId)
 }

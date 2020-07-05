@@ -17,6 +17,11 @@ interface ScripterWorker extends scriptenv.ScripterWorker {
 }
 
 
+// workerSet contains all workers
+const workerSet = new Set<ScripterWorker>()
+
+// workerMap is a subset of workerSet, containing workers which have been created
+// on the UI side and assigned a workerId (key.)
 const workerMap = new Map<string,ScripterWorker>()  // workerId => Worker
 
 
@@ -91,11 +96,13 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
 
   function onScriptEnd() {
     // when script ends, end all workers
-    // note: copy values as w.terminate might call workerMap.delete
-    for (let w of Array.from(workerMap.values())) {
+    // note: copy values as w.terminate might call workerSet.delete
+    dlog("createCreateWorker/onScriptEnd", workerSet.size, Array.from(workerSet.values()))
+    for (let w of Array.from(workerSet.values())) {
+      dlog("createCreateWorker/onScriptEnd terminate worker", w)
       w.terminate()
     }
-    workerMap.clear()
+    workerSet.clear()
   }
 
   return function createWorker(
@@ -201,6 +208,10 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       }
     }
 
+    // register new worker
+    workerSet.add(w)
+
+    // sed request to UI
     rpc<WorkerCreateRequestMsg, WorkerCreateResponseMsg>(
       "worker-create-req", "worker-create-res",
     {
@@ -208,11 +219,15 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       iframe: opt.iframe,
     }).then(res => {
       dlog("Worker created", res)
+      workerId = res.workerId
+      workerMap.set(workerId, w)
 
       w.terminate = () => {
+        dlog("worker/terminate req")
         w._onclose()
-        if (!terminated) {
-          terminated = true
+        terminated = true
+        if (workerSet.delete(w)) {
+          dlog("worker/terminate exec")
           workerMap.delete(workerId)
           dlog(`[worker] terminating worker#${workerId}`)
           sendMsg<WorkerCtrlMsg>({
@@ -227,12 +242,11 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       if (terminated) {
         // worker terminated already
         dlog(`[worker] note: worker#${workerId} terminated before it started`)
+        workerSet.add(w) // so that terminate() works as expected
         w.terminate()
         return
       }
 
-      workerId = res.workerId
-      workerMap.set(workerId, w)
       if (w.onerror && res.error) {
         return (w as any).onerror(new _WorkerError(res.error))
       }

@@ -225,6 +225,15 @@ interface ScripterWorkerBaseEnv {
 interface ScripterWorkerIframeConfig {
   /** If true, show the iframe rather than hiding it */
   visible? :boolean
+
+  /** Sets the window title of visible iframes */
+  name? :string
+
+  /** Width of the iframe */
+  width? :number
+
+  /** Height of the iframe */
+  height? :number
 }
 
 interface ScripterWorkerError {
