@@ -28,8 +28,7 @@ addlib("dom", "lib.dom.d.ts", s)
 
 
 // webworker lib
-s = readfile("node_modules/typescript/lib/lib.webworker.d.ts") + "\n" +
-    readfile("node_modules/typescript/lib/lib.webworker.importscripts.d.ts")
+s = readfile("node_modules/typescript/lib/lib.webworker.d.ts")
 
 s = 'declare global { namespace WebWorkerEnv {\n' +
     s.replace(/declare\s+|\/\/\/\s*<reference[^\r\n]+/g, "") + "\n" +

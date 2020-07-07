@@ -1,6 +1,15 @@
+// Note: Changes to this file only take effect after running misc/build-app.pre.sh
 (function (_postMessage, importScripts, _close, globalObj) {
+  // special props on data for implementing script-worker requests
+  // IMPORTANT: Keep in sync with worker-template.js
+  const requestIdProp = "__scripterRequestId"
+  const requestErrProp = "__scripterRequestError"
+
   let recvp, recvres, recvrej
   let msgq = []
+  let requestq = []
+  let workerInitialized = false
+
   function recv() {
     if (!recvp) {
       if (msgq.length > 0) {
@@ -10,14 +19,63 @@
     }
     return recvp
   }
+
+  function onInit(err) {
+    // console.log("[worker] init. flush requestq")
+    workerInitialized = true
+    requestq.forEach(r => handleRequest(r))
+    requestq = null
+  }
+
+  function handleRequest(data) {
+    const requestId = data[requestIdProp]
+    const f = globalObj.onrequest
+    // console.log("[worker-wrapper] got request", data)
+    const response = { [requestIdProp]: requestId }
+    let r = null
+    if (f) {
+      try {
+        r = f({ id: requestId, data: data.data })
+      } catch (err) {
+        response[requestErrProp] = String(err.stack||err)
+      }
+    } else {
+      response[requestErrProp] = "No onrequest handler registered in worker"
+    }
+    const reply = r => {
+      response.data = r
+      postMessage(response)
+    }
+    if (r instanceof Promise) {
+      r.then(reply).catch(err => {
+        console.log("[worker] error in promise")
+        response[requestErrProp] = String(err ? (err.stack || err) : "error")
+        reply(null)
+      })
+    } else {
+      reply(r)
+    }
+  }
+
   globalObj.addEventListener("message", ev => {
+    if (ev.data && typeof ev.data == "object" && requestIdProp in ev.data) {
+      if (!workerInitialized) {
+        requestq.push(ev.data)
+      } else {
+        handleRequest(ev.data)
+      }
+      ev.stopPropagation()
+      ev.preventDefault()
+      return
+    }
     if (recvp) {
       recvp = null
       recvres(ev.data)
-    } else {
+    } else if (!workerInitialized || msgq.length < 10) {
       msgq.push(ev.data)
     }
-  });
+  }, {capture:true});
+
   globalObj.addEventListener("messageerror", ev => {
     if (recvp) { recvp = null ; recvrej(ev.data) }
   });
@@ -42,6 +100,7 @@
 
   try {
     let r = (eval($__JS__))( (() => {
+      // build environment passed in to the worker
       let w = Object.create(globalObj)
       w.send = w.postMessage = postMessage
       w.recv = recv
@@ -66,14 +125,21 @@
           set(f) { globalObj.onmessage = f },
           enumerable: true,
         },
+        onrequest: {
+          get() { return globalObj.onrequest },
+          set(f) { globalObj.onrequest = f },
+          enumerable: true,
+        },
       })
       return w
     })())
+    onInit(null)
     if (r instanceof Promise) {
       r.catch(__onerror)
     }
   } catch(err) {
     console.warn("error in worker-template", err)
+    onInit(err)
     __onerror(err)
   }
 })(

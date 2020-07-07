@@ -1010,6 +1010,9 @@ body.menuVisible .inlineWidget > div {
       padding-left: 8px;
       user-select: none; -webkit-user-select: none;
       cursor: default;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     & .close-button {

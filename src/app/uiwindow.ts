@@ -6,6 +6,7 @@ import { EL } from "./dom"
 import { dlog, print } from "./util"
 import { EventEmitter } from "./event"
 import { uiresponder } from "./uiresponder"
+import app from "./app"
 
 
 export interface UIWindowConfig {
@@ -43,6 +44,27 @@ let idgen = 0
 const windowStack = new class UIWindowStack {
   windows :UIWindow[] = []
 
+  _initCalled = false
+
+  _init() {
+    this._initCalled = true
+    app.addKeyEventHandler(ev => {
+      // cmd-w, ctrl-w and alt-F4 -- close window in focus
+      if (
+        this.windows.length > 0 && (
+          ((ev.ctrlKey || ev.metaKey) && ev.key == "w") ||
+          (ev.altKey && ev.key == "F4")
+        )
+      ) {
+        const topwin = this.top()
+        if (topwin.inFocus) {
+          topwin.close()
+          return true
+        }
+      }
+    })
+  }
+
   top() :UIWindow|null {
     return this.windows[this.windows.length - 1] || null
   }
@@ -57,6 +79,9 @@ const windowStack = new class UIWindowStack {
   }
 
   add(w :UIWindow) {
+    if (!this._initCalled) {
+      this._init()
+    }
     // dlog(`[windowStack] add ${w}`)
     if (DEBUG) if (this.windows.indexOf(w) != -1) {
       console.warn(`duplicate call to windowStackAdd ${w}`)
@@ -76,6 +101,8 @@ const windowStack = new class UIWindowStack {
     }
     if (this.windows.length == 0) {
       document.body.focus()
+    } else if (w.inFocus) {
+      this.top().focus()
     }
   }
 
@@ -148,6 +175,10 @@ export class UIWindow extends EventEmitter<UIWindowEvents> {
       this._centerOnScreenY()
     )
     this._clampBounds()
+    if (config.x === undefined && this._x < 0) {
+      // TODO improve _clampBounds to position a window after limiting its size
+      this._x = 0
+    }
 
     this.body = body
 

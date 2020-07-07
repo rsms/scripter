@@ -5,11 +5,11 @@ export const dom = {
 };
 export const webworker = {
   filename: "lib.webworker.d.ts",
-  version: "6NuArQ9ZIk+1Rs0FkMNjr1RlEp4"
+  version: "nkpjZop6oiU0iz4a83cmigz6edo"
 };
 export const scripter = {
   filename: "scripter-env.d.ts",
-  version: "/iCTuQTPEUDVMit3Dqpt2T0eE78"
+  version: "df0b6ORzVVumbqEM4eZn4/yBs1Y"
 };
 export const figma = {
   filename: "figma.d.ts",

@@ -87,8 +87,9 @@ Keyboard shortcuts
 	Resets text size                       ${kb("⌘0",     "Ctrl+0")}
 	Opens quick commander                  ${kb("F1 ",     "F1")} or ${kb(" ⇧⌘P", "Ctrl+Shift+P")}
 	Goes to defintion of selected symbol   ${kb("⌘F12 ",  "Ctrl+F12")} or ${kb(" F12", "F12")}
+	Peek definitions of selected symbol    F11
 	Show references to selected symbol     ${kb("⇧F12",   "Shift+F12")}
-	Quick navigator                        ${kb("⇧⌘O",   "Ctrl+Shift+O")}
+	Quick navigator                        ${kb("⇧⌘O ",   "Ctrl+Shift+O")} or ${kb(" ⌘P", "Ctrl+P")}
 	Go back in history                     ${kb("⇧⌘[ ",  "Ctrl+Shift+[")} or ${kb(" ⌃-", "Alt+←")}
 	Go forward in history                  ${kb("⇧⌘] ",  "Ctrl+Shift+]")} or ${kb(" ⌃⇧-",   "Alt+→")}
 
@@ -472,6 +473,304 @@ async function fetchFigmaFile(fileKey :string) :Promise<any> {
 	}
 	return json
 }
+`),
+
+
+//------------------------------------------------------------------------------------------------
+
+
+s("worker/basics", "Workers/Worker Basics", `
+/**
+Workers are new in Scripter since July 2020. Workers is a way to execute code in parallel inside a full WebWorker environment, with access to features like script loading and OffscreenCanvas. There are also iframe-based workers as an option when you need a full complete web DOM with access to the full Web API.
+
+Let's get started with a simple worker:
+*/
+
+let w = createWorker(async w => {
+  let r = await w.recv()  // wait for input
+	let result = "Hello ".repeat(r).trim()  // compute some stuff
+  w.send(result)  // send the result
+  w.close()  // close the worker
+})
+w.send(4)  // send some input
+print(await w.recv())  // wait for a reply
+
+/**
+The above worker is written in idiomatic Scripter style using send() and recv() calls.
+
+If that's not your jam, you can alternatively use the event-based WebWorker API:
+*/
+
+let w2 = createWorker(w => {
+	w.importScripts
+	w.onmessage = ev => {
+		let result = "Bye ".repeat(ev.data).trim()
+		w.postMessage(result)
+		w.close()
+	}
+})
+w2.postMessage(4)
+w2.onmessage = ev => {
+	print(ev.data)
+}
+// We must await the worker or it will be closed immediately
+// as the script ends.
+await w2
+
+/**
+Since Scripter is fully async-await capable, it's usually easier to use the send() and recv() functions instead of postMessage and handle to onmessage events.
+
+send() and recv() are optionally typed, which can be useful when you are writing more complicated scripts or simply prefer to have stricter types:
+*/
+let w3 = createWorker(async w => {
+  let r = await w.recv<number>()  // r is a number
+	let result = "Hej ".repeat(r).trim()
+  w.send(result)  // type inferred from result
+  w.close()
+})
+w3.send<number>(4)  // this call now only accepts numbers
+print(await w3.recv<string>())
+
+/**
+One final example: worker requests
+The request-response patterns is common with many worker uses and so there is a function-and-event pair to save you time from managing your own request IDs over send & recv:
+*/
+
+let w4 = createWorker(async w => {
+	w.onrequest = req => {
+		return "Hi ".repeat(req.data).trim()  // compute some stuff
+	}
+})
+const r1 = w4.request(/* input: */ 4, /* timeout: */ 1000)
+const r2 = w4.request(/* input: */ 9, /* timeout: */ 1000)
+print(await r1)
+print(await r2)
+`),
+
+
+s("worker/iframe-d3-density-contours", "Workers/IFrame workers", `
+/**
+Sometimes a worker needs a full Web DOM or access to a Web API only available in full-blown documents, like WebGL. That's when iframe-based workers comes in handy.
+
+This example shows how to load an external library which manipulates SVG in a DOM to create complex graphs. Specifically, the chart generated shows the relationship between idle and eruption times for Old Faithful. (Source: https://observablehq.com/@d3/density-contours)
+*/
+
+let w = createWorker({iframe:true}, async w => {
+  // load d3 library
+  await w.importScripts("https://d3js.org/d3.v5.min.js")
+  const d3 = w["d3"] // d3 exports itself globally
+
+  // load dataset and add labels to the array
+  const data = Object.assign(
+    await w.recv<{x:number,y:number}[]>(),
+    {x: "Idle (min.)", y: "Erupting (min.)"}
+  )
+
+  const width = 800
+  const height = 800
+  const margin = {top: 20, right: 30, bottom: 30, left: 40}
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(data, d => d.x)).nice()
+    .rangeRound([margin.left, width - margin.right])
+
+  const y = d3.scaleLinear()
+    .domain(d3.extent(data, d => d.y)).nice()
+    .rangeRound([height - margin.bottom, margin.top])
+
+  const xAxis = g => g.append("g")
+    .attr("transform", \`translate(0,\${height - margin.bottom})\`)
+    .call(d3.axisBottom(x).tickSizeOuter(0))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.select(".tick:last-of-type text").clone()
+      .attr("y", -3)
+      .attr("dy", null)
+      .attr("font-weight", "bold")
+      .text(data.x))
+
+  const yAxis = g => g.append("g")
+    .attr("transform", \`translate(\${margin.left},0)\`)
+    .call(d3.axisLeft(y).tickSizeOuter(0))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.select(".tick:last-of-type text").clone()
+      .attr("x", 3)
+      .attr("text-anchor", "start")
+      .attr("font-weight", "bold")
+      .text(data.y))
+
+  const contours = d3.contourDensity()
+    .x(d => x(d.x))
+    .y(d => y(d.y))
+    .size([width, height])
+    .bandwidth(30)
+    .thresholds(30)
+    (data)
+
+  const svg = d3.create("svg")
+      .attr("viewBox", [0, 0, width, height]);
+
+  svg.append("g").call(xAxis);
+
+  svg.append("g").call(yAxis);
+
+  svg.append("g")
+      .attr("fill", "none")
+      .attr("stroke", "steelblue")
+      .attr("stroke-linejoin", "round")
+    .selectAll("path")
+    .data(contours)
+    .enter().append("path")
+      .attr("stroke-width", (d, i) => i % 5 ? 0.25 : 1)
+      .attr("d", d3.geoPath());
+
+  svg.append("g")
+      .attr("stroke", "white")
+    .selectAll("circle")
+    .data(data)
+    .enter().append("circle")
+      .attr("cx", d => x(d.x))
+      .attr("cy", d => y(d.y))
+      .attr("r", 2);
+
+  // respond with SVG code
+  w.send(svg.node().outerHTML)
+})
+
+// load sample data
+const data = await fetchJson("https://scripter.rsms.me/sample/old-faithful.json")
+
+// Send data to the worker for processing.
+// The second argument causes data to be transferred
+// instead of copied.
+w.send(data, [data])
+
+// await a response, then add SVG to Figma document
+let svg = await w.recv<string>()
+let n = figma.createNodeFromSvg(svg)
+figma.viewport.scrollAndZoomIntoView([n])
+`),
+
+
+s("worker/window-basics", "Workers/Windows", `
+/**
+Workers backed by an iframe can be made visible and interactive via the "visible" property passed to createWorker.
+*/
+const w1 = createWorker({iframe:{visible:true}}, async w => {
+	function updateTime() {
+		w.document.body.innerText =
+			\`The time is: \${(new Date).toTimeString()}\`
+	}
+	updateTime()
+	setInterval(updateTime, 1000)
+})
+
+/**
+createWindow is a dedicated function for creating windows that house workers. To explore the options and the API, either place your pointer over createWindow below and press F12 or ALT-click the createWindow call to jump to the API documentation.
+*/
+const w2 = createWindow({width:200,height:100}, async w => {
+	w.document.body.innerHTML = \`<p>B</p>\`
+})
+
+// wait until both windows have been closed
+await Promise.all([w1,w2])
+`),
+
+
+s("worker/window-advanced1", "Workers/Windows advanced", `
+/**
+This is a version of the "IFrame worker" example which uses the d3 library inside a window to create a data visualization. However, instead of adding the generating graph to the Figma document, its shown in an interactive window instead. (Source: https://observablehq.com/@d3/density-contours)
+
+A second window is opened as well, loading a Three.js WebGL via an external URL.
+*/
+const w1 = createWindow({title:"d3",width:800}, async w => {
+  // load data
+  const datap = fetch("https://scripter.rsms.me/sample/old-faithful.json").then(r => r.json())
+  // load d3 library
+  await w.importScripts("https://d3js.org/d3.v5.min.js")
+  const d3 = w["d3"] // d3 exports itself globally
+
+  // wait for dataset and add labels
+  const data = Object.assign(
+    await datap,
+    {x: "Idle (min.)", y: "Erupting (min.)"}
+  )
+
+  const width = 800
+  const height = 800
+  const margin = {top: 20, right: 30, bottom: 30, left: 40}
+
+  const x = d3.scaleLinear()
+    .domain(d3.extent(data, d => d.x)).nice()
+    .rangeRound([margin.left, width - margin.right])
+
+  const y = d3.scaleLinear()
+    .domain(d3.extent(data, d => d.y)).nice()
+    .rangeRound([height - margin.bottom, margin.top])
+
+  const xAxis = g => g.append("g")
+    .attr("transform", \`translate(0,\${height - margin.bottom})\`)
+    .call(d3.axisBottom(x).tickSizeOuter(0))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.select(".tick:last-of-type text").clone()
+      .attr("y", -3)
+      .attr("dy", null)
+      .attr("font-weight", "bold")
+      .text(data.x))
+
+  const yAxis = g => g.append("g")
+    .attr("transform", \`translate(\${margin.left},0)\`)
+    .call(d3.axisLeft(y).tickSizeOuter(0))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.select(".tick:last-of-type text").clone()
+      .attr("x", 3)
+      .attr("text-anchor", "start")
+      .attr("font-weight", "bold")
+      .text(data.y))
+
+  const contours = d3.contourDensity()
+    .x(d => x(d.x))
+    .y(d => y(d.y))
+    .size([width, height])
+    .bandwidth(30)
+    .thresholds(30)
+    (data)
+
+  const svg = d3.create("svg")
+      .attr("viewBox", [0, 0, width, height]);
+
+  svg.append("g").call(xAxis);
+
+  svg.append("g").call(yAxis);
+
+  svg.append("g")
+      .attr("fill", "none")
+      .attr("stroke", "steelblue")
+      .attr("stroke-linejoin", "round")
+    .selectAll("path")
+    .data(contours)
+    .enter().append("path")
+      .attr("stroke-width", (d, i) => i % 5 ? 0.25 : 1)
+      .attr("d", d3.geoPath());
+
+  svg.append("g")
+      .attr("stroke", "white")
+    .selectAll("circle")
+    .data(data)
+    .enter().append("circle")
+      .attr("cx", d => x(d.x))
+      .attr("cy", d => y(d.y))
+      .attr("r", 2);
+
+  // respond with SVG code
+  w.document.body.appendChild(svg.node())
+})
+
+const w2= createWindow(
+  {title:"Three.js"},
+  "https://threejs.org/examples/webgl_postprocessing_unreal_bloom.html")
+
+// wait until both windows have been closed
+await Promise.all([w1,w2])
 `),
 
 

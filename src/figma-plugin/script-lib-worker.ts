@@ -89,6 +89,11 @@ class _WorkerError extends Error implements ScripterWorkerError {
 
 const kWorkerId = Symbol("workerId")
 
+// special props on data for implementing script-worker requests
+// IMPORTANT: Keep in sync with worker-template.js
+const requestIdProp = "__scripterRequestId"
+const requestErrProp = "__scripterRequestError"
+
 
 export function createCreateWorker(env :ScriptEnv, scriptId :string) {
 
@@ -129,7 +134,8 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       arg1 && arg0 ? (arg0 as ScripterCreateWorkerOptions) : {}
     )
 
-    let workerId = scriptId + "." + (workerIdGen++).toString(36)
+    const workerId = scriptId + "." + (workerIdGen++).toString(36)
+    const eventOrigin = `scripter-worker:${workerId}`
 
     let js = script.toString()
     let sendq :{data:any,transfer?:ScripterTransferable[]}[] = []
@@ -138,6 +144,8 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
     let terminated = false
     let closed = false
     let lastError :ScripterWorkerError|null = null
+    let requestIdGen = 0
+    const requests = new Map<string,{ resolve:any, reject:any, timer:any }>()
 
     function checkTerminated() {
       if (terminated) {
@@ -169,6 +177,28 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       }
       return recvp
     }
+    w.request = (data :any, arg1?: number|ScripterTransferable[], arg2? :number) :Promise<any> => {
+      let transfer: undefined|ScripterTransferable[]
+      let timeout :number = 0
+      if (arg2 !== undefined) {
+        transfer = arg1 as undefined|ScripterTransferable[]
+        timeout = arg2
+      } else if (typeof arg1 == "number") {
+        timeout = arg1 as number
+      }
+
+      return new Promise<any>((resolve, reject) => {
+        const requestId = scriptId + "." + (requestIdGen++).toString(36)
+        w.postMessage({ [requestIdProp]: requestId, data }, transfer)
+        let timer :any = null
+        if (timeout && timeout > 0) {
+          timer = setTimeout(() => { reject(new Error("timeout")) }, timeout)
+        }
+        dlog(`script send worker request ${requestId}`)
+        requests.set(requestId, { resolve, reject, timer })
+      })
+    }
+
     w.terminate = () => {
       dlog("worker/terminate req")
       w._onclose()
@@ -201,13 +231,33 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       }
       w.terminate()
     }
+
     w._onmessage = (msg :WorkerMessageMsg) => {
       if (terminated) {
         return
       }
       if (msg.evtype == "message") {
+        const requestId = msg.data[requestIdProp]
+        if (requestId !== undefined) {
+          dlog("script got a response from a w.request() call", msg.data, requestId)
+          const r = requests.get(requestId) // { resolve, reject, timer }
+          if (r) {
+            clearTimeout(r.timer)
+            const err = msg.data[requestErrProp]
+            if (err) {
+              r.reject(new Error(String(err)))
+            } else {
+              r.resolve(msg.data.data)
+            }
+          }
+          return
+        }
         if (w.onmessage) {
-          ;(w as any).onmessage(msg.data)
+          ;(w as any).onmessage({
+            type: "message",
+            data: msg.data,
+            origin: eventOrigin,
+          })
         }
         if (recvp) {
           recvp = null
@@ -215,7 +265,11 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
         }
       } else {
         if (w.onmessageerror) {
-          ;(w as any).onmessageerror(msg.data)
+          ;(w as any).onmessageerror({
+            type: "messageerror",
+            data: msg.data,
+            origin: eventOrigin,
+          })
         }
         if (recvp) {
           recvp = null

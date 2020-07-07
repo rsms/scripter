@@ -1539,9 +1539,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       }
     })
 
-    // setTimeout(() => {
-    // dlog("editor.getSupportedActions():", editor.getSupportedActions())
-    // },1000)
+    // DEBUG dump all actions
+    setTimeout(() => {
+    dlog("editor.getSupportedActions():", editor.getSupportedActions())
+    },1000)
 
     // shift-cmd-P / shift-ctrl-P for quick command in addition to F1
     editor.addCommand(
@@ -1550,10 +1551,37 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       | monaco.KeyCode.KEY_P,
       (ctx :any) => { editor.trigger('', 'editor.action.quickCommand', {}) }
     )
+    // built-in key command is buggy
+    editor.addCommand(
+      monaco.KeyCode.F1,
+      (ctx :any) => { editor.trigger('', 'editor.action.quickCommand', {}) }
+    )
 
+    // cmd-P -- go to symbol
+    editor.addCommand(
+        monaco.KeyMod.CtrlCmd
+      | monaco.KeyCode.KEY_P,
+      (ctx :any) => { editor.trigger('', 'editor.action.quickOutline', {}) }
+    )
+
+    // go to definition
+    // Note: shows "peek definition" instead when there are many defs.
     editor.addCommand(
       monaco.KeyCode.F12,
       (ctx :any) => { editor.trigger('', 'editor.action.revealDefinition', {}) }
+    )
+
+    editor.addCommand(
+      monaco.KeyCode.F11,
+      (ctx :any) => { editor.trigger('', 'editor.action.peekDefinition', {}) }
+    )
+
+    // cmd-alt-/ -- toggle block comment
+    editor.addCommand(
+        monaco.KeyMod.CtrlCmd
+      | monaco.KeyMod.Alt
+      | monaco.KeyCode.US_SLASH,
+      (ctx :any) => { editor.trigger('', 'editor.action.blockComment', {}) }
     )
 
     // handle changes to the database that were made by another tab

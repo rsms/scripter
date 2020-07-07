@@ -90,6 +90,7 @@ export class NavigationHistory<E extends HistoryEntry>
       if (this.stack.length > 100) {
         // limit to 100 entries
         this.stack.shift()
+        this.cursor--
       }
     }
     this.triggerEvent("change")
@@ -102,7 +103,7 @@ export class NavigationHistory<E extends HistoryEntry>
   restoreSnapshot(s :NavigationHistorySnapshot<E>) {
     this.stack.length = 0
     this.stack.splice(0, 0, ...s.stack)
-    this.cursor = s.cursor
+    this.cursor = Math.min(s.cursor, s.stack.length)
     this.triggerEvent("change")
   }
 }

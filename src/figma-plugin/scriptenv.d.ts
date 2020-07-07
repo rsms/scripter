@@ -156,10 +156,10 @@ function createWindow(scriptOrURL :string | ScripterWorkerDOMFun) :ScripterWindo
 /** Interface to a worker */
 interface ScripterWorker extends Promise<void> {
   /** Event callback invoked when a message arrives from the worker */
-  onmessage? :((data :any)=>void) | null
+  onmessage? :((ev :ScripterMessageEvent)=>void) | null
 
   /** Event callback invoked when a message error occurs */
-  onmessageerror? :((data :any)=>void) | null
+  onmessageerror? :((ev :ScripterMessageEvent)=>void) | null
 
   /**
    * Event callback invoked when an error occurs.
@@ -181,6 +181,24 @@ interface ScripterWorker extends Promise<void> {
    * This is an alternative to event-based message processing with `onmessage`.
    */
   recv<T=any>() :Promise<T>
+
+  /**
+   * Send a message to the worker and wait for a response.
+   * If the worker responds to the onrequest event, that handler is used to fullfill
+   * the request.
+   * Otherwise, if the worker does not implement onrequest, the behavior is identical
+   * to the following code: w.send(msg).then(() => w.recv<OutT>())
+   *
+   * timeout is given in milliseconds. Absense of timeout, zero or negative timeout
+   * means "no timeout". When a request times out, the promise is rejected.
+   */
+  request<InT=any,OutT=any>(
+    msg :InT,
+    transfer?: ScripterTransferable[],
+    timeout? :number,
+  ) :Promise<OutT>
+
+  request<InT=any,OutT=any>(msg :InT, timeout :number) :Promise<OutT>
 
   /** Request termination of the worker */
   terminate() :this
@@ -210,30 +228,29 @@ type ScripterWorkerDOMFun = (self :ScripterWorkerDOMEnv) => void|Promise<void>
 type WebDOMInterface = typeof WebDOM
 type WebWorkerEnvInterface = typeof WebWorkerEnv
 
-type ScripterWorkerDOMEnv = ScripterWorkerBaseEnv & WebDOMInterface
-type ScripterWorkerEnv = ScripterWorkerBaseEnv & WebWorkerEnvInterface
+// type ScripterWorkerDOMEnv = ScripterWorkerBaseEnv & WebDOMInterface
+// type ScripterWorkerEnv = ScripterWorkerBaseEnv & WebWorkerEnvInterface
+
+interface ScripterWorkerEnv extends ScripterWorkerBaseEnv, WebWorkerEnvInterface {
+}
+
+interface ScripterWorkerDOMEnv extends ScripterWorkerBaseEnv, WebDOMInterface {
+  /**
+   * Import scripts into the worker process.
+   * Async in DOM (in contrast to being blocking in Web Workers)
+   */
+  importScripts(...urls: string[]): Promise<void>
+}
 
 interface ScripterWorkerBaseEnv {
   /** Close this worker */
   close(): void
 
   /**
-   * Import scripts into the worker process.
-   * Async when DOM is used. Blocking in pure web workers.
+   * Invoked when a request initiated by a call to ScripterWorker.request() is received.
+   * The return value will be sent as the response to the request.
    */
-  importScripts(...urls: string[]): Promise<void>
-
-  /** Event callback invoked when a message arrives from the main Scripter script */
-  onmessage? :((ev :WebDOM.MessageEvent)=>void) | null
-
-  /** Event callback invoked when a message error occurs */
-  onmessageerror? :((ev :WebDOM.MessageEvent)=>void) | null
-
-  /** Event callback invoked when an error occurs */
-  onerror? :((err :ScripterWorkerError)=>void) | null
-
-  /** Send a message to the the main Scripter script */
-  postMessage(msg :any, transfer?: WebDOM.Transferable[]) :void
+  onrequest? :(req :ScripterWorkerRequest) => Promise<any>|any
 
   /** Send a message to the main Scripter script (alias for postMessage) */
   send<T=any>(msg :T, transfer?: WebDOM.Transferable[]) :void  // alias for postMessage
@@ -248,7 +265,9 @@ interface ScripterWorkerBaseEnv {
   /**
    * Wrapper around importScripts() for importing a script that expects a CommonJS
    * environment, i.e. module object and exports object. Returns the exported API.
-   * Async when DOM is used. Blocking in pure web workers.
+   *
+   * Caveat: If more than one call is performed at once, the results are undefined.
+   * This because CommonJS relies on a global variable.
    */
   importCommonJS(url :string) :Promise<any>
 }
@@ -274,12 +293,25 @@ interface ScripterWorkerIframeConfig {
   title? :string
 }
 
+interface ScripterWorkerRequest {
+  readonly id   :string
+  readonly data :any
+}
+
 interface ScripterWorkerError {
   readonly colno?: number;
   readonly error?: any;
   readonly filename?: string;
   readonly lineno?: number;
   readonly message?: string;
+}
+
+/** Minimal version of the Web DOM MessageEvent type */
+interface ScripterMessageEvent {
+  readonly type: "message" | "messageerror";
+  /** Data of the message */
+  readonly data: any;
+  readonly origin: string;
 }
 
 // ------------------------------------------------------------------------------------
