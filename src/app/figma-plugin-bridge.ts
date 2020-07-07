@@ -11,6 +11,7 @@ import {
   UpdateSavedScriptsIndexMsg,
   WorkerCreateRequestMsg, WorkerCreateResponseMsg,
   WorkerMessageMsg, WorkerErrorMsg, WorkerCtrlMsg,
+  WorkerSetFrameMsg,
 } from "../common/messages"
 import * as Eval from "./eval"
 import { config } from "./config"
@@ -23,6 +24,8 @@ import { UIRangeInput, UIRangeInputInit } from "./ui-range"
 import savedScripts from "./saved-scripts"
 import * as workerTemplate from "./worker-template"
 import { scriptenv } from "../figma-plugin/scriptenv"
+import { UIWindow } from "./uiwindow"
+import app from "./app"
 
 
 // const defaultApiVersion = "1.0.0" // used when there's no specific requested version
@@ -158,185 +161,6 @@ function worker_iframeInit() {
 }
 
 
-interface UserWindowConfig {
-  x?        :number
-  y?        :number
-  width?    :number
-  height?   :number
-  title?    :string
-  onClose?  :()=>void  // adds a close button with this fn as its click handler
-  moveable? :boolean
-  onMove?   :(x :number, y :number) => void
-}
-
-
-// simple DOM element builder
-function EL<T extends HTMLElement>(
-  name        :string,
-  attrs?      :{[k:string]:any},
-  ...children :any[]
-) :T {
-  let el = document.createElement(name)
-  if (attrs) for (let k in attrs) {
-    if (k == "style") {
-      Object.assign(el.style, attrs[k])
-    } else if (k == "className") {
-      el.className = attrs[k]
-    } else {
-      el.setAttribute(k, attrs[k])
-    }
-  }
-  for (let n of children) {
-    if (n instanceof Node) {
-      el.appendChild(n)
-    } else if (n !== undefined && n !== null) {
-      el.appendChild(document.createTextNode(String(n)))
-    }
-  }
-  return el as T
-}
-
-
-const kUserWindowTitleHeight = 24  // keep in sync with app.css
-
-
-class UserWindow {
-  readonly domRoot :HTMLDivElement
-  readonly title :HTMLDivElement
-  readonly config :UserWindowConfig
-  readonly frame = { x: 0, y: 0, width: 300, height: 200 }
-
-  constructor(body :HTMLElement, config? :UserWindowConfig) {
-    let closeButton :HTMLElement|null = null
-    this.config = config || (config = {})
-    if (config.onClose) {
-      closeButton = EL("div", { className: "close-button" })
-      closeButton.onclick = config.onClose
-    }
-    if (config.width !== undefined) { this.frame.width = config.width }
-    if (config.height !== undefined) { this.frame.height = config.height }
-    this.frame.x = (config.x !== undefined) ? config.x : this._centerOnScreenX()
-    this.frame.y = (config.y !== undefined) ? config.y : this._centerOnScreenY()
-
-    this._clampFrame()
-    const frame = this.frame
-
-    this.domRoot = EL("div",
-      {
-        className: "user-window",
-        style: {
-          transform: `translate3d(${frame.x}px,${frame.y}px,0)`,
-          width:     frame.width + "px",
-          height:    frame.height + "px",
-        },
-      },
-      EL("div", { className: "titlebar" },
-        this.title = EL("div", { className: "title" }, config.title || ""),
-        closeButton,
-      ),
-      body,
-    )
-
-    if (config.moveable) {
-      this.enableMove()
-    } else if (config.onMove) {
-      console.warn("UserWindow config.onMove is set but config.movable is not -- mistake?")
-    }
-  }
-
-  _clampFrame() {
-    const maxX = window.innerWidth - 50
-    const maxY = window.innerHeight - kUserWindowTitleHeight
-    this.frame.width = Math.min(window.innerWidth - 8, this.frame.width)
-    this.frame.height = Math.min(window.innerHeight - 8, this.frame.height)
-    this.frame.x = Math.min(maxX, Math.max(4, this.frame.x))
-    this.frame.y = Math.min(maxY, Math.max(4, this.frame.y))
-  }
-
-  _setPosition(x :number, y :number) {
-    this.frame.x = x
-    this.frame.y = y
-    this._clampFrame()
-    this.domRoot.style.transform = `translate3d(${this.frame.x}px, ${this.frame.y}px, 0)`
-  }
-
-  _centerOnScreenX() :number {
-    return Math.round((window.innerWidth - this.frame.width) * 0.5)
-  }
-  _centerOnScreenY() :number {
-    return Math.round((window.innerHeight - this.frame.height) * 0.4)
-  }
-
-  setPosition(x :number, y :number) {
-    if (this.config.moveable) {
-      this._setPosition(x, y)
-      this.config.onMove && this.config.onMove(this.frame.x, this.frame.y)
-    }
-  }
-
-  centerOnScreen() {
-    this._setPosition(this._centerOnScreenX(), this._centerOnScreenY())
-    this.config.onMove && this.config.onMove(this.frame.x, this.frame.y)
-  }
-
-  enableMove() {
-    let currentX = 0
-    let currentY = 0
-    let initialX = 0
-    let initialY = 0
-
-    const onpointermove = (e :PointerEvent) => {
-      e.preventDefault()
-      currentX = e.clientX - initialX
-      currentY = e.clientY - initialY
-      this._setPosition(currentX, currentY)
-    }
-
-    const onpointerdown = (e :PointerEvent) => {
-      initialX = e.clientX - this.frame.x
-      initialY = e.clientY - this.frame.y
-      if (this.title.setPointerCapture) {
-        this.title.setPointerCapture(e.pointerId)
-      }
-      document.addEventListener("pointermove", onpointermove, {capture:true})
-    }
-
-    const onpointerup = (e :PointerEvent) => {
-      if (this.title.releasePointerCapture) {
-        this.title.releasePointerCapture(e.pointerId)
-      }
-      document.removeEventListener("pointermove", onpointermove, {capture:true})
-      if (this.config.onMove) {
-        this.config.onMove(this.frame.x, this.frame.y)
-      }
-    }
-
-    this.title.addEventListener("pointerdown", onpointerdown, false)
-    this.title.addEventListener("pointerup", onpointerup, false)
-  }
-}
-
-
-// // DEBUG show window during development
-// setTimeout(function xx() {
-//   let e = document.createElement("iframe")
-//   e.src = "https://rsms.me/"
-//   let w = new UserWindow(e, {
-//     x: 40,
-//     y: 40,
-//     width: 600,
-//     height: 500,
-//     title: "Worker",
-//     moveable: true,
-//     onClose() {
-//       document.body.removeChild(w.domRoot)
-//     },
-//     onMove(x :number, y :number) {
-//       dlog("onMove", x, y)
-//     },
-//   })
-//   document.body.appendChild(w.domRoot)
-// }, 1000)
 
 
 type ScripterWorkerIframeConfig = scriptenv.ScripterWorkerIframeConfig
@@ -345,7 +169,7 @@ type ScripterWorkerIframeConfig = scriptenv.ScripterWorkerIframeConfig
 class IFrameWorker implements ScripterWorkerI {
   readonly workerId :string
   readonly frame    :HTMLIFrameElement
-  readonly domRoot  :HTMLElement
+  readonly window   :UIWindow|null = null
   readonly recvq :{ message :any, transfer? :Transferable[] }[] = []
 
   onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
@@ -356,44 +180,83 @@ class IFrameWorker implements ScripterWorkerI {
   closed = false
 
   constructor(workerId :string, scriptBody :string, config :ScripterWorkerIframeConfig) {
+    // laily initialize one-time, app-wide iframe support
+    worker_iframeInit()
+
     this.workerId = workerId
     this.frame = document.createElement("iframe")
     const frame = this.frame
 
-    worker_iframeInit()
+    // is the scriptBody really a URL?
+    const iframeUrl = /^https?:\/\/[^\r\n]+$/.test(scriptBody) ? scriptBody : ""
 
-    frame.setAttribute("sandbox", "allow-scripts")
+    frame.setAttribute(
+      "sandbox",
+      "allow-scripts allow-modals allow-pointer-lock" + (
+        // when the iframe is constructed with a script, set allow-same-origin to allow us
+        // to interact with the iframe's document.
+        // However, for security reasons, do NOT set this when the worker is loaded from an
+        // arbitrary URL, as the URL could be pointed to the scripter website which would
+        // or at least could pose a risk. Better safe than sorry :–)
+        iframeUrl ? "" : " allow-same-origin"
+      )
+    )
     frame.onerror = err => {
-      this.onerror(err as any as ErrorEvent) // FIXME
+      this.onerror(err instanceof ErrorEvent ? err : new ErrorEvent(String(err)))
+      frame.onerror = null
     }
 
+    // decide on size for iframe
     const edbounds = window.document.getElementById("editor").getBoundingClientRect()
     let width = (
       config.width !== undefined ? Math.round(config.width) :
-      edbounds.width - 40
+      Math.round(edbounds.width * 0.9)
     )
     let height = (
       config.height !== undefined ? Math.round(config.height) :
-      Math.round(edbounds.height / 2) - 20
+      Math.round(edbounds.height * 0.7)
     )
 
     if (config.visible) {
       // visible, interactive iframe in an iframe-win container
       if (config.height !== undefined) {
         // add title height, since user size is requested size of the content, not window.
-        height += kUserWindowTitleHeight
+        height += UIWindow.TitleHeight
       }
-      let win = new UserWindow(frame, {
+      let title = config.title || "Worker"
+      if (DEBUG) {
+        title += ` [Worker#${workerId} iframe#${iframeWorkers.size}]`
+      }
+      const win = new UIWindow(frame, {
+        x: config.x,
+        y: config.y,
         width,
         height,
-        title:  config.name || `Worker ${iframeWorkers.size + 1}`,
-        moveable: true,
-        onClose: () => { this.close() },
+        title,
       })
-      document.body.appendChild(win.domRoot)
-      this.domRoot = win.domRoot
+      win.on("close", () => { this.close() })
+      frame.onload = () => {
+        dlog(`worker#${workerId} iframe loaded`)
+        // win.focus()
+        if (iframeUrl) {
+          // url-based iframes will not send __scripter_iframe_ready, so trigger onReady now
+          this.onReady()
+        } else {
+          // add key event handler to script iframes
+          try {
+            let doc = frame.contentWindow.document
+            doc.addEventListener("keydown", app.handleKeyDownEvent, {capture:true})
+          } catch (e) {
+            console.warn(`IFrameWorker error while accessing frame document: ${e.stack||e}`)
+          }
+        }
+        // remove handler
+        frame.onload = null
+      }
+      this.window = win
+
     } else {
-      // hidden iframe on body
+      // hidden iframe
       Object.assign(frame.style, {
         position: "fixed",
         zIndex: "-1",
@@ -405,23 +268,32 @@ class IFrameWorker implements ScripterWorkerI {
         pointerEvents: "none",
       })
       document.body.appendChild(frame)
-      this.domRoot = frame
+      if (iframeUrl) {
+        // url-based iframes will not send __scripter_iframe_ready, so trigger onReady now
+        frame.onload = () => { this.onReady() }
+      }
     }
 
     iframeWorkers.set(frame.contentWindow, this)
 
-    let blobParts = [
-      `<html><head></head><body><script type='text/javascript'>`,
-      workerTemplate.frame[0],  // generated from worker-frame-template.js
-      workerTemplate.worker[0], // generated from worker-template.js
-      scriptBody,
-      workerTemplate.worker[1],
-      workerTemplate.frame[1],,
-      `</script></body></html>`,
-    ]
-    let url = URL.createObjectURL(new Blob(blobParts, {type: "text/html;charset=utf8"} ))
-    frame.src = url
-    setTimeout(() => { URL.revokeObjectURL(url) }, 1)
+    // set src to begin loading iframe
+    if (iframeUrl) {
+      frame.src = iframeUrl
+    } else {
+      let blobParts = [
+        `<html><head></head><body><script type='text/javascript'>`,
+        workerTemplate.frame[0],  // generated from worker-frame-template.js
+        workerTemplate.worker[0], // generated from worker-template.js
+        JSON.stringify(scriptBody),
+        workerTemplate.worker[1],
+        workerTemplate.frame[1],,
+        `</script></body></html>`,
+      ]
+      dlog("running worker script", blobParts.join(""))
+      let url = URL.createObjectURL(new Blob(blobParts, {type: "text/html;charset=utf8"} ))
+      frame.src = url
+      setTimeout(() => { URL.revokeObjectURL(url) }, 1)
+    }
   }
 
   onReady() {
@@ -464,15 +336,18 @@ class IFrameWorker implements ScripterWorkerI {
     }
     this.closed = true
     iframeWorkers.delete(this.frame.contentWindow)
-    this.domRoot.parentElement.removeChild(this.domRoot)
+    if (this.window) {
+      this.window.close()
+    } else {
+      this.frame.parentElement.removeChild(this.frame)
+    }
     this.frame.src = "about:blank"
     ;(this as any).frame = null
-    ;(this as any).domRoot = null
   }
 }
 
 
-function worker_createWebWorker(workerId :string, scriptBody :string) :ScripterWorkerI {
+function worker_createWebWorker(scriptBody :string) :ScripterWorkerI {
   let blobParts = [
     workerTemplate.worker[0], // generated from worker-template.js
     scriptBody,
@@ -489,18 +364,17 @@ let workerIdGen = 0
 let workers = new Map<string,ScripterWorkerI>()
 
 function rpc_worker_create(req :WorkerCreateRequestMsg) {
-  // WorkerCreateRequestMsg, WorkerCreateResponseMsg,
   rpc_reply<WorkerCreateResponseMsg>(req.id, "worker-create-res", async () => {
-    dlog("App todo create worker", req)
+    dlog("rpc_worker_create", req)
 
-    let workerId = (workerIdGen++).toString(36)
+    let workerId = req.workerId
     let worker :ScripterWorkerI
     if (req.iframe) {
       // launch an iframe-based worker
       let config :ScripterWorkerIframeConfig = typeof req.iframe == "object" ? req.iframe : {}
       worker = new IFrameWorker(workerId, req.js, config)
     } else {
-      worker = worker_createWebWorker(workerId, req.js)
+      worker = worker_createWebWorker(req.js)
     }
 
     workers.set(workerId, worker)
@@ -515,11 +389,15 @@ function rpc_worker_create(req :WorkerCreateRequestMsg) {
       if (d.type == "__scripter_close") {
         return worker_onclose(workerId)
       } else if (d.type == "__scripter_toplevel_err") {
-        worker.terminate()
+        let stack = d.stack
+        if (stack != "") {
+          stack = stack.replace(/\sblob:.+:(\d+):(\d+)/g, " <worker-script>:$1:$2")
+        }
         sendMsg<WorkerErrorMsg>({ type: "worker-error", workerId, error: {
           error:   d.message,
-          message: d.stack || d.message,
+          message: stack || d.message,
         } })
+        worker.terminate()
         return worker_onclose(workerId)
       }
       sendMsg<WorkerMessageMsg>({
@@ -600,12 +478,16 @@ function worker_ctrl(msg :WorkerCtrlMsg) {
     return
   }
   let worker = worker_get(msg)
-  if (!worker) {
-    dlog("figma-plugin-bridge/worker_ctrl ignoring unknown worker#" + msg.workerId)
-    return
-  }
+  if (!worker) { return }
   worker.terminate()
   worker_onclose(msg.workerId)
+}
+
+
+function worker_setFrame(msg :WorkerSetFrameMsg) {
+  let worker = worker_get(msg) as IFrameWorker
+  if (!worker) { return }
+  worker.window!.setBounds(msg.x, msg.y, msg.width, msg.height)
 }
 
 
@@ -740,6 +622,10 @@ export function init() {
         worker_ctrl(msg as WorkerCtrlMsg)
         break
 
+      case "worker-setFrame":
+        worker_setFrame(msg as WorkerSetFrameMsg)
+        break
+
       case "load-script":
         editor.loadScriptFromFigma(msg as LoadScriptMsg)
         break
@@ -806,19 +692,12 @@ export function init() {
     }
   }
 
-  function onKeydown(ev :KeyboardEvent, key :string) :bool|undefined {
+  app.addKeyEventHandler(ev => {
     // Note: Rest of app key bindings are in app.ts
     if (ev.code == "KeyP" && (ev.metaKey || ev.ctrlKey) && ev.altKey) {
       // meta-alt-P
       closePlugin()
       return true
     }
-  }
-
-  window.addEventListener("keydown", ev => {
-    if (onKeydown(ev, ev.key)) {
-      ev.preventDefault()
-      ev.stopPropagation()
-    }
-  }, { capture: true, passive: false })
+  })
 }

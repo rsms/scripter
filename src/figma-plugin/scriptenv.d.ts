@@ -117,20 +117,43 @@ function alert(message: string): void;
 type ScripterTransferable = ArrayBuffer;
 
 /** Create a worker */
-function createWorker(script :string | ScripterWorkerFun) :ScripterWorker
+function createWorker(scriptOrURL :string | ScripterWorkerFun) :ScripterWorker
+
+/** Create a iframe-based worker, with a full DOM */
+function createWorker(
+  opt :ScripterCreateWorkerOptions & { iframe: ScripterWorkerIframeConfig & {visible:true} },
+  scriptOrURL :string | ScripterWorkerDOMFun
+) :ScripterWindowedWorker
 
 /** Create an iframe-based worker, with a full DOM */
 function createWorker(
-  opt :ScripterCreateWorkerOptions & { iframe:ScripterWorkerIframeConfig|true },
-  script :string | ScripterWorkerDOMFun
+  opt :ScripterCreateWorkerOptions & { iframe: (ScripterWorkerIframeConfig & {visible?:false}) | true },
+  scriptOrURL :string | ScripterWorkerDOMFun
 ) :ScripterWorker
 
 /** Create a worker, with options */
 function createWorker(
   opt :ScripterCreateWorkerOptions | undefined | null,
-  script :string | ScripterWorkerFun
+  scriptOrURL :string | ScripterWorkerFun
 ) :ScripterWorker
 
+/**
+ * Create an iframe-based worker in a visible window.
+ * Equivalent to createWorker({iframe:{visible:true,...opt}},scriptOrURL)
+ */
+function createWindow(
+  opt :(ScripterWorkerIframeConfig & { visible?: never }) | undefined | null,
+  scriptOrURL :string | ScripterWorkerDOMFun
+) :ScripterWindowedWorker
+
+/**
+ * Create an iframe-based worker in a visible window.
+ * Equivalent to createWorker({iframe:{visible:true,...opt}},scriptOrURL)
+ */
+function createWindow(scriptOrURL :string | ScripterWorkerDOMFun) :ScripterWindowedWorker
+
+
+/** Interface to a worker */
 interface ScripterWorker extends Promise<void> {
   /** Event callback invoked when a message arrives from the worker */
   onmessage? :((data :any)=>void) | null
@@ -161,6 +184,14 @@ interface ScripterWorker extends Promise<void> {
 
   /** Request termination of the worker */
   terminate() :this
+}
+
+interface ScripterWindowedWorker extends ScripterWorker {
+  /** Move and resize the window */
+  setFrame(x :number, y :number, width :number, height :number) :void
+
+  /** Close the window. Alias for ScripterWorker.terminate() */
+  close() :void
 }
 
 interface ScripterCreateWorkerOptions {
@@ -222,18 +253,25 @@ interface ScripterWorkerBaseEnv {
   importCommonJS(url :string) :Promise<any>
 }
 
+
 interface ScripterWorkerIframeConfig {
   /** If true, show the iframe rather than hiding it */
   visible? :boolean
-
-  /** Sets the window title of visible iframes */
-  name? :string
 
   /** Width of the iframe */
   width? :number
 
   /** Height of the iframe */
   height? :number
+
+  /** Position on screen of visible iframe's window (measured from top left) */
+  x? :number
+
+  /** Position on screen of visible iframe's window (measured from top left) */
+  y? :number
+
+  /** Sets the window title of visible iframes */
+  title? :string
 }
 
 interface ScripterWorkerError {

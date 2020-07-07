@@ -4,6 +4,7 @@ import { scriptsData } from "./script-data"
 import { isMac, dlog } from "./util"
 import * as warningMessage from "./warning-message"
 import savedScripts from "./saved-scripts"
+import { EL } from "./dom"
 
 
 class ToolbarUI {
@@ -20,6 +21,9 @@ class ToolbarUI {
   isRunning :bool = false
   isFadedOut :bool = false
   pointerInsideAt :number = 0 // when non-null, Date.now() when pointer entered toolbar
+  waitCount :number = 0
+  waitTimer :any = null
+  waitSpinnerEl :HTMLDivElement|null = null
 
 
   addStopCallback(stopCallback :()=>void) {
@@ -39,6 +43,44 @@ class ToolbarUI {
       this.isRunning = false
       this.updateUI()
     }
+  }
+
+
+  // these are called by editor while its waiting for compilation, while run has been requested
+  // but the app is waiting for e.g. typescript worker to reply.
+  incrWaitCount() {
+    this.waitCount++
+    if (this.waitCount == 1) {
+      this.scheduleWaitIndicator()
+    }
+  }
+
+  decrWaitCount() {
+    this.waitCount--
+    if (this.waitCount == 0) {
+      this.cancelWaitIndicator()
+    }
+  }
+
+
+  scheduleWaitIndicator() {
+    if (this.waitTimer !== null) {
+      return console.warn(`race error in toolbar/scheduleWaitIndicator`)
+    }
+    this.waitTimer = setTimeout(() => {
+      if (this.runButton.classList.toggle("hide-icon", true)) {
+        this.runButton.appendChild(EL("div", { className: "progress-spinner on" }))
+      }
+    }, 100)
+  }
+
+  cancelWaitIndicator() {
+    if (this.runButton.firstChild) {
+      this.runButton.classList.remove("hide-icon")
+      this.runButton.removeChild(this.runButton.firstChild)
+    }
+    clearTimeout(this.waitTimer)
+    this.waitTimer = null
   }
 
 
@@ -150,14 +192,14 @@ class ToolbarUI {
       editor.focus()
       ev.preventDefault()
       ev.stopPropagation()
-    }, {passive:false,capture:true})
+    }, {capture:true})
     this.fwdButton = this.el.querySelector('.button.history-forward') as HTMLElement
     this.fwdButton.addEventListener("click", ev => {
       editor.historyForward()
       editor.focus()
       ev.preventDefault()
       ev.stopPropagation()
-    }, {passive:false,capture:true})
+    }, {capture:true})
     const updateHistoryButtons = () => {
       this.backButton.classList.toggle("unavailable", !editor.navigationHistory.canGoBack())
       this.fwdButton.classList.toggle("unavailable", !editor.navigationHistory.canGoForward())

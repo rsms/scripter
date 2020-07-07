@@ -17,18 +17,33 @@ import { isMac, dlog } from "./util"
 import * as warningMessage from "./warning-message"
 import "../common/filetype"
 import { EventEmitter } from "./event"
+import { uiresponder } from "./uiresponder"
 
 
 interface AppEvents {
   "close": undefined
 }
 
+// return true to stop event chain
+type AppKeyEventHandler = (ev :KeyboardEvent) => boolean|undefined|void
+
 const app = new class App extends EventEmitter<AppEvents> {
+  _keyEventHandlers = new Set<AppKeyEventHandler>()
+
   constructor() {
     super()
     window.addEventListener("unload", () => {
       this.triggerEvent("close")
     })
+  }
+
+  handleKeyDownEvent = (ev :KeyboardEvent) :void => {}  // replaced by setupKeyboardHandlers
+
+  addKeyEventHandler(f :AppKeyEventHandler) {
+    this._keyEventHandlers.add(f)
+  }
+  removeKeyEventHandler(f :AppKeyEventHandler) {
+    this._keyEventHandlers.delete(f)
   }
 
   zoomIn() {
@@ -156,16 +171,30 @@ function setupKeyboardHandlers() {
     // dlog("KeyboardEvent", ev, key)
   }
 
-  window.addEventListener("keydown", ev => {
-    // print(ev.key, ev.keyCode, ev.metaKey, ev.ctrlKey)
+  app.handleKeyDownEvent = ev => {
+    // console.log("app.handleKeyDownEvent",
+    //   { key: ev.key, keyCode: ev.keyCode, metaKey: ev.metaKey, ctrlKey: ev.ctrlKey, ev })
+    let stop = false
     if ((ev.metaKey || ev.ctrlKey) && maybeHandleCmdKeypress(ev, ev.key)) {
-      ev.preventDefault()
-      ev.stopPropagation()
+      stop = true
     } else if (ev.altKey && maybeHandleAltKeypress(ev, ev.key)) {
+      stop = true
+    }
+    if (!stop) {
+      for (let f of app._keyEventHandlers) {
+        if (f(ev)) {
+          stop = true
+          break
+        }
+      }
+    }
+    if (stop) {
       ev.preventDefault()
       ev.stopPropagation()
     }
-  }, { capture: true, passive: false, })
+  }
+
+  window.addEventListener("keydown", app.handleKeyDownEvent, { capture: true, passive: false, })
 }
 
 
@@ -214,14 +243,28 @@ function updateUIScaleCssVar() {
 async function main() {
   figmaPluginBridge.init()
   setupKeyboardHandlers()
+
+  // sync here on db and config init
+  // config depends on database, other init functions depends on config and database
   await initData()
   await config.load()
+
+  let promises :Promise<void>[] = []
   setupAppEventHandlers()
   updateUIScaleCssVar()
   toolbar.init()
-  editor.init()
+  promises.push(editor.init())
   menu.init()
   figmaPluginBridge.start()
+
+  await Promise.all(promises)
+  document.documentElement.classList.remove("loading")
+
+  uiresponder.addFocusListener(document.body, (inFocus, lostFocus) => {
+    if (inFocus === document.body) {
+      editor.focus()
+    }
+  })
 }
 
 

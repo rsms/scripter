@@ -843,6 +843,7 @@ env.libui = F
 env.libvars = F
 env.DOM = F
 env.createWorker = F
+env.createWindow = F
 env.Base64 = F
 env.createCancellablePromise = F
 env.timer = F // deprecated
@@ -984,6 +985,15 @@ function _evalScript(reqId, js) {
     env0.libvars = scriptLib.create_libvars(env0.libui)
     env0.DOM = new scriptLib.DOM(env0)
     env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
+    env0.createWindow = function createWindow(a,src) {
+      let title = "Window"
+      if (src === undefined) {
+        return env0.createWorker({ iframe: { visible: true, title } }, a)
+      }
+      let iframe = Object.assign({ title }, a)
+      iframe.visible = true
+      return env0.createWorker({ iframe }, src)
+    }
 
     // Node constructors
     env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }

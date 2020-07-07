@@ -41,7 +41,7 @@
   }
 
   try {
-    let r = ($__JS__)( (() => {
+    let r = (eval($__JS__))( (() => {
       let w = Object.create(globalObj)
       w.send = w.postMessage = postMessage
       w.recv = recv
@@ -73,6 +73,7 @@
       r.catch(__onerror)
     }
   } catch(err) {
+    console.warn("error in worker-template", err)
     __onerror(err)
   }
 })(

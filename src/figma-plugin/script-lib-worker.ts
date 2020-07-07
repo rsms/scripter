@@ -3,25 +3,27 @@ import { rpc, sendMsg } from "./rpc"
 import {
   WorkerCreateRequestMsg, WorkerCreateResponseMsg,
   WorkerMessageMsg, WorkerErrorMsg, WorkerCtrlMsg,
+  WorkerSetFrameMsg,
 } from "../common/messages"
 
 type ScripterWorkerFun = scriptenv.ScripterWorkerFun
 type ScripterWorkerError = scriptenv.ScripterWorkerError
 type ScripterCreateWorkerOptions = scriptenv.ScripterCreateWorkerOptions
 type ScripterTransferable = scriptenv.ScripterTransferable
+type ScripterWindowedWorker = scriptenv.ScripterWindowedWorker
 
-interface ScripterWorker extends scriptenv.ScripterWorker {
+interface ScripterWorker extends scriptenv.ScripterWindowedWorker {
   _onmessage(msg :WorkerMessageMsg) :void
   _onerror(err :ScripterWorkerError) :void
   _onclose() :void
+  _cancel(reason :string) :void  // sets error to reason and calls terminate
 }
 
 
-// workerSet contains all workers
-const workerSet = new Set<ScripterWorker>()
+let workerIdGen = 0
 
-// workerMap is a subset of workerSet, containing workers which have been created
-// on the UI side and assigned a workerId (key.)
+
+// workerMap contains all workers
 const workerMap = new Map<string,ScripterWorker>()  // workerId => Worker
 
 
@@ -85,9 +87,14 @@ class _WorkerError extends Error implements ScripterWorkerError {
 }
 
 
+const kWorkerId = Symbol("workerId")
+
+
 export function createCreateWorker(env :ScriptEnv, scriptId :string) {
 
   let initialized = false
+  let scriptEnded = false
+
   function init() {
     if (initialized) { return }
     initialized = true
@@ -96,19 +103,25 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
 
   function onScriptEnd() {
     // when script ends, end all workers
-    // note: copy values as w.terminate might call workerSet.delete
-    dlog("createCreateWorker/onScriptEnd", workerSet.size, Array.from(workerSet.values()))
-    for (let w of Array.from(workerSet.values())) {
-      dlog("createCreateWorker/onScriptEnd terminate worker", w)
-      w.terminate()
+    // note: copy values as w.terminate might call workerMap.delete
+    scriptEnded = true
+    dlog(`createCreateWorker/onScriptEnd terminating ${workerMap.size} workers`)
+    for (let w of Array.from(workerMap.values())) {
+      dlog(`createCreateWorker/onScriptEnd terminate Worker#${w[kWorkerId]}`)
+      w._cancel("script stopped")
     }
-    workerSet.clear()
+    workerMap.clear()
   }
 
   return function createWorker(
     arg0  :ScripterCreateWorkerOptions | undefined | string | ScripterWorkerFun,
     arg1? :string | ScripterWorkerFun,
   ) :ScripterWorker {
+    if (scriptEnded) {
+      console.log(`ignoring createWorker call after script has been stopped`)
+      return Promise.reject(new Error("script stopped")) as any as ScripterWorker
+    }
+
     init()
 
     let script :string | ScripterWorkerFun = arg1 || (arg0 as string | ScripterWorkerFun)
@@ -116,9 +129,10 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       arg1 && arg0 ? (arg0 as ScripterCreateWorkerOptions) : {}
     )
 
+    let workerId = scriptId + "." + (workerIdGen++).toString(36)
+
     let js = script.toString()
     let sendq :{data:any,transfer?:ScripterTransferable[]}[] = []
-    let workerId = ""
     let recvp :Promise<any>|null = null
     let recvr = { resolve: (m:any)=>{}, reject: (reason?:any)=>{} }
     let terminated = false
@@ -139,6 +153,8 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       workerPromiseReject = reject
     }) as any as ScripterWorker
 
+    w[kWorkerId] = workerId
+
     w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
       checkTerminated()
       sendq.push({ data, transfer })
@@ -154,9 +170,36 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
       return recvp
     }
     w.terminate = () => {
-      terminated = true
+      dlog("worker/terminate req")
       w._onclose()
+      terminated = true
+      if (workerMap.delete(workerId)) {
+        dlog("worker/terminate exec")
+        dlog(`[worker] terminating worker#${workerId}`)
+        sendMsg<WorkerCtrlMsg>({
+          type: "worker-ctrl",
+          signal: "terminate",
+          workerId,
+        })
+      }
       return w
+    }
+
+    // ScripterWindowedWorker methods
+    if (opt.iframe && typeof opt.iframe == "object" && opt.iframe.visible) {
+      w.setFrame = (x :number, y :number, width :number, height :number) :void => {
+        sendMsg<WorkerSetFrameMsg>({ type:"worker-setFrame", workerId, x, y, width, height })
+      }
+      w.close = w.terminate
+    }
+
+
+    // internal methods, exposed for handleIncomingMessage
+    w._cancel = (reason :string) => {
+      if (!lastError) {
+        lastError = new _WorkerError({ message: reason })
+      }
+      w.terminate()
     }
     w._onmessage = (msg :WorkerMessageMsg) => {
       if (terminated) {
@@ -188,10 +231,11 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
     }
     w._onclose = () => {
       if (closed) {
+        dlog(`Worker#${workerId} onclose -- already closed`)
         return
       }
+      dlog(`Worker#${workerId} onclose`)
       closed = true
-      dlog(`worker#${workerId} closed`)
       terminated = true
       if (recvp) {
         // reject waiting recv() calls
@@ -209,47 +253,32 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
     }
 
     // register new worker
-    workerSet.add(w)
+    workerMap.set(workerId, w)
+
+    dlog(`script requesting create Worker#${workerId}`)
 
     // sed request to UI
     rpc<WorkerCreateRequestMsg, WorkerCreateResponseMsg>(
       "worker-create-req", "worker-create-res",
     {
+      workerId,
       js,
       iframe: opt.iframe,
     }).then(res => {
-      dlog("Worker created", res)
-      workerId = res.workerId
-      workerMap.set(workerId, w)
-
-      w.terminate = () => {
-        dlog("worker/terminate req")
-        w._onclose()
-        terminated = true
-        if (workerSet.delete(w)) {
-          dlog("worker/terminate exec")
-          workerMap.delete(workerId)
-          dlog(`[worker] terminating worker#${workerId}`)
-          sendMsg<WorkerCtrlMsg>({
-            type: "worker-ctrl",
-            signal: "terminate",
-            workerId,
-          })
-        }
-        return w
-      }
+      dlog(`Worker#${workerId} created`, res)
 
       if (terminated) {
         // worker terminated already
         dlog(`[worker] note: worker#${workerId} terminated before it started`)
-        workerSet.add(w) // so that terminate() works as expected
-        w.terminate()
         return
       }
 
       if (w.onerror && res.error) {
-        return (w as any).onerror(new _WorkerError(res.error))
+        w.onerror(new _WorkerError(res.error))
+        w.terminate()
+        return
       }
+
       w.postMessage = (data :any, transfer?: ScripterTransferable[]) => {
         checkTerminated()
         sendMsg<WorkerMessageMsg>({

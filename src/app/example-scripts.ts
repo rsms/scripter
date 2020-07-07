@@ -1,41 +1,41 @@
 import { isMac } from "./util"
 
 interface ExampleScript {
-  guid :string
-  name :string
-  code :string
+	guid :string
+	name :string
+	code :string
 }
 
 function s(guid :string, name :string, code :string) :ExampleScript {
-  return {
-    guid: "examples/" + guid,
-    name,
-    code: code.replace(/^\s*\n|\n\s*$/, ""),
-  }
+	return {
+		guid: "examples/" + guid,
+		name,
+		code: code.replace(/^\s*\n|\n\s*$/, ""),
+	}
 }
 
 function kb(mac :string, other :string) {
-  return isMac ? mac : other
+	return isMac ? mac : other
 }
 
 export default (samples => {
-  let categories :{[k:string]:ExampleScript[]} = {}
-  for (let s of samples) {
-    let [category, title] = s.name.split("/", 2)
-    if (!title) {
-      title = category
-      category = ""
-    } else {
-      s.name = title
-    }
-    let ss = categories[category]
-    if (ss) {
-      ss.push(s)
-    } else {
-      categories[category] = [ s ]
-    }
-  }
-  return categories
+	let categories :{[k:string]:ExampleScript[]} = {}
+	for (let s of samples) {
+		let [category, title] = s.name.split("/", 2)
+		if (!title) {
+			title = category
+			category = ""
+		} else {
+			s.name = title
+		}
+		let ss = categories[category]
+		if (ss) {
+			ss.push(s)
+		} else {
+			categories[category] = [ s ]
+		}
+	}
+	return categories
 })([
 
 
@@ -78,19 +78,19 @@ Editor basics
 • Rename a script "" (nothing) to delete it.
 
 Keyboard shortcuts
-  Runs the current script                ${kb("⌘↩",    "Ctrl+Return")}
-  Stop a running script                  ${kb("⇧⌘↩",  "Ctrl+Shift+Return")}
-  Closes Scripter                        ${kb("⌥⌘P",   "Ctrl+Alt+P")}
-  Toggle the menu                        ${kb("⌃M",     "Ctrl+M")}
-  Increases text size                    ${kb("⌘+",     "Ctrl+Plus")}
-  Decreases text size                    ${kb("⌘−",     "Ctrl+Minus")}
-  Resets text size                       ${kb("⌘0",     "Ctrl+0")}
-  Opens quick commander                  ${kb("F1 ",     "F1")} or ${kb(" ⇧⌘P", "Ctrl+Shift+P")}
-  Goes to defintion of selected symbol   ${kb("⌘F12 ",  "Ctrl+F12")} or ${kb(" F12", "F12")}
-  Show references to selected symbol     ${kb("⇧F12",   "Shift+F12")}
-  Quick navigator                        ${kb("⇧⌘O",   "Ctrl+Shift+O")}
-  Go back in history                     ${kb("⇧⌘[ ",  "Ctrl+Shift+[")} or ${kb(" ⌃-", "Alt+←")}
-  Go forward in history                  ${kb("⇧⌘] ",  "Ctrl+Shift+]")} or ${kb(" ⌃⇧-",   "Alt+→")}
+	Runs the current script                ${kb("⌘↩",    "Ctrl+Return")}
+	Stop a running script                  ${kb("⇧⌘↩",  "Ctrl+Shift+Return")}
+	Closes Scripter                        ${kb("⌥⌘P",   "Ctrl+Alt+P")}
+	Toggle the menu                        ${kb("⌃M",     "Ctrl+M")}
+	Increases text size                    ${kb("⌘+",     "Ctrl+Plus")}
+	Decreases text size                    ${kb("⌘−",     "Ctrl+Minus")}
+	Resets text size                       ${kb("⌘0",     "Ctrl+0")}
+	Opens quick commander                  ${kb("F1 ",     "F1")} or ${kb(" ⇧⌘P", "Ctrl+Shift+P")}
+	Goes to defintion of selected symbol   ${kb("⌘F12 ",  "Ctrl+F12")} or ${kb(" F12", "F12")}
+	Show references to selected symbol     ${kb("⇧F12",   "Shift+F12")}
+	Quick navigator                        ${kb("⇧⌘O",   "Ctrl+Shift+O")}
+	Go back in history                     ${kb("⇧⌘[ ",  "Ctrl+Shift+[")} or ${kb(" ⌃-", "Alt+←")}
+	Go forward in history                  ${kb("⇧⌘] ",  "Ctrl+Shift+]")} or ${kb(" ⌃⇧-",   "Alt+→")}
 
 */
 `),
@@ -102,7 +102,7 @@ Keyboard shortcuts
 s("figma/rects", "Figma/Create rectangles", `
 // Create some rectangles on the current page
 let rectangles = range(0, 5).map(i =>
-  Rectangle({ x: i * 150, fills: [ ORANGE.paint ] }))
+	Rectangle({ x: i * 150, fills: [ ORANGE.paint ] }))
 
 // select our new rectangles and center the viewport
 viewport.scrollAndZoomIntoView(setSelection(rectangles))
@@ -112,9 +112,9 @@ viewport.scrollAndZoomIntoView(setSelection(rectangles))
 s("figma/trim-ws", "Figma/Trim whitespace", `
 // Select some text and run this script to trim away linebreaks and space.
 for (let n of selection()) {
-  if (isText(n)) {
-    n.characters = n.characters.trim()
-  }
+	if (isText(n)) {
+		n.characters = n.characters.trim()
+	}
 }
 `),
 
@@ -122,9 +122,9 @@ for (let n of selection()) {
 s("figma/trim-line-indent", "Figma/Trim line indentation", `
 // Select some text and run this script to trim away whitespace from the beginning of lines
 for (let n of selection()) {
-  if (isText(n)) {
-    n.characters = n.characters.replace(/\\n\\s+/g, "\\n")
-  }
+	if (isText(n)) {
+		n.characters = n.characters.replace(/\\n\\s+/g, "\\n")
+	}
 }
 `),
 
@@ -150,7 +150,7 @@ setSelection(images)
 let n = selection(0)
 // here, n's type is the generic BaseNode
 if (isRect(n)) {
-  // but here n's type is RectangleNode
+	// but here n's type is RectangleNode
 }
 `),
 
@@ -158,9 +158,9 @@ if (isRect(n)) {
 s("figma/set-images-fit", "Figma/Set images to fit", `
 // Loop over images in the selection
 for (let shape of await find(selection(), n => isImage(n) && n)) {
-  // Update image paints to use "FIT" scale mode
-  shape.fills = shape.fills.map(p =>
-    isImage(p) ? {...p, scaleMode: "FIT"} : p)
+	// Update image paints to use "FIT" scale mode
+	shape.fills = shape.fills.map(p =>
+		isImage(p) ? {...p, scaleMode: "FIT"} : p)
 }
 `),
 
@@ -221,14 +221,14 @@ print(loadedIcon, loadedIcon.meta)
 // Img also accepts image data as its input,
 // in common image formats like png, gif and jpeg.
 let gifData = Bytes(\`
-  47 49 46 38 39 61
-  0A 00 0A 00 91 00 00
-  FF FF FF FF 00 00 00 00 FF 00 00 00
-  21 F9 04 00 00 00 00 00
-  2C 00 00 00 00 0A 00 0A 00 00
-  02 16 8C 2D 99 87 2A 1C DC 33 A0 02 75
-  EC 95 FA A8 DE 60 8C 04 91 4C 01 00
-  3B
+	47 49 46 38 39 61
+	0A 00 0A 00 91 00 00
+	FF FF FF FF 00 00 00 00 FF 00 00 00
+	21 F9 04 00 00 00 00 00
+	2C 00 00 00 00 0A 00 0A 00 00
+	02 16 8C 2D 99 87 2A 1C DC 33 A0 02 75
+	EC 95 FA A8 DE 60 8C 04 91 4C 01 00
+	3B
 \`)
 print(Img(gifData, 32))
 
@@ -253,15 +253,15 @@ print("timer started")
 t.cancel()
 // wait for timer
 try {
-  await t
-  print("Rrrriiiiing!")
+	await t
+	print("Rrrriiiiing!")
 } catch (_) {
-  print("timer canceled")
+	print("timer canceled")
 }
 
 // Timers accept an optional handler function:
 timer(200, canceled => {
-  print("timer expired.", {canceled})
+	print("timer expired.", {canceled})
 })
 // .cancel() // uncomment to try canceling
 `),
@@ -277,7 +277,7 @@ print(range(100, 0, 20))
 
 // Ranges are iterable
 for (let n of range(1,4)) {
-  print(n) ; await timer(200)
+	print(n) ; await timer(200)
 }
 
 // If we want a pre-allocated array, we can call the array() function
@@ -313,9 +313,9 @@ print(range(0, Infinity, 3))
 // Calling functions which only makes sense on finite sequences—like
 // map(), array() or join()—on an infinite sequence throws an error:
 try {
-  range(0, Infinity).array()
+	range(0, Infinity).array()
 } catch (e) {
-  print(e)
+	print(e)
 }
 `),
 
@@ -345,8 +345,8 @@ s("basics/jsx", "Basics/JSX", `
 
 let frame :FrameNode =
 <Frame height={130} fills={[ WHITE.paint ]}>
-  <Rectangle fills={[ RED.paint ]} />
-  <Text characters="Hello" x={8} y={110} />
+	<Rectangle fills={[ RED.paint ]} />
+	<Text characters="Hello" x={8} y={110} />
 </Frame>
 
 // Try uncommenting this to see the frame added to the page
@@ -354,8 +354,8 @@ let frame :FrameNode =
 
 // Here is an example of using the regular node constructors:
 let g = Group(
-  Rectangle(),
-  Text({characters:"Hello", y:110}),
+	Rectangle(),
+	Text({characters:"Hello", y:110}),
 )
 
 // remove the group since the regular constructor form automatically
@@ -395,20 +395,20 @@ const { rangeInput } = libui
 let origViewport = { zoom: viewport.zoom, center: viewport.center }
 let r = addToPage(Rectangle({ fills: [ORANGE.paint], cornerRadius: 10 }))
 try {
-  // Set viewport to focus on the rectangle
-  viewport.zoom = 1
-  viewport.center = {y: r.y, x: r.x}
+	// Set viewport to focus on the rectangle
+	viewport.zoom = 1
+	viewport.center = {y: r.y, x: r.x}
 
-  // Show a slider and move rectangle as it changes
-  for await (let v of rangeInput({min:-300, max:300})) {
-    r.x = Math.sin(v * 0.03) * 200
-    r.y = Math.cos(v * 0.05) * 80
-  }
+	// Show a slider and move rectangle as it changes
+	for await (let v of rangeInput({min:-300, max:300})) {
+		r.x = Math.sin(v * 0.03) * 200
+		r.y = Math.cos(v * 0.05) * 80
+	}
 } finally {
-  // Remove the rectangle and restore viewport
-  r.remove()
-  viewport.center = origViewport.center
-  viewport.zoom = origViewport.zoom
+	// Remove the rectangle and restore viewport
+	r.remove()
+	viewport.center = origViewport.center
+	viewport.zoom = origViewport.zoom
 }
 `),
 
@@ -420,14 +420,14 @@ s("ui/async-gen", "UI input/Async generators", `
 // In this example we use a range input control to generate lists
 // of strings upon user moving the slider
 async function* meowGenerator(max :number) {
-  for await (let count of libui.rangeInput({max, value:1, step:1})) {
-    yield range(0, count).map(() => "Meow")
-  }
+	for await (let count of libui.rangeInput({max, value:1, step:1})) {
+		yield range(0, count).map(() => "Meow")
+	}
 }
 
 // We can now use our meow generator like this:
 for await (const meows of meowGenerator(10)) {
-  print(meows)
+	print(meows)
 }
 `),
 
@@ -463,14 +463,14 @@ print(Img(file.thumbnailUrl), file)
 
 // Simple helper function for GETing files from Figma servers
 async function fetchFigmaFile(fileKey :string) :Promise<any> {
-  let json = await fetchJson(
-    "https://api.figma.com/v1/files/" + encodeURIComponent(fileKey),
-    { headers: { "X-FIGMA-TOKEN": figmaHttpApiToken } }
-  )
-  if (json.status && json.err) {
-    throw new Error(\`API error: \${json.err}\`)
-  }
-  return json
+	let json = await fetchJson(
+		"https://api.figma.com/v1/files/" + encodeURIComponent(fileKey),
+		{ headers: { "X-FIGMA-TOKEN": figmaHttpApiToken } }
+	)
+	if (json.status && json.err) {
+		throw new Error(\`API error: \${json.err}\`)
+	}
+	return json
 }
 `),
 
@@ -485,19 +485,19 @@ s("advanced/timeout", "Advanced/Timeout", `
 // Try changing the delay here from 200 to 300:
 await doSlowThing(200)
 async function doSlowThing(timeout :number) {
-  let result = await withTimeout(getFromSlowInternet(), timeout)
-  if (result == "TIMEOUT") {
-    print("network request timed out :-(")
-  } else {
-    print("network request finished on time :-)", result)
-  }
+	let result = await withTimeout(getFromSlowInternet(), timeout)
+	if (result == "TIMEOUT") {
+		print("network request timed out :-(")
+	} else {
+		print("network request finished on time :-)", result)
+	}
 }
 
 // Function that simulates a slow, cancellable network fetch.
 // In parctice, this would be some some actual long-running thing
 // like fetch call or timer.
 function getFromSlowInternet() :CancellablePromise<Object> {
-  return timer(250).catch(_=>{}).then(() => ({message: "Hello"}))
+	return timer(250).catch(_=>{}).then(() => ({message: "Hello"}))
 }
 `),
 
@@ -508,8 +508,8 @@ s("advanced/tick-tock", "Advanced/Tick tock, tick tock, tick tock", `
 // stop the script.
 
 for (let i = 1; true; i++) {
-  print(i % 2 ? "Tick" : "Tock")
-  await timer(1000)  // wait for 1 second
+	print(i % 2 ? "Tick" : "Tock")
+	await timer(1000)  // wait for 1 second
 }
 `),
 
@@ -519,25 +519,25 @@ s("advanced/animation", "Advanced/Animation", `
 // Moves a rectangle around in a "figure eight" pattern.
 let r = addToPage(Rectangle({ fills:[ORANGE.paint], rotation: 45 }))
 try {
-  // setup viewport
-  viewport.scrollAndZoomIntoView([r])
-  viewport.zoom = 1
+	// setup viewport
+	viewport.scrollAndZoomIntoView([r])
+	viewport.zoom = 1
 
-  // extent of motion in dp
-  const size = 500 - r.width
+	// extent of motion in dp
+	const size = 500 - r.width
 
-  // animation loop
-  await animate(time => {
-    // This function is called at a high frequency with
-    // time incrementing for every call.
-    time *= 3 // speed things up
-    let scale = size / (3 - Math.cos(time * 2))
-    r.x = scale * Math.cos(time) - (r.width / 2)
-    r.y = scale * Math.sin(2 * time) / 2 - (r.height / 2)
-  })
+	// animation loop
+	await animate(time => {
+		// This function is called at a high frequency with
+		// time incrementing for every call.
+		time *= 3 // speed things up
+		let scale = size / (3 - Math.cos(time * 2))
+		r.x = scale * Math.cos(time) - (r.width / 2)
+		r.y = scale * Math.sin(2 * time) / 2 - (r.height / 2)
+	})
 } finally {
-  // When the script is stopped, remove the rectangle
-  r.remove()
+	// When the script is stopped, remove the rectangle
+	r.remove()
 }
 `),
 

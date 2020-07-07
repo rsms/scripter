@@ -16,6 +16,9 @@ import resources from "./resources"
 import { NavigationHistory, HistoryEntry, NavigationHistorySnapshot } from "./history"
 import app from "./app"
 
+
+const DEBUG_HIDDEN_AREAS = DEBUG && false
+
 const ts = monaco.languages.typescript
 
 // some extensions to monaco, defined in src/monaco/monaco-editor/esm/vs/editor/scripter.js
@@ -646,7 +649,15 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
 
     // let runqItem = runqueue.push()
 
-    let prog = await this.compileCurrentScript()
+    // compiling a script may take a long time when run just after Scripter is opened,
+    // as the typescript worker sometimes takes a little while to start.
+    toolbar.incrWaitCount()
+    let prog :ScriptProgram
+    try {
+      prog = await this.compileCurrentScript()
+    } finally {
+      toolbar.decrWaitCount()
+    }
 
     if (prog.code.length > 0) {
       try {
@@ -1344,7 +1355,9 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       this._lineNumberOffset = 1
     }
     ;(this as any).hiddenAreas = hiddenAreas  // since readonly for outside
-    ;(this.editor as any).setHiddenAreas(hiddenAreas)
+    if (!DEBUG_HIDDEN_AREAS) {
+      ;(this.editor as any).setHiddenAreas(hiddenAreas)
+    }
     this.adjustSelection()
   }
 
@@ -1413,30 +1426,42 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       return
     }
 
-    let [header, footer] = hiddenAreas
+    let [header, ] = hiddenAreas
     let changed = false
+    let footerLine = this._currentModel.getLineCount()
+
     for (let i = 0; i < sels.length; i++) {
       let sel = sels[i]
 
       if (sel.startLineNumber <= header.endLineNumber) {
         // inside header
+        if (DEBUG_HIDDEN_AREAS) {
+          dlog("sel.startLineNumber <= header.endLineNumber",
+            sel.startLineNumber, "<=", header.endLineNumber)
+        }
         sels[i] = sel = sel.setStartPosition(header.endLineNumber + 1, 1)
         changed = true
       }
 
-      if (sel.endLineNumber >= footer.startLineNumber) {
+      if (sel.endLineNumber >= footerLine) {
         // inside footer
-        sels[i] = sel = sel.setEndPosition(footer.startLineNumber - 1, 1)
+        if (DEBUG_HIDDEN_AREAS) {
+          dlog("sel.endLineNumber >= footerLine", sel.endLineNumber, "<=", footerLine)
+        }
+        sels[i] = sel = sel.setEndPosition(footerLine - 1, 1)
         changed = true
       }
     }
 
     if (changed) {
-      dlog("patch selection to leave out header and footer", sels)
+      if (DEBUG_HIDDEN_AREAS) {
+        dlog("patch selection (DEBUG_HIDDEN_AREAS)",
+          this.editor.getSelections(), "=>", sels)
+      } else {
+        dlog("patch selection (set DEBUG_HIDDEN_AREAS=true to debug)", sels)
+      }
       this.editor.setSelections(sels)
     }
-
-    hiddenAreas[0].containsRange({} as any as monaco.IRange)
   }
 
 

@@ -183,9 +183,10 @@ export interface UIInputResponseMsg extends TransactionalMsg {
 // worker
 
 export interface WorkerCreateRequestMsg extends TransactionalMsg {
-  type    :"worker-create-req"
-  js      :string
-  iframe? :scriptenv.ScripterWorkerIframeConfig | boolean | null
+  type     :"worker-create-req"
+  workerId :string
+  js       :string
+  iframe?  :scriptenv.ScripterWorkerIframeConfig | boolean | null
 }
 
 export interface WorkerCreateResponseMsg extends TransactionalMsg {
@@ -223,3 +224,13 @@ export interface WorkerCtrlMsg extends Msg {
   // "terminate" is sent by host to worker to terminate worker
   // "close" is sent by worker supervisor to host when worker closed
 }
+
+export interface WorkerSetFrameMsg extends Msg {
+  type     :"worker-setFrame"
+  workerId :string
+  x        :number
+  y        :number
+  width    :number
+  height   :number
+}
+

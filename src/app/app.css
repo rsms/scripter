@@ -96,7 +96,65 @@ code { white-space:nowrap }
 code b, pre b, tt b { font-weight:540 }
 
 
-#progress-spinner {}
+@keyframes spin {
+  from {transform:rotate(0deg);}
+  to {transform:rotate(360deg);}
+}
+
+/*
+progress spinner, used in the following places:
+- bottom right corner of main window during app boot (#main-progress-spinner)
+- inside the run/stop button in the toolbar when waiting to run
+*/
+.progress-spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  background: url("./progress-spinner.svg");
+  background-size: 12px;
+  background-position: center center;
+  background-repeat: no-repeat;
+  transition: opacity 150ms ease-out;
+  pointer-events: none;
+
+  --animation-name: spin;
+  --animation-duration: 1000ms;
+  --animation-timing-function: linear;
+  --animation-iteration-count: infinite;
+
+  &.on {
+    animation-name: var(--animation-name);
+    animation-duration: var(--animation-duration);
+    animation-timing-function: var(--animation-timing-function);
+    animation-iteration-count: var(--animation-iteration-count);
+  }
+}
+
+#main-progress-spinner {
+  position: fixed;
+  top:0;
+  right:0;
+  bottom:0;
+  left:0;
+  z-index:99;
+  opacity: 0;
+  pointer-events: none;
+  padding: 16px;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+:root.loading #main-progress-spinner {
+  opacity: 0.8;
+  & .progress-spinner {
+    animation-name: var(--animation-name);
+    animation-duration: var(--animation-duration);
+    animation-timing-function: var(--animation-timing-function);
+    animation-iteration-count: var(--animation-iteration-count);
+  }
+}
 
 
 @keyframes button-flash {
@@ -107,7 +165,6 @@ code b, pre b, tt b { font-weight:540 }
 
 .button {
   flex: 0 0 auto;
-  display: block;
   width: var(--toolbarHeight);
   height: var(--toolbarHeight);
   line-height: var(--toolbarHeight);
@@ -118,6 +175,10 @@ code b, pre b, tt b { font-weight:540 }
   /*transition: background 200ms ease-out;*/
   background-position: center center;
   background-repeat: no-repeat;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   &:hover { opacity:1; background-color: #eee; }
   &:active { opacity:1; background-color: #ccc; }
@@ -134,6 +195,8 @@ code b, pre b, tt b { font-weight:540 }
   &.save            { background-image: url('./icon-save.svg') }
   &.history-back    { background-image: url('./icon-history-back.svg') }
   &.history-forward { background-image: url('./icon-history-forward.svg') }
+
+  &.hide-icon     { background-image: none !important; }
 }
 
 #toolbar {
@@ -591,6 +654,7 @@ body.windowWidthSmall #toolbar .title.focus {
 
     & > p {
       padding: 8px 0;
+      white-space: pre-wrap;
     }
   }
 }
@@ -885,32 +949,54 @@ body.menuVisible .inlineWidget > div {
   }
 }
 
-.user-window {
+.UIWindow {
+  --titlebarHeight: 24px;
+
   position:   fixed;
   left:       0px;
   top:        0px;
   z-index:    9;
-  background: white;
+  background: rgba(255,255,255,0.8);
   border-radius: 2px;
   overflow: hidden;
+  outline: none;
   transform: translate3d(0,0,0); /* overridden in js */
+  backdrop-filter: blur(4px) saturate(200%);
   box-shadow:
-    0 0 0 0.5px rgba(0,0,0,0.2),
-    0 1px 4px 0 rgba(0,0,0,0.08),
-    0 2px 12px 0 rgba(0,0,0,0.12);
+    0 0 0 0.5px rgba(0,0,0,0.4),
+    0 1px 4px 0 rgba(0,0,0,0.08);
 
   display: flex;
   flex-direction: column;
 
+  & > :last-child { /* body */
+    flex: 1 1 auto;
+    opacity:0.5;
+  }
+
+  /* covers the body when window is inactive, for receiving events */
+  & > .body-cover {
+    position: absolute;
+    /*background: rgba(255,0,0,0.3);*/
+    background: transparent;
+    top: var(--titlebarHeight);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index:2;
+
+    /* these affected by .UIWindow.active */
+    pointer-events: all;
+    visibility: visible;
+  }
+
   & > .titlebar {
-    --height: 24px;
     flex: 0 0 auto;
-    height: var(--height);
+    height: var(--titlebarHeight);
     padding: 0;
     margin: 0;
     box-shadow: 0 1px 0 0 rgba(0,0,0,0.1);
-    background: #f5f5f5;
-    background: linear-gradient(0deg, rgba(240,240,240,1) 0%, rgba(245,245,245,1) 100%);
+    background: transparent;
 
     display: flex;
 
@@ -919,8 +1005,8 @@ body.menuVisible .inlineWidget > div {
       font-size: 11px;
       font-weight: 600;
       font-weight: 550;
-      line-height: var(--height);
-      color: black;
+      line-height: var(--titlebarHeight);
+      color: rgba(0,0,0,0.5);
       padding-left: 8px;
       user-select: none; -webkit-user-select: none;
       cursor: default;
@@ -928,23 +1014,49 @@ body.menuVisible .inlineWidget > div {
 
     & .close-button {
       flex: 0 0 auto;
-      width: var(--height);
-      height: var(--height);
+      width: var(--titlebarHeight);
+      height: var(--titlebarHeight);
       background-position: center center;
       background-repeat: no-repeat;
       background-image: url("./icon-win-close.svg");
       opacity: 0.4;
 
-      &:hover {
+      &:hover, &.active {
         opacity: 1;
       }
-      &:active {
+      &:active, &.active {
         background-color: rgba(0,0,0,0.1);
       }
     }
   }
 
-  & > :last-child {
-    flex: 1 1 auto;
+  /* when window has focus (not the same as CSS's :focus state) */
+  &.focus {
+    z-index: 11; /* 10 is where Monaco puts its hover widgets */
+    background: white;
+    backdrop-filter: none;
+    box-shadow:
+      0 0 0 0.5px rgba(0,0,0,0.3),
+      0 2px 4px -1px rgba(0,0,0,0.08),
+      0 5px 12px -2px rgba(0,0,0,0.12);
+
+    & > :last-child { /* body */
+      opacity:1;
+    }
+
+    & > .body-cover {
+      pointer-events:none;
+      visibility: hidden;
+    }
+
+    & > .titlebar {
+      background: #f5f5f5;
+      background:
+        linear-gradient(0deg, rgba(230,230,230,1) 0%,
+                              rgba(237,237,237,1) 100%);
+      & .title {
+        color: black;
+      }
+    }
   }
-}
+} /* .UIWindow */
