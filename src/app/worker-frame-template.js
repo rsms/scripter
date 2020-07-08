@@ -16,18 +16,22 @@
     )
   }
 
-  function postMessage(msg, transfer) {
-    window.parent.postMessage(msg, '*', transfer)
+  let postMessage = window.parent.postMessage.bind(window.parent)
+  function _postMessage(msg, transfer) {
+    postMessage(msg, '*', transfer)
   }
 
-  postMessage("__scripter_iframe_ready");
+  _postMessage("__scripter_iframe_ready");
 
   function close() {
-    postMessage("__scripter_iframe_close");
+    _postMessage("__scripter_iframe_close");
   }
 
-  scriptfn(window, postMessage, importScripts, close);
+  // store ref to original window.postMessage as it's used by IFrameWorker
+  window["__scripterPostMessage"] = window.postMessage
 
-})((self, postMessage, __scripterImportScripts, __scripterClose) => {
+  scriptfn(window, _postMessage, importScripts, close);
+
+})((self, __scripterPostMessage, __scripterImportScripts, __scripterClose) => {
 $__JS__
 })

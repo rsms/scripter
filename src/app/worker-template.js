@@ -20,11 +20,30 @@
     return recvp
   }
 
-  function onInit(err) {
-    // console.log("[worker] init. flush requestq")
-    workerInitialized = true
+  let onrequest = undefined
+  Object.defineProperty(globalObj, "onrequest", {
+    get() { return onrequest },
+    set(f) {
+      onrequest = f
+      if (onrequest && workerInitialized && requestq.length > 0) {
+        requestqFlush()
+      }
+    },
+    enumerable: true,
+  })
+
+  function requestqFlush() {
+    //console.log("[worker] requestqFlush")
     requestq.forEach(r => handleRequest(r))
-    requestq = null
+    requestq.length = 0
+  }
+
+  function onInit(err) {
+    //console.log("[worker] init")
+    workerInitialized = true
+    if (onrequest && requestq.length > 0) {
+      requestqFlush()
+    }
   }
 
   function handleRequest(data) {
@@ -48,7 +67,7 @@
     }
     if (r instanceof Promise) {
       r.then(reply).catch(err => {
-        console.log("[worker] error in promise")
+        console.warn("[worker] error in promise: " + (err.stack||err))
         response[requestErrProp] = String(err ? (err.stack || err) : "error")
         reply(null)
       })
@@ -59,7 +78,7 @@
 
   globalObj.addEventListener("message", ev => {
     if (ev.data && typeof ev.data == "object" && requestIdProp in ev.data) {
-      if (!workerInitialized) {
+      if (!workerInitialized || !onrequest) {
         requestq.push(ev.data)
       } else {
         handleRequest(ev.data)
@@ -83,11 +102,22 @@
   function postMessage(data,transfer) {
     return _postMessage({data,transfer},transfer)
   }
-  function print(...msg) { console.log(...msg) }
-  function send() { return postMessage.apply(globalObj, arguments) }
+
+  function send(data, transfer) {
+    return postMessage(data, transfer)
+  }
+
   function close() {
+    // detect missing onrequest handler
+    if (requestq.length > 0 && !onrequest) {
+      __onerror("request() was called but no onrequest handler was registered")
+    }
     postMessage({type:"__scripter_close"})
     _close()
+  }
+
+  function print(...msg) {
+    console.log(...msg)
   }
 
   function __onerror(err) {
@@ -101,7 +131,7 @@
   try {
     let r = (eval($__JS__))( (() => {
       // build environment passed in to the worker
-      let w = Object.create(globalObj)
+      let w = globalObj
       w.send = w.postMessage = postMessage
       w.recv = recv
       w.close = close
@@ -119,18 +149,6 @@
         })
       }
 
-      Object.defineProperties(w, {
-        onmessage: {
-          get() { return globalObj.onmessage },
-          set(f) { globalObj.onmessage = f },
-          enumerable: true,
-        },
-        onrequest: {
-          get() { return globalObj.onrequest },
-          set(f) { globalObj.onrequest = f },
-          enumerable: true,
-        },
-      })
       return w
     })())
     onInit(null)
@@ -143,8 +161,11 @@
     __onerror(err)
   }
 })(
-  // _postMessage  (note: worker-frame-template provides a wrapped version)
-  postMessage,
+  // _postMessage
+  (
+    typeof __scripterPostMessage != "undefined" ? __scripterPostMessage :
+    self.postMessage.bind(self)
+  ),
   // importScripts
   (
     typeof __scripterImportScripts != "undefined" ? __scripterImportScripts :

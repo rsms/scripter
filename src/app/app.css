@@ -303,7 +303,6 @@ progress spinner, used in the following places:
 
   & .spacer { flex: 1 1 auto; }
 
-  /*&.menuVisible {}*/
   &.faded {
     /*transition-timing-function: ease-in-out;*/
     transition-duration: 400ms; /* fade out */
@@ -312,6 +311,10 @@ progress spinner, used in the following places:
     & .button {
       opacity: 0;
       transition-duration: inherit;
+
+      &.run.running, &.hide-icon {
+        opacity: 1;
+      }
     }
   }
 

@@ -171,6 +171,7 @@ class IFrameWorker implements ScripterWorkerI {
   readonly frame    :HTMLIFrameElement
   readonly window   :UIWindow|null = null
   readonly recvq :{ message :any, transfer? :Transferable[] }[] = []
+  readonly iframeUrl :string  // non-empty when content is loaded from URL
 
   onmessage      :(this: ScripterWorkerI, ev: MessageEvent) => any
   onmessageerror :(this: ScripterWorkerI, ev: MessageEvent) => any
@@ -188,7 +189,7 @@ class IFrameWorker implements ScripterWorkerI {
     const frame = this.frame
 
     // is the scriptBody really a URL?
-    const iframeUrl = /^https?:\/\/[^\r\n]+$/.test(scriptBody) ? scriptBody : ""
+    const iframeUrl = this.iframeUrl = /^https?:\/\/[^\r\n]+$/.test(scriptBody) ? scriptBody : ""
 
     frame.setAttribute(
       "sandbox",
@@ -208,14 +209,25 @@ class IFrameWorker implements ScripterWorkerI {
 
     // decide on size for iframe
     const edbounds = window.document.getElementById("editor").getBoundingClientRect()
-    let width = (
-      config.width !== undefined ? Math.round(config.width) :
-      Math.round(edbounds.width * 0.9)
-    )
-    let height = (
-      config.height !== undefined ? Math.round(config.height) :
-      Math.round(edbounds.height * 0.7)
-    )
+    let width = 0, height = 0
+
+    if (config.width !== undefined) {
+      width = Math.round(config.width)
+      if (config.height !== undefined) {
+        // width & height provided
+        height = Math.round(config.height)
+      } else {
+        // only width provided; set height to same
+        height = config.height = width
+      }
+    } else if (config.height !== undefined) {
+      // only height provided; set width to same
+      width = height = config.width = Math.round(config.height)
+    } else {
+      // neither width nor height provided. Use percentage of viewport.
+      width = Math.round(edbounds.width * 0.9)
+      height = Math.round(edbounds.height * 0.7)
+    }
 
     if (config.visible) {
       // visible, interactive iframe in an iframe-win container
@@ -298,6 +310,36 @@ class IFrameWorker implements ScripterWorkerI {
 
   onReady() {
     dlog("iframe ready. recvq:", this.recvq)
+
+    // replace postMessage function
+    if (this.iframeUrl) {
+      // contentWindow.postMessage is normal iframe function
+      this.postMessage = (message, transfer) => {
+        this.frame.contentWindow.postMessage(message, "*", transfer)
+      }
+    } else {
+      // frame.contentWindow.postMessage is the actual postMessage function
+      // defined in worker-template.js -- it's API is different from the iframe one.
+      //
+      // This, because w/self/window can not be derived from and must be mutated inside worker,
+      // which causes the worker to replace the window.postMessage function, which is used to
+      // deliver messages to the worker. The __scripterPostMessage property contains a ref to the
+      // actual, verbatim window.postMessage function.
+      //
+      // Caution: Accessing this.frame.contentWindow when iframeUrl is not empty causes
+      // an exception.
+      const postMessage = this.frame.contentWindow["__scripterPostMessage"]
+      if (postMessage) {
+        this.postMessage = (message, transfer) => {
+          postMessage.call(this.frame.contentWindow, message, "*", transfer)
+        }
+      } else {
+        this.postMessage = (message, transfer) => {
+          this.frame.contentWindow.postMessage(message, "*", transfer)
+        }
+      }
+    }
+
     this.ready = true
     for (let { message, transfer } of this.recvq) {
       this.postMessage(message, transfer)
@@ -317,11 +359,8 @@ class IFrameWorker implements ScripterWorkerI {
   }
 
   postMessage(message :any, transfer? :Transferable[]) :void {
-    if (this.ready) {
-      this.frame.contentWindow.postMessage(message, "*", transfer)
-    } else {
-      this.recvq.push({ message, transfer })
-    }
+    // implementation replaced by onReady()
+    this.recvq.push({ message, transfer })
   }
 
   close() {

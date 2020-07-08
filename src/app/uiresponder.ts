@@ -35,7 +35,7 @@ export const uiresponder = new class UIResponderInfo {
       const past = this.current
       ;(this as any).current = current
 
-      // dlog("[UIResponderInfo] focus changed", past, "->", current)
+      // dlog("[uiresponder] focus changed", past, "->", current)
 
       const listeners1 = this._focusListeners.get(past)
       const listeners2 = this._focusListeners.get(current)

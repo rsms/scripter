@@ -340,6 +340,7 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
           evtype: "message",
           workerId,
           data,
+          // Note: Figma API does not (yet) support transfer
         })
       }
 

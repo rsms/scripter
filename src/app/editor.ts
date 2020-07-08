@@ -166,7 +166,7 @@ const defaultOptions :EditorOptions = {
 }
 
 
-const typescriptCompilerOptions = {
+const typescriptCompilerOptions :monaco.languages.typescript.CompilerOptions = {
   // Note: When we set compiler options, we _override_ the default ones.
   // This is why we need to set allowNonTsExtensions.
   allowNonTsExtensions: true, // make "in-memory source" work
@@ -178,6 +178,9 @@ const typescriptCompilerOptions = {
   sourceMap: true, // note: inlineSourceMap must not be true (we rely on this in eval)
   strictNullChecks: true,
   newLine: ts.NewLineKind.LineFeed, // scripter-env.js relies on this
+
+  noImplicitAny: false,
+  suppressImplicitAnyIndexErrors: true,
 
   jsx: ts.JsxEmit.React,
   jsxFactory: "DOM.createElement",
@@ -1539,10 +1542,10 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
       }
     })
 
-    // DEBUG dump all actions
-    setTimeout(() => {
-    dlog("editor.getSupportedActions():", editor.getSupportedActions())
-    },1000)
+    // // DEBUG dump all actions
+    // setTimeout(() => {
+    // dlog("editor.getSupportedActions():", editor.getSupportedActions())
+    // },1000)
 
     // shift-cmd-P / shift-ctrl-P for quick command in addition to F1
     editor.addCommand(

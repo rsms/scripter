@@ -259,12 +259,6 @@ async function main() {
 
   await Promise.all(promises)
   document.documentElement.classList.remove("loading")
-
-  uiresponder.addFocusListener(document.body, (inFocus, lostFocus) => {
-    if (inFocus === document.body) {
-      editor.focus()
-    }
-  })
 }
 
 
