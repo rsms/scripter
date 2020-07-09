@@ -326,10 +326,7 @@ export class UIWindow extends EventEmitter<UIWindowEvents> {
   }
 
   _updateZIndex() {
-    const appMaxZIndex = 40  // monaco's hover cards
-    const appMinZIndex = 2  // toolbar & menu
-    const baseZIndex = (this.inFocus ? appMaxZIndex : appMinZIndex) + 1
-    this.domRoot.style.zIndex = String(baseZIndex + this._zIndex)
+    this.domRoot.style.zIndex = String(100 + this._zIndex)
   }
 
   _setInFocus(inFocus :boolean) {

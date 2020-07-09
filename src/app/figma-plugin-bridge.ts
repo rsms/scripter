@@ -226,7 +226,7 @@ class IFrameWorker implements ScripterWorkerI {
     } else {
       // neither width nor height provided. Use percentage of viewport.
       width = Math.round(edbounds.width * 0.9)
-      height = Math.round(edbounds.height * 0.7)
+      height = Math.round(width * 0.8)
     }
 
     if (config.visible) {

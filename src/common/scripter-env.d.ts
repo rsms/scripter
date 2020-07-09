@@ -231,9 +231,21 @@ interface ScripterWorkerEnv extends ScripterWorkerBaseEnv, WebWorkerEnvInterface
 interface ScripterWorkerDOMEnv extends ScripterWorkerBaseEnv, WebDOMInterface {
   /**
    * Import scripts into the worker process.
-   * Async in DOM (in contrast to being blocking in Web Workers)
+   * Consider using importAll(...urls) or import(url) instead as those functions
+   * has better support for more modules and for loading from NPM.
+   * This function is defined mainly to make WebWorker-based code portable.
    */
   importScripts(...urls: string[]): Promise<void>
+
+  /**
+   * React-style DOM builder.
+   * Thin wrapper around document.createElement.
+   */
+  createElement<T extends WebDOM.Element>(
+    name        :string,
+    attrs?      :{[k:string]:any},
+    ...children :any[]
+  ) :T
 }
 
 interface ScripterWorkerBaseEnv {
@@ -264,6 +276,23 @@ interface ScripterWorkerBaseEnv {
    * This because CommonJS relies on a global variable.
    */
   importCommonJS(url :string) :Promise<any>
+
+  /**
+   * Import an AMD- or CommonJS-compatible library. Returns its exported API.
+   * Most libraries targeting web browsers support AMD or CommonJS.
+   * See https://github.com/amdjs/amdjs-api for details in AMD modules.
+   */
+  import(url: string): Promise<any>
+
+  /**
+   * Import one or more AMD- or CommonJS-compatible libraries.
+   * Returns its exported APIs in the same order as the input urls.
+   * Most libraries targeting web browsers support AMD or CommonJS.
+   * See https://github.com/amdjs/amdjs-api for details in AMD modules.
+   *
+   * @see import
+   */
+  importAll(...urls: string[]): Promise<any[]>
 }
 
 

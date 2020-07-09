@@ -10,7 +10,7 @@ function s(guid :string, name :string, code :string) :ExampleScript {
 	return {
 		guid: "examples/" + guid,
 		name,
-		code: code.replace(/^\s*\n|\n\s*$/, ""),
+		code: code.replace(/^\s*\n|\n\s*$/, "") + "\n",
 	}
 }
 
@@ -488,7 +488,7 @@ Let's get started with a simple worker:
 
 let w = createWorker(async w => {
   let r = await w.recv()  // wait for input
-	let result = "Hello ".repeat(r).trim()  // compute some stuff
+  let result = "Hello ".repeat(r).trim()  // compute some stuff
   w.send(result)  // send the result
   w.close()  // close the worker
 })
@@ -498,33 +498,32 @@ print(await w.recv())  // wait for a reply
 /**
 The above worker is written in idiomatic Scripter style using send() and recv() calls.
 
-If that's not your jam, you can alternatively use the event-based WebWorker API:
+If that's not your jam, you can alternatively use the event-based WebWorker API. The following example also shows how you can pass a worker script as a string:
 */
 
-let w2 = createWorker(w => {
-	w.importScripts
-	w.onmessage = ev => {
-		let result = "Bye ".repeat(ev.data).trim()
-		w.postMessage(result)
-		w.close()
-	}
-})
+let w2 = createWorker(\`w => {
+  w.onmessage = ev => {
+    let result = "Bye ".repeat(ev.data).trim()
+    w.postMessage(result)
+    w.close()
+  }
+}\`)
 w2.postMessage(4)
 w2.onmessage = ev => {
-	print(ev.data)
+  print(ev.data)
 }
 // We must await the worker or it will be closed immediately
 // as the script ends.
 await w2
 
 /**
-Since Scripter is fully async-await capable, it's usually easier to use the send() and recv() functions instead of postMessage and handle to onmessage events.
+Since Scripter is fully async-await capable, it's usually easier to use the send() and recv() functions instead of postMessage & onmessage events.
 
 send() and recv() are optionally typed, which can be useful when you are writing more complicated scripts or simply prefer to have stricter types:
 */
 let w3 = createWorker(async w => {
   let r = await w.recv<number>()  // r is a number
-	let result = "Hej ".repeat(r).trim()
+  let result = "Hej ".repeat(r).trim()
   w.send(result)  // type inferred from result
   w.close()
 })
@@ -537,15 +536,55 @@ The request-response patterns is common with many worker uses and so there is a 
 */
 
 let w4 = createWorker(async w => {
-	w.onrequest = req => {
-		return "Hi ".repeat(req.data).trim()  // compute some stuff
-	}
+  w.onrequest = req => {
+    return "Hi ".repeat(req.data).trim()  // compute some stuff
+  }
 })
 const r1 = w4.request(/* input: */ 4, /* timeout: */ 1000)
 const r2 = w4.request(/* input: */ 9, /* timeout: */ 1000)
 print(await r1)
 print(await r2)
 `),
+
+
+
+s("worker/import", "Workers/Importing libraries", `
+/**
+Workers can import scripts from the Internet and NPM, using w.import().
+This opens up a world of millions of JavaScript libraries to Scripter!
+Browse libraries at https://www.npmjs.com/
+
+Let's import the lru_map package:
+*/
+let w = createWorker(async w => {
+	let { LRUMap } = await w.import("lru_map")
+	let c = new LRUMap(3)
+	c.set('sam', 42)
+	c.set('john', 26)
+	c.set('angela', 24)
+	w.send(c.toString())
+	c.get('john') // touch entry to make it "recently used"
+	w.send(c.toString())
+})
+print(await w.recv())
+print(await w.recv())
+
+/**
+You can import any URL; you are not limited to NPM. Additionally, using the importAll function we can import multiple packages at once:
+*/
+w = createWorker(async w => {
+	let [{ LRUMap }, d3] = await w.importAll(
+		"https://unpkg.com/lru_map@0.4.0/dist/lru.js",
+		"d3@5",
+	)
+	w.send(\`d3: \${typeof d3}, LRUMap: \${typeof LRUMap}\`)
+})
+print(await w.recv())
+
+// Note that TypeScript types are not supported for imported modules.
+// Scripter considers the API exposed by an imported library as "any".
+`),
+
 
 
 s("worker/iframe-d3-density-contours", "Workers/IFrame workers", `
@@ -557,8 +596,7 @@ This example shows how to load an external library which manipulates SVG in a DO
 
 let w = createWorker({iframe:true}, async w => {
   // load d3 library
-  await w.importScripts("https://d3js.org/d3.v5.min.js")
-  const d3 = w["d3"] // d3 exports itself globally
+  const d3 = await w.import("d3@5")
 
   // load dataset and add labels to the array
   const data = Object.assign(
@@ -655,21 +693,38 @@ s("worker/window-basics", "Workers/Windows", `
 /**
 Workers backed by an iframe can be made visible and interactive via the "visible" property passed to createWorker.
 */
-const w1 = createWorker({iframe:{visible:true}}, async w => {
-	function updateTime() {
-		w.document.body.innerText =
-			\`The time is: \${(new Date).toTimeString()}\`
-	}
-	updateTime()
-	setInterval(updateTime, 1000)
+const w1 = createWorker({iframe:{visible:true,width:100}}, async w => {
+	w.document.body.innerHTML = \`<p>Hello</p>\`
 })
 
 /**
 createWindow is a dedicated function for creating windows that house workers. To explore the options and the API, either place your pointer over createWindow below and press F12 or ALT-click the createWindow call to jump to the API documentation.
 */
-const w2 = createWindow({width:200,height:100}, async w => {
-	w.document.body.innerHTML = \`<p>B</p>\`
+const w2 = createWindow({width:300,height:100}, async w => {
+	let time :any
+	const ui = w.createElement("div", {
+		style: {
+			display: "flex",
+			"flex-direction": "column",
+			font: "12px sans-serif",
+		}},
+		w.createElement("button", { onclick() { w.send("ping") } }, "Ping!"),
+		w.createElement("button", { onclick() { w.close() } }, "Close window"),
+		time = w.createElement("p", {}, "")
+	)
+	w.document.body.appendChild(ui)
+
+	function updateTime() {
+		time.innerText = \`Time: \${(new Date).toTimeString()}\`
+	}
+	updateTime()
+	setInterval(updateTime, 1000)
 })
+
+w2.onmessage = ev => {
+	// click the "Ping!" button in the window
+	print(ev.data)
+}
 
 // wait until both windows have been closed
 await Promise.all([w1,w2])
@@ -685,9 +740,9 @@ A second window is opened as well, loading a Three.js WebGL via an external URL.
 const w1 = createWindow({title:"d3",width:800}, async w => {
   // load data
   const datap = fetch("https://scripter.rsms.me/sample/old-faithful.json").then(r => r.json())
+
   // load d3 library
-  await w.importScripts("https://d3js.org/d3.v5.min.js")
-  const d3 = w["d3"] // d3 exports itself globally
+  const d3 = await w.import("d3@5")
 
   // wait for dataset and add labels
   const data = Object.assign(
@@ -765,7 +820,7 @@ const w1 = createWindow({title:"d3",width:800}, async w => {
   w.document.body.appendChild(svg.node())
 })
 
-const w2= createWindow(
+const w2 = createWindow(
   {title:"Three.js"},
   "https://threejs.org/examples/webgl_postprocessing_unreal_bloom.html")
 

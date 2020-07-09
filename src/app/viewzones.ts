@@ -210,7 +210,12 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
     }
     let viewZoneId :ViewZoneID = ""
     this.editor.editor.changeViewZones(changeAccessor => {
+      let existingClassName = ""
       if (existingViewZoneId !== undefined) {
+        const vz = this.viewZones.get(existingViewZoneId)
+        if (vz && vz.constructor && vz.constructor.name) {
+          existingClassName = vz.constructor.name
+        }
         changeAccessor.removeZone(this._removeZone(existingViewZoneId))
         existingViewZoneId = undefined
       }
@@ -218,7 +223,7 @@ export class ViewZones extends EventEmitter<ViewZonesEvents> {
       viewZoneId = changeAccessor.addZone(viewZone)
       this.viewZones.set(viewZoneId, viewZone)
       this.lineToZoneId[viewZone.afterLineNumber] = viewZoneId
-      viewZone.onDidAddToEditor(viewZoneId)
+      viewZone.onDidAddToEditor(viewZoneId, existingClassName)
     })
 
     this.count++

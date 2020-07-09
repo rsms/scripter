@@ -165,13 +165,22 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
     this.onWillMount()
   }
 
-  onDidAddToEditor(id :ViewZoneID) {
+  onDidAddToEditor(id :ViewZoneID, replacedClassName :string) {
     ;(this as any).id = id
     // if (DEBUG) {
     //   this.contentEl.appendChild(document.createTextNode(` #${id}`))
     // }
     this._updateSourceLineLen()
     this.triggerEvent("add", this.editor)
+    if (replacedClassName == this.constructor.name) {
+      this.domNode.classList.add("updated")
+      // const domNode = this.domNode
+      // requestAnimationFrame(() => {
+      //   if (domNode.ownerDocument) {
+      //     domNode.classList.add("updated")
+      //   }
+      // })
+    }
   }
 
   onWillRemoveFromEditor() {
