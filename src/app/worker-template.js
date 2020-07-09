@@ -205,7 +205,7 @@
   // This is a version of https://github.com/rsms/js-amdld
 
   const CHECK_CYCLES = false  // enable check for cyclic dependencies
-  const DEBUG = true  // enable debug logging
+  const DEBUG = false  // enable debug logging
 
   function emptyFunction(){}
 
