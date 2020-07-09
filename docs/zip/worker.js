@@ -1,7 +1,7 @@
 importScripts("jszip.min.js")
 
 onmessage = ev => {
-  console.log("onmessage", ev.data)
+  // console.log("onmessage", ev.data)
   switch (ev.data[0]) {
     case "create": {
       let requestId = ev.data[1]
