@@ -896,4 +896,229 @@ try {
 `),
 
 
+s("advanced/poisson-disc-gen", "Advanced/Poisson-disc generator", `
+/**
+Progressively generates Poisson-disc pattern.
+Poisson-disc sampling produces points that are tightly-packed, but no closer to each other than a specified minimum distance, resulting in a more natural pattern.
+This implementation uses a worker which computes Poisson-disc samples using a generator. Samples are sent from the worker to the Scripter script which then creates discs on the Figma canvas.
+*/
+
+// Constants controlling the resulting graphic
+const width  = 900
+const height = 800
+const density      = 8  // average distance between vertices
+const circleRadius = 2  // radius of dots drawn for each vertex
+
+// Simple 2D vector used for vertices
+type Vec = [number,number]
+
+// Request data that the Poisson-disc generator worker accepts
+interface PoissonDiscGenRequest {
+	width  :number  // size of area to fill
+	height :number  // size of area to fill
+	radius :number  // density of vertices
+}
+
+// Poisson-disc generator worker
+const w = createWorker({iframe:{visible:false}}, async w => {
+
+	const r = await w.recv<PoissonDiscGenRequest>()
+
+	let sendq :Vec[] = []
+	for (const v of poissonDiscSampler(r.width, r.height, r.radius)) {
+		sendq.push(v)
+		if (sendq.length > 10) {
+			await w.recv()
+			w.send(sendq)
+			sendq.length = 0
+		}
+	}
+	// send possibly last samples and finally an empty list,
+	// which signals the end for the Scripter script.
+	w.send(sendq)
+	w.send([])
+
+	function* poissonDiscSampler(width :int, height :int, radius :number) :Generator<Vec> {
+		// Based on the following implementations:
+		// - https://observablehq.com/@techsparx/an-improvement-on-bridsons-algorithm-for-poisson-disc-samp/2
+		// - https://bl.ocks.org/mbostock/19168c663618b7f07158 which
+		// - https://www.jasondavies.com/poisson-disc/
+		const k = 4, // maximum number of samples before rejection
+		      radius2 = radius * radius,
+		      cellSize = radius * Math.SQRT1_2,
+		      gridWidth = Math.ceil(width / cellSize),
+		      gridHeight = Math.ceil(height / cellSize),
+		      grid = new Array<Vec>(gridWidth * gridHeight),
+		      queue :Vec[] = []
+
+		// Pick the first sample.
+		yield sample(width / 2 , height / 2)
+
+		// Pick a random existing sample from the queue.
+		pick: while (queue.length) {
+			const i = Math.random() * queue.length | 0,
+			      parent = queue[i],
+			      seed = Math.random(),
+			      epsilon = 0.0000001
+
+			// Make a new candidate.
+			for (let j = 0; j < k; ++j) {
+				const a = 2 * Math.PI * (seed + 1.0*j/k),
+				      r = radius + epsilon,
+				      x = parent[0] + r * Math.cos(a),
+				      y = parent[1] + r * Math.sin(a)
+
+				// Accept candidates that are inside the allowed extent
+				// and farther than 2 * radius to all existing samples.
+				if (0 <= x && x < width && 0 <= y && y < height && far(x, y)) {
+					yield sample(x, y)
+					continue pick
+				}
+			}
+
+			// If none of k candidates were accepted, remove it from the queue.
+			const r = queue.pop()
+			if (i < queue.length) queue[i] = r as Vec
+		}
+
+		function far(x :number, y :number) :bool {
+			const i = x / cellSize | 0,
+			      j = y / cellSize | 0,
+			      i0 = Math.max(i - 2, 0),
+			      j0 = Math.max(j - 2, 0),
+			      i1 = Math.min(i + 3, gridWidth),
+			      j1 = Math.min(j + 3, gridHeight)
+			for (let j = j0; j < j1; ++j) {
+				const o = j * gridWidth
+				for (let i = i0; i < i1; ++i) {
+					const s = grid[o + i]
+					if (s) {
+						const dx = s[0] - x
+						const dy = s[1] - y
+						if (dx * dx + dy * dy < radius2) return false
+					}
+				}
+			}
+			return true
+		}
+
+		function sample(x :number, y :number) :Vec {
+			const s = grid[gridWidth * (y / cellSize | 0) + (x / cellSize | 0)] = [x, y]
+			queue.push(s)
+			return s
+		}
+	}
+})
+
+// Ask the worker to generate vertices with poisson-disc distribution
+w.send<PoissonDiscGenRequest>({
+	width,
+	height,
+	radius: density,
+})
+
+// make a frame to house the results
+const frame = Frame({ width, height, expanded: false })
+figma.viewport.scrollAndZoomIntoView([frame])
+
+// color spectrum
+const colors :(t :number)=>RGB = rgbSpline([
+	"#ff0000", //"#d53e4f", "#f46d43",
+	//"#fdae61", "#fee08b", "#ffffbf", "#e6f598",
+	"#abdda4", "#66c2a5", "#3288bd", "#5e4fa2"
+])
+
+// add dots as they arrive from the worker
+const center :Vec = [ width * 0.5, height * 0.5 ]
+const farDistance = squareDistance([0,0], center)
+while (true) {
+	w.send(1)
+	const vertices = await w.recv<Vec[]>()
+	if (vertices.length == 0) {
+		break
+	}
+	for (let v of vertices) {
+		frame.appendChild(
+			Ellipse({
+				fills: [ {
+					type: "SOLID",
+					color: colors(squareDistance(center, v) / farDistance)
+				} ],
+				x: v[0] - circleRadius,
+				y: v[1] - circleRadius,
+				width: circleRadius * 2,
+				height: circleRadius * 2,
+				constrainProportions: true
+			})
+		)
+	}
+}
+
+function squareDistance(a :Vec, b :Vec) :number {
+	let x = a[0] - b[0]
+	let y = a[1] - b[1]
+	return Math.sqrt(x * x + y * y)
+}
+
+// little color gradient function for making interpolateable ramps
+function rgbSpline(colors :string[]) :(t:number)=>RGB {
+	const n = colors.length
+	const r = new Float64Array(n)
+	const g = new Float64Array(n)
+	const b = new Float64Array(n)
+	let color = { r:0, g:0, b:0 }
+
+	for (let i = 0; i < n; ++i) {
+		parseColor(colors[i], color)
+		r[i] = color.r || 0
+		g[i] = color.g || 0
+		b[i] = color.b || 0
+	}
+
+	const rf = basisSpline(r),
+	      gf = basisSpline(g),
+	      bf = basisSpline(b)
+
+	return (t :number) :RGB => {
+		color.r = rf(t) / 255.0
+		color.g = gf(t) / 255.0
+		color.b = bf(t) / 255.0
+		return color  // borrow
+		// return { r: rf(t), g: gf(t), b: bf(t) }  // alloc & copy
+	}
+
+	function basisSpline(values :ArrayLike<number>) :(t :number)=>number {
+		const n = values.length - 1
+		return (t :number) => {
+			let i = (
+				t <= 0 ? (t = 0) :
+				t >= 1 ? (t = 1, n - 1) :
+				Math.floor(t * n)
+			)
+			let v1 = values[i]
+			let v2 = values[i + 1]
+			let v0 = i > 0 ? values[i - 1] : 2 * v1 - v2
+			let v3 = i < n - 1 ? values[i + 2] : 2 * v2 - v1
+			let t1 = (t - i / n) * n
+			let t2 = t1 * t1, t3 = t2 * t1
+			return ((1 - 3 * t1 + 3 * t2 - t3) * v0
+			     + (4 - 6 * t2 + 3 * t3) * v1
+			     + (1 + 3 * t1 + 3 * t2 - 3 * t3) * v2
+			     + t3 * v3) / 6;
+		}
+	}
+
+	function parseColor(s :string, out :{ r :number, g :number, b :number }) {
+		if (s[0] == '#') {
+			s = s.substr(1)
+		}
+		let n = parseInt(s, 16)
+		out.r = n >> 16 & 0xff
+		out.g = n >> 8 & 0xff
+		out.b = n & 0xff
+	}
+}
+`),
+
+
 ] as ExampleScript[])
