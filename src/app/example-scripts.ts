@@ -900,7 +900,7 @@ s("advanced/poisson-disc-gen", "Advanced/Poisson-disc generator", `
 /**
 Progressively generates Poisson-disc pattern.
 Poisson-disc sampling produces points that are tightly-packed, but no closer to each other than a specified minimum distance, resulting in a more natural pattern.
-This implementation uses a worker which computes Poisson-disc samples using a generator. Samples are sent from the worker to the Scripter script which then creates discs on the Figma canvas.
+This implementation is based on https://bl.ocks.org/mbostock/dbb02448b0f93e4c82c3 and uses a worker which computes Poisson-disc samples using a generator. Samples are sent from the worker to the Scripter script which then creates discs on the Figma canvas.
 */
 
 // Constants controlling the resulting graphic
@@ -927,7 +927,7 @@ const w = createWorker({iframe:{visible:false}}, async w => {
 	let sendq :Vec[] = []
 	for (const v of poissonDiscSampler(r.width, r.height, r.radius)) {
 		sendq.push(v)
-		if (sendq.length > 10) {
+		if (sendq.length >= 100) {
 			await w.recv()
 			w.send(sendq)
 			sendq.length = 0
@@ -939,12 +939,10 @@ const w = createWorker({iframe:{visible:false}}, async w => {
 	w.send([])
 
 	function* poissonDiscSampler(width :int, height :int, radius :number) :Generator<Vec> {
-		// Based on the following implementations:
-		// - https://observablehq.com/@techsparx/an-improvement-on-bridsons-algorithm-for-poisson-disc-samp/2
-		// - https://bl.ocks.org/mbostock/19168c663618b7f07158 which
-		// - https://www.jasondavies.com/poisson-disc/
-		const k = 4, // maximum number of samples before rejection
+		// Based on https://bl.ocks.org/mbostock/dbb02448b0f93e4c82c3
+		const k = 30, // maximum number of samples before rejection
 		      radius2 = radius * radius,
+		      radius2_3 = 3 * radius2,
 		      cellSize = radius * Math.SQRT1_2,
 		      gridWidth = Math.ceil(width / cellSize),
 		      gridHeight = Math.ceil(height / cellSize),
@@ -952,25 +950,26 @@ const w = createWorker({iframe:{visible:false}}, async w => {
 		      queue :Vec[] = []
 
 		// Pick the first sample.
-		yield sample(width / 2 , height / 2)
+		yield sample(
+			width / 2 + Math.random() * radius,
+			height / 2 + Math.random() * radius)
 
 		// Pick a random existing sample from the queue.
 		pick: while (queue.length) {
-			const i = Math.random() * queue.length | 0,
-			      parent = queue[i],
-			      seed = Math.random(),
-			      epsilon = 0.0000001
+			const i = Math.random() * queue.length | 0
+			const parent = queue[i]
 
-			// Make a new candidate.
+			// Make a new candidate between [radius, 2 * radius] from the existing sample.
 			for (let j = 0; j < k; ++j) {
-				const a = 2 * Math.PI * (seed + 1.0*j/k),
-				      r = radius + epsilon,
+				const a = 2 * Math.PI * Math.random(),
+				      r = Math.sqrt(Math.random() * radius2_3 + radius2),
 				      x = parent[0] + r * Math.cos(a),
 				      y = parent[1] + r * Math.sin(a)
 
 				// Accept candidates that are inside the allowed extent
 				// and farther than 2 * radius to all existing samples.
 				if (0 <= x && x < width && 0 <= y && y < height && far(x, y)) {
+					//yield {add: sample(x, y), parent}
 					yield sample(x, y)
 					continue pick
 				}
@@ -1003,11 +1002,13 @@ const w = createWorker({iframe:{visible:false}}, async w => {
 		}
 
 		function sample(x :number, y :number) :Vec {
-			const s = grid[gridWidth * (y / cellSize | 0) + (x / cellSize | 0)] = [x, y]
+			const i = gridWidth * (y / cellSize | 0) + (x / cellSize | 0)
+			const s = grid[i] = [x, y]
 			queue.push(s)
 			return s
 		}
 	}
+
 })
 
 // Ask the worker to generate vertices with poisson-disc distribution
@@ -1023,8 +1024,8 @@ figma.viewport.scrollAndZoomIntoView([frame])
 
 // color spectrum
 const colors :(t :number)=>RGB = rgbSpline([
-	"#ff0000", //"#d53e4f", "#f46d43",
-	//"#fdae61", "#fee08b", "#ffffbf", "#e6f598",
+	"#ff0000", "#d53e4f", "#f46d43",
+	"#fdae61", "#fee08b", // "#ffffbf", "#e6f598",
 	"#abdda4", "#66c2a5", "#3288bd", "#5e4fa2"
 ])
 
@@ -1039,6 +1040,8 @@ while (true) {
 	}
 	for (let v of vertices) {
 		frame.appendChild(
+			// Create a shape.
+			// Try changing "Ellipse" to "Star" or "Rectangle"
 			Ellipse({
 				fills: [ {
 					type: "SOLID",
