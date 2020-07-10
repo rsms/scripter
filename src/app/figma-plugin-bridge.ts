@@ -421,24 +421,26 @@ function rpc_worker_create(req :WorkerCreateRequestMsg) {
     // forward messages to the plugin process
     worker.onmessage = ev => {
       dlog(`app got message from worker#${workerId}`, ev.data)
+
       let d = ev.data.data
-      if (!d) {
-        return
-      }
-      if (d.type == "__scripter_close") {
-        return worker_onclose(workerId)
-      } else if (d.type == "__scripter_toplevel_err") {
-        let stack = d.stack
-        if (stack != "") {
-          stack = stack.replace(/\sblob:.+:(\d+):(\d+)/g, " <worker-script>:$1:$2")
+      if (d && typeof d == "object") {
+        const type = d.type
+        if (type == "__scripter_close") {
+          return worker_onclose(workerId)
+        } else if (type == "__scripter_toplevel_err") {
+          let stack = d.stack
+          if (stack != "") {
+            stack = stack.replace(/\sblob:.+:(\d+):(\d+)/g, " <worker-script>:$1:$2")
+          }
+          sendMsg<WorkerErrorMsg>({ type: "worker-error", workerId, error: {
+            error:   d.message,
+            message: stack || d.message,
+          } })
+          worker.terminate()
+          return worker_onclose(workerId)
         }
-        sendMsg<WorkerErrorMsg>({ type: "worker-error", workerId, error: {
-          error:   d.message,
-          message: stack || d.message,
-        } })
-        worker.terminate()
-        return worker_onclose(workerId)
       }
+
       sendMsg<WorkerMessageMsg>({
         type: "worker-message",
         evtype: "message",

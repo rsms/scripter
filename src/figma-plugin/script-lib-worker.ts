@@ -237,25 +237,30 @@ export function createCreateWorker(env :ScriptEnv, scriptId :string) {
         return
       }
       if (msg.evtype == "message") {
-        const requestId = msg.data[requestIdProp]
-        if (requestId !== undefined) {
-          dlog("script got a response from a w.request() call", msg.data, requestId)
-          const r = requests.get(requestId) // { resolve, reject, timer }
-          if (r) {
-            clearTimeout(r.timer)
-            const err = msg.data[requestErrProp]
-            if (err) {
-              r.reject(new Error(String(err)))
-            } else {
-              r.resolve(msg.data.data)
+
+        const data = msg.data
+        if (data !== null && typeof data == "object") {
+          const requestId = data[requestIdProp]
+          if (requestId !== undefined) {
+            dlog("script got a response from a w.request() call", data, requestId)
+            const r = requests.get(requestId) // { resolve, reject, timer }
+            if (r) {
+              clearTimeout(r.timer)
+              const err = data[requestErrProp]
+              if (err) {
+                r.reject(new Error(String(err)))
+              } else {
+                r.resolve(data.data)
+              }
             }
+            return
           }
-          return
         }
+
         if (w.onmessage) {
           ;(w as any).onmessage({
             type: "message",
-            data: msg.data,
+            data: data,
             origin: eventOrigin,
           })
         }
