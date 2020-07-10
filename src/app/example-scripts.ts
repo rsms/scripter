@@ -1080,9 +1080,9 @@ function rgbSpline(colors :string[]) :(t:number)=>RGB {
 	      bf = basisSpline(b)
 
 	return (t :number) :RGB => {
-		color.r = rf(t) / 255.0
-		color.g = gf(t) / 255.0
-		color.b = bf(t) / 255.0
+		color.r = Math.max(0, Math.min(1, rf(t) / 255.0))
+		color.g = Math.max(0, Math.min(1, gf(t) / 255.0))
+		color.b = Math.max(0, Math.min(1, bf(t) / 255.0))
 		return color  // borrow
 		// return { r: rf(t), g: gf(t), b: bf(t) }  // alloc & copy
 	}
