@@ -8,16 +8,22 @@ export function visit(
   let containers :{c:ChildrenMixin,depth:number}[] = []
 
   function visitContainer(c :ChildrenMixin, depth :number, f :(n :SceneNode)=>any) {
-    c.findChildren(n => {
-      let res = f(n)
-      if (depth < maxdepth &&
-          (res === undefined || !!res) &&
-          "children" in n && n.children.length > 0
-      ) {
-        containers.push({c: n as ChildrenMixin, depth: depth + 1})
+    try {
+      c.findChildren(n => {
+        let res = f(n)
+        if (depth < maxdepth &&
+            (res === undefined || !!res) &&
+            "children" in n && n.children.length > 0
+        ) {
+          containers.push({c: n as ChildrenMixin, depth: depth + 1})
+        }
+        return false  // don't add to accumulation array (unused)
+      })
+    } catch (err) {
+      if (DEBUG) {
+        console.error("[plugin] error in visit()/visitContainer(): " + (err.stack || err))
       }
-      return false  // don't add to accumulation array (unused)
-    })
+    }
   }
 
   return new Promise<void>(resolve => {
