@@ -78,15 +78,82 @@ function withTimeout<
   R = T extends Promise<infer U> ? U : T
 >(p :T, timeout :number) :CancellablePromise<R|"TIMEOUT">
 
-/**
- * Calls f at a high frequency.
- * `time` is a monotonically-incrementing number of seconds with millisecond precision.
- * Return or throw "STOP" to end animation which resolved the promise.
- */
-function animate(f :(time :number) => void|"STOP") :Animation;
-interface Animation extends Promise<void> {
+var animate :SAnimate
+interface SAnimate {
+  /**
+   * animate(f) calls f at a high enough frequency to animate things.
+   * The time argument to f is a monotonically-incrementing number of seconds, starting at the
+   * call to animate(). It has millisecond precision.
+   * Return or throw "STOP" to end animation, which resolves the promise.
+   */
+  (f :SAnimationCallback) :SAnimation
+
+  /**
+   * transition is used to create animated transitions over a set amount of time (duration).
+   * The provided function f is called with progress (not time) in the range [0-1] with an optional
+   * timing function. If no timing function is provided, animate.easeInOut is used.
+   * Note that duration is defined in seconds (not milliseconds.)
+   * See https://easings.net/ for a visual overview of timing functions.
+   */
+  transition(duration :number, timingf :SAnimationTimingFunction|null, f :SAnimationCallback) :SAnimation
+
+  /**
+   * transition is used to create animated transitions over a set amount of time (duration).
+   * The provided function f is called with progress (not time) in the range [0-1].
+   * The animate.easeInOut timing function is used.
+   * Note that duration is defined in seconds (not milliseconds.)
+   */
+  transition(duration :number, f :SAnimationCallback) :SAnimation
+
+  // Timing functions
+  // See https://easings.net/ for a visual overview of timing functions.
+  readonly easeIn           :SAnimationTimingFunction  // == easeInQuad
+  readonly easeOut          :SAnimationTimingFunction  // == easeOutQuad
+  readonly easeInOut        :SAnimationTimingFunction  // == easeInOutQuad
+  readonly easeInQuad       :SAnimationTimingFunction
+  readonly easeOutQuad      :SAnimationTimingFunction
+  readonly easeInOutQuad    :SAnimationTimingFunction
+  readonly easeInCubic      :SAnimationTimingFunction
+  readonly easeOutCubic     :SAnimationTimingFunction
+  readonly easeInOutCubic   :SAnimationTimingFunction
+  readonly easeInQuart      :SAnimationTimingFunction
+  readonly easeOutQuart     :SAnimationTimingFunction
+  readonly easeInOutQuart   :SAnimationTimingFunction
+  readonly easeInQuint      :SAnimationTimingFunction
+  readonly easeOutQuint     :SAnimationTimingFunction
+  readonly easeInOutQuint   :SAnimationTimingFunction
+  readonly easeInSine       :SAnimationTimingFunction
+  readonly easeOutSine      :SAnimationTimingFunction
+  readonly easeInOutSine    :SAnimationTimingFunction
+  readonly easeInExpo       :SAnimationTimingFunction
+  readonly easeOutExpo      :SAnimationTimingFunction
+  readonly easeInOutExpo    :SAnimationTimingFunction
+  readonly easeInCirc       :SAnimationTimingFunction
+  readonly easeOutCirc      :SAnimationTimingFunction
+  readonly easeInOutCirc    :SAnimationTimingFunction
+  readonly easeInBack       :SAnimationTimingFunction
+  readonly easeOutBack      :SAnimationTimingFunction
+  readonly easeInOutBack    :SAnimationTimingFunction
+  readonly easeInElastic    :SAnimationTimingFunction
+  readonly easeOutElastic   :SAnimationTimingFunction
+  readonly easeInOutElastic :SAnimationTimingFunction
+  readonly easeInBounce     :SAnimationTimingFunction
+  readonly easeInOutBounce  :SAnimationTimingFunction
+}
+
+/** Cancellable and waitable animation handle */
+interface SAnimation extends Promise<void> {
   cancel() :void
 }
+
+type SAnimationCallback = (t :number) => void|undefined|"STOP"
+
+/**
+ * Animation easing function receives time in the range [0-1] and
+ * outputs normalized position in the range [0-1].
+ */
+type SAnimationTimingFunction = (t :number) => number
+
 
 /** Set to true if the script was canceled by the user */
 var canceled :boolean;
@@ -525,14 +592,76 @@ function setSelection<T extends BaseNode|null|undefined|ReadonlyArray<BaseNode|n
 /** Version of Figma plugin API that is currently in use */
 var apiVersion :string
 
-/** Viewport */
-var viewport :ViewportAPI
-
 /** The "MIXED" symbol (figma.mixed), signifying "mixed properties" */
 var MIXED :symbol
 
 /** Current page. Equivalent to figma.currentPage */
 var currentPage :PageNode
+
+// ------------------------------------------------------------------------------------
+// viewport
+
+/** Viewport */
+var viewport :SViewportAPI
+interface SViewportAPI extends ViewportAPI {
+  /**
+   * Save the viewport state on a stack.
+   * You can later call restore() to restore the last save()d viewport, or call
+   * restore(state) to restore a from a specific call to save().
+   * If autorestore=false, restore() will NOT be called when the script ends.
+   * Returns an opaque value that identifies the viewport state, which can be used with restore().
+   */
+  save(autorestore? :boolean /*=true*/) :SViewportState
+
+  /** Restore the most recently save()d viewport */
+  restore() :void
+
+  /** Restore a specific viewport */
+  restore(state :SViewportState|null) :void
+
+  /** Restore the most recently save()d viewport with animation */
+  restoreAnimated(duration? :number, timingf? :SAnimationTimingFunction) :SAnimation
+
+  /** Restore a specific viewport with animation */
+  restoreAnimated(state :SViewportState|null, duration? :number, timingf? :SAnimationTimingFunction) :SAnimation
+
+
+  /** Convenience function equivalent to setting viewport.center and viewport.zoom */
+  set(center :Vector|null, zoom? :number|null) :void
+
+  /**
+   * Change viewport with transitional animation.
+   * The returned SAnimation promise resolves when the animation completes.
+   * Call cancel() on the returned SAnimation to cancel the animation.
+   * When cancelled, the viewport will be left in whatever state it was during the animation.
+   * duration defaults to 1.0 seconds, timingf defaults to default of animate.transition.
+   */
+  setAnimated(center :Vector|null, zoom? :number|null, duration? :number, timingf? :SAnimationTimingFunction) :SAnimation
+
+  /**
+   * Convenience function equivalent to calling viewport.save() and viewport.set().
+   * If autorestore=false, restore() will NOT be called when the script ends.
+   * Returns an opaque value that identifies the viewport state, which can be used with restore().
+   */
+  setSave(center :Vector|null, zoom? :number|null, autorestore? :boolean /*=true*/) :SViewportState
+
+  /**
+   * Adjust viewport position and zoom around the provided node or nodes.
+   */
+  focus(nodes: ReadonlyArray<BaseNode>|BaseNode) :void
+
+  /**
+   * Save the viewport and then adjust position and zoom around the provided node or nodes.
+   * If zoom is provided, use explicit zoom level instead of automatic.
+   * If autorestore=false, restore() will NOT be called when the script ends.
+   */
+  focusSave(nodes: ReadonlyArray<BaseNode>|BaseNode, zoom? :number, autorestore? :boolean /*=true*/) :SViewportState
+}
+
+interface SViewportState {} // opaque
+
+// End of viewport
+// ------------------------------------------------------------------------------------
 
 /**
  * Add node to current page.
