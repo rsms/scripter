@@ -389,14 +389,15 @@ function _clearInterval(id) {
 }
 
 
-// animate(f :(t:number)=>void|"STOP") :Promise<void>
+// animate(f :(t:number, startt:number)=>void|"STOP") :SAnimation
 function animate(f) {
   var id
   var rejectfun
   let p = new Promise((resolve, reject) => {
+    const startt = Date.now() / 1000
     id = setInterval(() => {
       try {
-        if (f(Date.now() / 1000) === "STOP") {
+        if (f((Date.now() / 1000) - startt) === "STOP") {
           __clearInterval(id)
           _clearTimer(id)
           resolve()
@@ -931,6 +932,7 @@ function _evalScript(reqId, js) {
     env.confirm = scriptLib.misc.confirm
     env.Base64 = scriptLib.misc.Base64
     env.createCancellablePromise = scriptLib.misc.createCancellablePromise
+    scriptLib.initAnimateAPI(env.animate)
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
@@ -984,6 +986,8 @@ function _evalScript(reqId, js) {
     env0.libui = scriptLib.create_libui(reqId)
     env0.libvars = scriptLib.create_libvars(env0.libui)
     env0.DOM = new scriptLib.DOM(env0)
+    env0.viewport = createViewportAPI(env0, reqId)
+    env0.animate = createAnimateAPI(env0, reqId)
     env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
     env0.createWindow = function createWindow(a,src) {
       let title = "Window"

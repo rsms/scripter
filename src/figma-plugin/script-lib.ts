@@ -20,6 +20,8 @@ import { DOM } from "./script-lib-dom"
 import { createCreateWorker } from "./script-lib-worker"
 import * as misc from "./script-lib-misc"
 import { fetch } from "./script-lib-misc"
+import { createViewportAPI } from "./script-lib-viewport"
+import { initAnimateAPI, createAnimateAPI } from "./script-lib-animate"
 
 export {
   markerProps,
@@ -39,6 +41,8 @@ export {
   create_libvars,
   libgeometry,
   DOM,
+  createViewportAPI,
+  initAnimateAPI, createAnimateAPI,
 
   // internal utilities used by rest of script-lib
   getFirstSourcePos,

@@ -166,6 +166,62 @@ for (let shape of await find(selection(), n => isImage(n) && n)) {
 `),
 
 
+s("figma/viewport-intro", "Figma/Viewport", `
+// This demonstrates use of the viewport API
+
+// Helper pause function
+const pause = () => timer(1000)
+
+// Save current viewport and then change it
+viewport.save()
+viewport.center = {x:1000,y:0}
+
+// wait for a little while so we can see the effect
+await pause()
+
+// restore the last saved viewport
+viewport.restore()
+await pause()
+
+
+// Viewports are saved on a stack. We can save multiple:
+viewport.save() // viewport 1
+viewport.center = {x:1000,y:0}
+await pause()
+viewport.save() // viewport 2
+viewport.center = {x:-1000,y:0}
+await pause()
+viewport.restore() // restore viewport 2
+await pause()
+viewport.restore() // restore viewport 1
+
+
+// save() returns a handle to a specific viewport
+let vp1 = viewport.save() // viewport 1
+viewport.center = {x:1000,y:0}
+viewport.save(false) // viewport 2
+viewport.center = {x:-1000,y:0}
+await pause()
+viewport.restore(vp1) // restore viewport 1
+
+
+// We can also animate viewport changes.
+// This makes use of animate.transition()
+viewport.save()
+await viewport.setAnimated({x:0,y:0}, 2.0, 0.5)
+await pause()
+await viewport.restoreAnimated(0.5, animate.easeInOutExpo)
+await pause()
+
+// Finally, the first saved viewport is automatically
+// restored when a script ends:
+viewport.save()
+viewport.center = {x:1000,y:0}
+await pause()
+// viewport.restore() called automatically
+`),
+
+
 //------------------------------------------------------------------------------------------------
 
 
@@ -365,6 +421,35 @@ g.remove()
 `),
 
 
+s("basics/animate.transition", "Basics/Animated transitions", `
+// This demonstrates use of animate.transition()
+// See Advanced/Animation for custom animation examples.
+
+// First, save & set the viewport to 0,0
+viewport.setSave({x:0,y:0}, 1)
+
+// Create a temporary circle
+let n = Ellipse({ width:200, height:200, fills:[RED.paint] })
+scripter.onend = () => n.remove()
+
+// Animate the circle moving from left to right by 400dp
+await animate.transition(2.0, progress => {
+	n.x = progress * -400
+})
+
+// Pause for a little while
+await timer(500)
+
+// Animate the circle back to 0,using a different timing function
+await animate.transition(1.0, animate.easeOutElastic, progress => {
+	n.x = -400 + (progress * 400)
+})
+
+// Pause for a little while before ending
+await timer(500)
+`),
+
+
 //------------------------------------------------------------------------------------------------
 
 
@@ -450,7 +535,7 @@ print(await fetchData("https://scripter.rsms.me/icon.png"))
 `),
 
 
-s("http/figma", "HTTP/Figma API", `
+s("http/figma", "HTTP/Figma REST API", `
 // This script demonstrates accessing the Figma HTTP API
 //
 // First, generate an access token for yourself using the
@@ -869,30 +954,29 @@ for (let i = 1; true; i++) {
 
 
 s("advanced/animation", "Advanced/Animation", `
-// Example of using animate()
-// Moves a rectangle around in a "figure eight" pattern.
-let r = addToPage(Rectangle({ fills:[ORANGE.paint], rotation: 45 }))
-try {
-	// setup viewport
-	viewport.scrollAndZoomIntoView([r])
-	viewport.zoom = 1
+// Example of using animate() to create custom animations
 
-	// extent of motion in dp
-	const size = 500 - r.width
+// Create a temporary rectangle
+let r = Rectangle({ fills:[ORANGE.paint], rotation: 45 })
+scripter.onend = () => r.remove()
 
-	// animation loop
-	await animate(time => {
-		// This function is called at a high frequency with
-		// time incrementing for every call.
-		time *= 3 // speed things up
-		let scale = size / (3 - Math.cos(time * 2))
-		r.x = scale * Math.cos(time) - (r.width / 2)
-		r.y = scale * Math.sin(2 * time) / 2 - (r.height / 2)
-	})
-} finally {
-	// When the script is stopped, remove the rectangle
-	r.remove()
-}
+// save viewport and focus on the rectangle
+viewport.focusSave(r, 1.0)
+
+// extent of motion in dp and shorthand functions
+const size = viewport.bounds.width / 2 - r.width
+const { cos, sin, abs, PI } = Math
+
+// animation loop
+await animate(time => {
+	// This function is called at a high frequency with
+	// time incrementing for every call.
+	time *= 3 // alter speed
+	let scale = size / (3 - cos(time * 2))
+	r.x = scale * cos(time) - (r.width / 2)
+	r.y = scale * sin(3 * time) / 1.5 - (r.height / 2)
+	r.rotation = cos(time) * 45
+})
 `),
 
 
