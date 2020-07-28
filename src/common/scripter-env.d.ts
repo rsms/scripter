@@ -657,6 +657,12 @@ interface SViewportAPI extends ViewportAPI {
    * If autorestore=false, restore() will NOT be called when the script ends.
    */
   focusSave(nodes: ReadonlyArray<BaseNode>|BaseNode, zoom? :number, autorestore? :boolean /*=true*/) :SViewportState
+
+  /**
+   * Adjust viewport position and zoom around the provided node or nodes, animated starting from
+   * the current viewport.
+   */
+  focusAnimated(nodes: ReadonlyArray<BaseNode>|BaseNode, duration? :number, timingf? :SAnimationTimingFunction) :SAnimation
 }
 
 interface SViewportState {} // opaque

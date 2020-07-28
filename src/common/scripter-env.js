@@ -833,23 +833,11 @@ env.addToPage = function add(node) {
 // All defined in scriptLib and initialized at first call to evalScript
 
 const F = function() {}
-// env.confirm = F
-// env.fetch = F
-// env.Headers = F
-// env.Response = F
-// env.Request = F
-// env.Img = F
-// env.Path = F
-// env.fileType = F
-// env.Bytes = F
-// env.libgeometry = F
 env.libui = F
 env.libvars = F
 env.DOM = F
 env.createWorker = F
 env.createWindow = F
-// env.Base64 = F
-// env.createCancellablePromise = F
 env.timer = F // deprecated
 env.Timer = F
 env.setTimeout = F
@@ -857,7 +845,6 @@ env.setInterval = F
 env.clearTimeout = F
 env.clearInterval = F
 env.withTimeout = F
-// env.createVectorNetworkContext = F
 // env.buildVector = F
 
 env.fetchData = function(input, init) {
@@ -948,6 +935,19 @@ function initialize() {
   //   jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
   // }
   //
+
+  // count lines that the source is offset, used for sourcemaps
+  let i = 0, lineOffset = 0
+  while (true) {
+    i = jsHeader.indexOf("\n", i)
+    if (i == -1) {
+      break
+    }
+    i++ // skip past \n
+    lineOffset++
+  }
+  // count lines that the source is offset, used for sourcemaps
+  _evalScript.lineOffset = lineOffset
 
   initialized = true
 }
@@ -1126,19 +1126,6 @@ function _evalScript(reqId, js) {
     }
   }), cancelFun]
 }
-
-
-// count lines that the source is offset, used for sourcemaps
-let i = 0, lineOffset = 0
-while (true) {
-  i = jsHeader.indexOf("\n", i)
-  if (i == -1) {
-    break
-  }
-  i++ // skip past \n
-  lineOffset++
-}
-_evalScript.lineOffset = lineOffset
 
 
 return _evalScript

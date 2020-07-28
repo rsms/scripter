@@ -208,7 +208,10 @@ export class ViewZone extends EventEmitter<ViewZoneEvents> implements monaco.edi
     try {
       ;(this as any).sourceLineLen = this.editor.currentModel.getLineLength(this.sourceLine)
     } catch(e) {
-      console.warn(`[scripter/ViewZone._updateSourceLineLen] Model.getLineLength: ${e.stack||e}`)
+      console.warn(
+        `[scripter/ViewZone._updateSourceLineLen] `+
+        `Model.getLineLength(${this.sourceLine}): ${e.stack||e}`
+      )
       ;(this as any).sourceLineLen = 1
     }
   }

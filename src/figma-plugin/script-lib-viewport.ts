@@ -202,6 +202,28 @@ export function createViewportAPI(env :ScriptEnv, _ign_scriptId :string) :SViewp
     ))
   }
 
+  viewport.focusAnimated = (
+    nodes: ReadonlyArray<BaseNode>|BaseNode,
+    duration? :number,
+    timingf? :SAnimationTimingFunction,
+  ) :SAnimation => {
+    // save
+    const zoomstart = figma.viewport.zoom
+    const centerstart = { ...figma.viewport.center }
+
+    // move and record zoom & position
+    figma.viewport.scrollAndZoomIntoView(Array.isArray(nodes) ? nodes : [nodes])
+    const zoomend = figma.viewport.zoom
+    const centerend = { ...figma.viewport.center }
+
+    // restore
+    figma.viewport.zoom = zoomstart
+    figma.viewport.center = centerstart
+
+    // animate
+    return viewport.setAnimated(centerend, zoomend, duration, timingf)
+  }
+
   return viewport
 }
 
