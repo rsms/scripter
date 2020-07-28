@@ -462,24 +462,27 @@ const env = {
 // ------------------------------------------------------------------------------------------
 // Nodes
 
+// Note: exposed on env for DOM.kindToCons
 env.nodeConstructors = {}
-env.Group            = function(){} // specialized
-env.BooleanOperation = env.nodeConstructors["BooleanOperation"] = figma.createBooleanOperation
-env.Component        = env.nodeConstructors["Component"] = figma.createComponent
-env.Ellipse          = env.nodeConstructors["Ellipse"] = figma.createEllipse
-env.Frame            = env.nodeConstructors["Frame"] = figma.createFrame
-env.Line             = env.nodeConstructors["Line"] = figma.createLine
-env.Page             = env.nodeConstructors["Page"] = figma.createPage
-env.Polygon          = env.nodeConstructors["Polygon"] = figma.createPolygon
-env.Rectangle        = env.nodeConstructors["Rectangle"] = figma.createRectangle
-env.Slice            = env.nodeConstructors["Slice"] = figma.createSlice
-env.Star             = env.nodeConstructors["Star"] = figma.createStar
-env.Text             = env.nodeConstructors["Text"] = figma.createText
-env.Vector           = env.nodeConstructors["Vector"] = figma.createVector
-env.PaintStyle       = env.nodeConstructors["PaintStyle"] = figma.createPaintStyle
-env.TextStyle        = env.nodeConstructors["TextStyle"] = figma.createTextStyle
-env.EffectStyle      = env.nodeConstructors["EffectStyle"] = figma.createEffectStyle
-env.GridStyle        = env.nodeConstructors["GridStyle"] = figma.createGridStyle
+env.nodeConstructors["BooleanOperation"] = figma.createBooleanOperation
+env.nodeConstructors["Component"] = figma.createComponent
+env.nodeConstructors["Ellipse"] = figma.createEllipse
+env.nodeConstructors["Frame"] = figma.createFrame
+env.nodeConstructors["Line"] = figma.createLine
+env.nodeConstructors["Page"] = figma.createPage
+env.nodeConstructors["Polygon"] = figma.createPolygon
+env.nodeConstructors["Rectangle"] = figma.createRectangle
+env.nodeConstructors["Slice"] = figma.createSlice
+env.nodeConstructors["Star"] = figma.createStar
+env.nodeConstructors["Text"] = figma.createText
+env.nodeConstructors["Vector"] = figma.createVector
+env.nodeConstructors["PaintStyle"] = figma.createPaintStyle
+env.nodeConstructors["TextStyle"] = figma.createTextStyle
+env.nodeConstructors["EffectStyle"] = figma.createEffectStyle
+env.nodeConstructors["GridStyle"] = figma.createGridStyle
+
+// DEPRECATED
+env.Vector = env.createVector
 
 
 // Node type guards
@@ -830,23 +833,23 @@ env.addToPage = function add(node) {
 // All defined in scriptLib and initialized at first call to evalScript
 
 const F = function() {}
-env.confirm = F
-env.fetch = F
-env.Headers = F
-env.Response = F
-env.Request = F
-env.Img = F
-env.Path = F
-env.fileType = F
-env.Bytes = F
-env.libgeometry = F
+// env.confirm = F
+// env.fetch = F
+// env.Headers = F
+// env.Response = F
+// env.Request = F
+// env.Img = F
+// env.Path = F
+// env.fileType = F
+// env.Bytes = F
+// env.libgeometry = F
 env.libui = F
 env.libvars = F
 env.DOM = F
 env.createWorker = F
 env.createWindow = F
-env.Base64 = F
-env.createCancellablePromise = F
+// env.Base64 = F
+// env.createCancellablePromise = F
 env.timer = F // deprecated
 env.Timer = F
 env.setTimeout = F
@@ -854,6 +857,8 @@ env.setInterval = F
 env.clearTimeout = F
 env.clearInterval = F
 env.withTimeout = F
+// env.createVectorNetworkContext = F
+// env.buildVector = F
 
 env.fetchData = function(input, init) {
   return scriptLib.fetch(input, init).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
@@ -876,63 +881,81 @@ env.fetchImg = function(input, init) {
 // end of env definition
 
 
-const envKeys = Object.keys(env)
-// Note: "__scripter_script_main" has special meaning: used to find stack start.
-//       "__scripter_script_main" used to be added here but is now added by the
-//       editor, in script.ts
-let jsHeader = `
-var _, canceled=false, __onend, currentPage;
-function __oncurrentpagechange() { currentPage = figma.currentPage; }
-[
-  function(module,exports,Symbol,__env,__print,__reqid,${envKeys.join(',')}){<LF>
-    Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});
-    currentPage = figma.currentPage;
-    figma.on("currentpagechange", __oncurrentpagechange);
-    function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
-    return`.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
-let jsFooter = `
-  },
-  function(){ canceled = true },
-  function(){ figma.off("currentpagechange", __oncurrentpagechange); return __onend }
-]
-`.trim().replace(/\n\s*/g, " ")
-
-// Note: The following caused a memory-related crash in fig-js when user code
-// replaced one of the variables. For instance:
-//   function animate() {};animate()
-// would crash Figma.
-// This was replaced by a slightly slower and messier solution, which is to pass
-// every single item of the environment as a function argument.
-//
-// let names = Object.keys(env)  //.filter(k => k[0] != "_")
-// try {
-//   // @ts-ignore eval
-//   ;(0,eval)(`var {x,y} = {x:1,y:1}`)
-//   jsHeader += `const {${names.join(',')}} = __env;`
-// } catch (_) {
-//   jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
-// }
-//
-
+let envKeys = [] // :string[]
+let jsHeader = "", jsFooter = ""
 let initialized = false
+
+function initialize() {
+  env.Img = scriptLib.Img
+  env.Headers = scriptLib.Headers
+  env.Response = scriptLib.Response
+  env.Request = scriptLib.Request
+  env.Path = scriptLib.Path
+  env.fileType = scriptLib.fileType
+  env.Bytes = scriptLib.Bytes
+  env.libgeometry = scriptLib.libgeometry
+  env.fetch = scriptLib.fetch
+  // misc
+  env.confirm = scriptLib.misc.confirm
+  env.Base64 = scriptLib.misc.Base64
+  env.createCancellablePromise = scriptLib.misc.createCancellablePromise
+  scriptLib.initAnimateAPI(env.animate)
+  scriptLib.initVectorNetworkAPI(env)
+
+  // Node constructor keys
+  env.createGroup = env.Group = F
+  for (let nodeName in env.nodeConstructors) {
+    env[nodeName] = F
+    env["create" + nodeName] = F
+  }
+
+  envKeys = Object.keys(env)
+
+  // Note: "__scripter_script_main" has special meaning: used to find stack start.
+  //       "__scripter_script_main" used to be added here but is now added by the
+  //       editor, in script.ts
+
+  jsHeader = `
+  var _, canceled=false, __onend, currentPage;
+  function __oncurrentpagechange() { currentPage = figma.currentPage; }
+  [
+    function(module,exports,Symbol,__env,__print,__reqid,${envKeys.join(',')}){<LF>
+      Object.defineProperty(scripter,"onend",{set:function(f){__onend=f}});
+      currentPage = figma.currentPage;
+      figma.on("currentpagechange", __oncurrentpagechange);
+      function print() { __print(__env, __reqid, Array.prototype.slice.call(arguments)) }<LF>
+      return`.trim().replace(/\n\s*/g, " ").replace(/<LF>/g, "\n")
+  jsFooter = `
+    },
+    function(){ canceled = true },
+    function(){ figma.off("currentpagechange", __oncurrentpagechange); return __onend }
+  ]
+  `.trim().replace(/\n\s*/g, " ")
+
+  // Note: The following caused a memory-related crash in fig-js when user code
+  // replaced one of the variables. For instance:
+  //   function animate() {};animate()
+  // would crash Figma.
+  // This was replaced by a slightly slower and messier solution, which is to pass
+  // every single item of the environment as a function argument.
+  //
+  // let names = Object.keys(env)  //.filter(k => k[0] != "_")
+  // try {
+  //   // @ts-ignore eval
+  //   ;(0,eval)(`var {x,y} = {x:1,y:1}`)
+  //   jsHeader += `const {${names.join(',')}} = __env;`
+  // } catch (_) {
+  //   jsHeader += "var " + names.map(k => `${k} = __env.${k}`).join(",") + ";"
+  // }
+  //
+
+  initialized = true
+}
+
 
 function _evalScript(reqId, js) {
   if (!initialized) {
-    initialized = true
-    env.Img = scriptLib.Img
-    env.Headers = scriptLib.Headers
-    env.Response = scriptLib.Response
-    env.Request = scriptLib.Request
-    env.Path = scriptLib.Path
-    env.fileType = scriptLib.fileType
-    env.Bytes = scriptLib.Bytes
-    env.libgeometry = scriptLib.libgeometry
-    env.fetch = scriptLib.fetch
-    // misc
-    env.confirm = scriptLib.misc.confirm
-    env.Base64 = scriptLib.misc.Base64
-    env.createCancellablePromise = scriptLib.misc.createCancellablePromise
-    scriptLib.initAnimateAPI(env.animate)
+    initialize()
   }
   var cancelFun
   return [new Promise((resolve, reject) => {
@@ -983,9 +1006,25 @@ function _evalScript(reqId, js) {
       clearInterval: bindenv(_clearInterval),
     })
     env0.scripter = Object.assign({}, env.scripter)
+    env0.DOM = new scriptLib.DOM(env0)
+
+    // Node constructors (depends on DOM)
+    env0.createGroup = env0.Group = function() {
+      return env0.DOM.createGroup.apply(env0.DOM, arguments)
+    }
+    for (let nodeName in env.nodeConstructors) {
+      let cons = env.nodeConstructors[nodeName]
+      let f = function create__NODE(props, ...children) {
+        return env0.DOM.createElementv(cons, props, children, /*oncanvas*/true)
+      }
+      env0[nodeName] = f
+      env0["create" + nodeName] = f
+      env0.nodeConstructors[nodeName] = f
+    }
+
+    scriptLib.initVectorNetworkAPI(env0) // uses node constructors
     env0.libui = scriptLib.create_libui(reqId)
     env0.libvars = scriptLib.create_libvars(env0.libui)
-    env0.DOM = new scriptLib.DOM(env0)
     env0.viewport = createViewportAPI(env0, reqId)
     env0.animate = createAnimateAPI(env0, reqId)
     env0.createWorker = scriptLib.createCreateWorker(env0, reqId)
@@ -997,15 +1036,6 @@ function _evalScript(reqId, js) {
       let iframe = Object.assign({ title }, a)
       iframe.visible = true
       return env0.createWorker({ iframe }, src)
-    }
-
-    // Node constructors
-    env0.Group = function() { return env0.DOM.createGroup.apply(env0.DOM, arguments) }
-    for (let nodeName in env.nodeConstructors) {
-      let cons = env0.nodeConstructors[nodeName]
-      env0[nodeName] = function(props, ...children) {
-        return env0.DOM.createElementv(cons, props, children, /*oncanvas*/true)
-      }
     }
 
     // onend function, guaranteed to be called at script end, including error.

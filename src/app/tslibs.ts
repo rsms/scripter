@@ -9,7 +9,7 @@ export const webworker = {
 };
 export const scripter = {
   filename: "scripter-env.d.ts",
-  version: "Uic6LU/gjbnBOAkZJ9LC1Sz+Xpc"
+  version: "TICOb8YV9hvbYZU7OE0j66L7TMQ"
 };
 export const figma = {
   filename: "figma.d.ts",

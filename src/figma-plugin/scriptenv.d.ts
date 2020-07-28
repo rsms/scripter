@@ -112,7 +112,8 @@ interface SAnimate {
   transition(duration :number, f :SAnimationCallback) :SAnimation
 
   // Timing functions
-  // See https://easings.net/ for a visual overview of timing functions.
+  // See the example script "Misc/Timing Functions" for a visualization.
+  // See https://easings.net/ for interactive examples.
   readonly easeIn           :SAnimationTimingFunction  // == easeInQuad
   readonly easeOut          :SAnimationTimingFunction  // == easeOutQuad
   readonly easeInOut        :SAnimationTimingFunction  // == easeInOutQuad
@@ -686,41 +687,83 @@ type NodeProps<N> = Partial<Omit<N,"type">>
 // Node constructors
 // Essentially figma.createNodeType + optional assignment of props
 //
-/** Creates a new Page */
+/** Creates a new Page node */
 function Page(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
-/** Creates a new Rectangle */
+/** Creates a new Rectangle node */
 function Rectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
-/** Creates a new Line */
+/** Creates a new Line node */
 function Line(props? :NodeProps<LineNode>|null): LineNode;
-/** Creates a new Ellipse */
+/** Creates a new Ellipse node */
 function Ellipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
-/** Creates a new Polygon */
+/** Creates a new Polygon node */
 function Polygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
-/** Creates a new Star */
+/** Creates a new Star node */
 function Star(props? :NodeProps<StarNode>|null): StarNode;
-/** Creates a new Vector */
-function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
-/** Creates a new Text */
+/** Creates a new Text node */
 function Text(props? :NodeProps<TextNode>|null): TextNode;
-/** Creates a new BooleanOperation */
+/** Creates a new BooleanOperation node */
 function BooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
-/** Creates a new Frame */
+/** Creates a new Frame node */
 function Frame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
-/** Creates a new Group. If parent is not provided, the first child's parent is used for the group. */
+/** Creates a new Group node */
 function Group(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
+/** Creates a new Group node */
 function Group(...children :SceneNode[]): GroupNode;
-/** Creates a new Component */
+/** Creates a new Component node */
 function Component(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
-/** Creates a new Slice */
+/** Creates a new Slice node */
 function Slice(props? :NodeProps<SliceNode>|null): SliceNode;
-/** Creates a new PaintStyle */
+/** Creates a new PaintStyle node */
 function PaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
-/** Creates a new TextStyle */
+/** Creates a new TextStyle node */
 function TextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
-/** Creates a new EffectStyle */
+/** Creates a new EffectStyle node */
 function EffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
-/** Creates a new GridStyle */
+/** Creates a new GridStyle node */
 function GridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
+
+/** DEPRECATED use createVector or buildVector instead. */
+function Vector(props? :NodeProps<VectorNode>|null): VectorNode;
+
+/** Creates a new Page node */
+function createPage(props? :NodeProps<PageNode>|null, ...children :SceneNode[]): PageNode;
+/** Creates a new Rectangle node */
+function createRectangle(props? :NodeProps<RectangleNode>) :RectangleNode;
+/** Creates a new Line node */
+function createLine(props? :NodeProps<LineNode>|null): LineNode;
+/** Creates a new Ellipse node */
+function createEllipse(props? :NodeProps<EllipseNode>|null): EllipseNode;
+/** Creates a new Polygon node */
+function createPolygon(props? :NodeProps<PolygonNode>|null): PolygonNode;
+/** Creates a new Star node */
+function createStar(props? :NodeProps<StarNode>|null): StarNode;
+/**
+ * Creates a new Vector node with an empty vector network.
+ * For building vector networks, see buildVector()
+ */
+function createVector(props? :NodeProps<VectorNode>|null): VectorNode;
+/** Creates a new Text node */
+function createText(props? :NodeProps<TextNode>|null): TextNode;
+/** Creates a new BooleanOperation node */
+function createBooleanOperation(props? :NodeProps<BooleanOperationNode>|null): BooleanOperationNode;
+/** Creates a new Frame node */
+function createFrame(props? :NodeProps<FrameNode>|null, ...children :SceneNode[]): FrameNode;
+/** Creates a new Group node */
+function createGroup(props :NodeProps<GroupNode & {index :number}>|null, ...children :SceneNode[]): GroupNode;
+/** Creates a new Group node */
+function createGroup(...children :SceneNode[]): GroupNode;
+/** Creates a new Component node */
+function createComponent(props? :NodeProps<ComponentNode>|null, ...children :SceneNode[]): ComponentNode;
+/** Creates a new Slice node */
+function createSlice(props? :NodeProps<SliceNode>|null): SliceNode;
+/** Creates a new PaintStyle node */
+function createPaintStyle(props? :NodeProps<PaintStyle>|null): PaintStyle;
+/** Creates a new TextStyle node */
+function createTextStyle(props? :NodeProps<TextStyle>|null): TextStyle;
+/** Creates a new EffectStyle node */
+function createEffectStyle(props? :NodeProps<EffectStyle>|null): EffectStyle;
+/** Creates a new GridStyle node */
+function createGridStyle(props? :NodeProps<GridStyle>|null): GridStyle;
 
 
 
@@ -836,6 +879,84 @@ function RGBA(r :number, g: number, b :number, a? :number) :ColorWithAlpha;
 /** #FFFF00 Color(1   , 1   , 0)   */ const YELLOW  :Color;
 /** #FF8000 Color(1   , 0.5 , 0)   */ const ORANGE  :Color;
 
+
+// ------------------------------------------------------------------------------------
+// MutVectorNetwork
+
+interface MutVectorVertex {
+  x                :number
+  y                :number
+  strokeCap?       :StrokeCap
+  strokeJoin?      :StrokeJoin
+  cornerRadius?    :number
+  handleMirroring? :HandleMirroring
+}
+
+interface MutVectorSegment {
+  start         :number
+  end           :number
+  tangentStart? :Vector  // Defaults to { x: 0, y: 0 }
+  tangentEnd?   :Vector  // Defaults to { x: 0, y: 0 }
+}
+
+interface MutVectorRegion {
+  windingRule :WindingRule
+  loops       :number[][]
+}
+
+interface MutVectorNetwork {
+  vertices :MutVectorVertex[]
+  segments :MutVectorSegment[]
+  regions  :MutVectorRegion[]
+}
+
+interface MutVectorNetworkContext {
+  /** The underlying mutable vector network. It's okay to edit this. */
+  readonly vectorNetwork :MutVectorNetwork
+
+  /** Add one vertex. Returns its index. */
+  vertex(x :number, y :number) :int
+
+  /** Add vertices. Returns their indices. */
+  vertices(...v :MutVectorVertex[]) :int[]
+
+  /** Add a segment. Returns the added segment's index. */
+  segment(
+    startVertexIndex :int,  endVertexIndex :int,
+    tangentStartX? :number, tangentStartY? :number,
+    tangentEndX? :number,   tangentEndY? :number,
+  ) :int
+
+  /** Add a line */
+  line(from :Vector, to :Vector) :void
+
+  /** Add a circle */
+  circle(center :Vector, radius :number) :void
+}
+
+/**
+ * Create a new MutVectorNetworkContext which has a mutable vector network.
+ * If an existing vector network is provided for init, it is deep-copied and used as
+ * the initial state of the context's vector network state.
+ */
+function createVectorNetworkContext(init? :VectorNetwork|null) :MutVectorNetworkContext
+
+/**
+ * Build a new vector node based on an existing vector node or network.
+ * The builder function will be called with a newly created context.
+ */
+export function buildVector(
+  init    :NodeProps<VectorNode>|null|undefined,
+  builder :(c:MutVectorNetworkContext)=>void,
+) :VectorNode
+
+/**
+ * Build a new vector node.
+ * The builder function will be called with a newly created context.
+ */
+export function buildVector(
+  builder :(c:MutVectorNetworkContext)=>void,
+) :VectorNode
 
 // ------------------------------------------------------------------------------------
 // find & visit

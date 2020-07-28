@@ -423,7 +423,7 @@ g.remove()
 
 s("basics/animate.transition", "Basics/Animated transitions", `
 // This demonstrates use of animate.transition()
-// See Advanced/Animation for custom animation examples.
+// See Misc/Animation for custom animation examples.
 
 // First, save & set the viewport to 0,0
 viewport.setSave({x:0,y:0}, 1)
@@ -917,7 +917,7 @@ await Promise.all([w1,w2])
 //------------------------------------------------------------------------------------------------
 
 
-s("advanced/timeout", "Advanced/Timeout", `
+s("advanced/timeout", "Misc/Timeout", `
 // Example of using withTimeout for limiting the time
 // of a long-running process.
 
@@ -941,7 +941,7 @@ function getFromSlowInternet() :CancellablePromise<Object> {
 `),
 
 
-s("advanced/tick-tock", "Advanced/Tick tock, tick tock, tick tock", `
+s("advanced/tick-tock", "Misc/Tick tock, tick tock, tick tock", `
 // Demonstrates continously-running scripts.
 // This loops forever until you restart or
 // stop the script.
@@ -953,7 +953,7 @@ for (let i = 1; true; i++) {
 `),
 
 
-s("advanced/animation", "Advanced/Animation", `
+s("advanced/animation", "Misc/Animation", `
 // Example of using animate() to create custom animations
 
 // Create a temporary rectangle
@@ -980,7 +980,59 @@ await animate(time => {
 `),
 
 
-s("advanced/poisson-disc-gen", "Advanced/Poisson-disc generator", `
+// Note: There's a reference to the name of this in scripter-env.d.ts
+s("misc/timing-function-viz", "Misc/Timing Functions", `
+// This generates a grid of graphs visualizing the different
+// timing functions available from animate.ease*
+// See Misc/Animation for examples of how to use these functions.
+
+viewport.focus(getTimingFunctions().map(createGraph))
+
+function createGraph(f :(n:number)=>number, index :int) {
+	const width = 200, height = 200, step = 2
+	const columns = 6
+	const spacing = Math.round(width * 0.75)
+	const xoffs = (index % columns) * (width + spacing)
+	const yoffs = Math.ceil((index + 1) / columns) * (height + spacing)
+	let n = buildVector({ width, height, strokeWeight: 2 }, c => {
+		let prevy = 0
+		for (let x of range(step, width, step)) {
+			let y = f(x / width) * height
+			c.line(
+				{x: xoffs + x,        y: yoffs + prevy},
+				{x: xoffs + x + step, y: yoffs + y}
+			)
+			prevy = y
+		}
+	}) as SceneNode
+	n = figma.flatten([n]) // merge into a line
+	if (f.name) {
+		let t = createText({
+			characters: f.name,
+			x: xoffs,
+			y: yoffs + height + 10,
+			width: width,
+		})
+		n = createGroup({expanded:false}, n, t)
+		n.name = f.name
+	}
+	return n
+}
+
+function getTimingFunctions() :SAnimationTimingFunction[] {
+	// collect timing functions, using a set to ignore aliases
+	let v = new Set<SAnimationTimingFunction>()
+	for (let k of Object.keys(animate)) {
+		if (k.startsWith("ease")) {
+			v.add(animate[k])
+		}
+	}
+	return Array.from(v)
+}
+`),
+
+
+s("advanced/poisson-disc-gen", "Misc/Poisson-disc generator", `
 /**
 Progressively generates Poisson-disc pattern.
 Poisson-disc sampling produces points that are tightly-packed, but no closer to each other than a specified minimum distance, resulting in a more natural pattern.
