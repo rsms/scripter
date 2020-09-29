@@ -888,6 +888,7 @@ function initialize() {
   env.createCancellablePromise = scriptLib.misc.createCancellablePromise
   scriptLib.initAnimateAPI(env.animate)
   scriptLib.initVectorNetworkAPI(env)
+  scriptLib.initJSONAPI(env)
 
   // Node constructor keys
   env.createGroup = env.Group = F

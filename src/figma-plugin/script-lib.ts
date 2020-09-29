@@ -23,6 +23,7 @@ import { fetch } from "./script-lib-misc"
 import { createViewportAPI } from "./script-lib-viewport"
 import { initAnimateAPI, createAnimateAPI } from "./script-lib-animate"
 import { initVectorNetworkAPI } from "./script-lib-vectornetwork"
+import { initJSONAPI } from "./script-lib-json"
 
 export {
   markerProps,
@@ -45,6 +46,7 @@ export {
   createViewportAPI,
   initAnimateAPI, createAnimateAPI,
   initVectorNetworkAPI,
+  initJSONAPI,
 
   // internal utilities used by rest of script-lib
   getFirstSourcePos,

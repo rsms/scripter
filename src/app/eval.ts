@@ -177,6 +177,10 @@ async function handlePrintMsg(msg :PrintMsg) {
     return
   }
 
+  // view zones appear on the line below the source line. If print() is on the last line,
+  // then the bottom hidden area may occlude it.
+  editor.ensureTrailingNewline()
+
   // html to show in message zone before the text message
   let htmlPrefix = ""
 

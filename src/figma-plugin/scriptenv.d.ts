@@ -460,6 +460,24 @@ interface DOM {
 
 
 // ------------------------------------------------------------------------------------
+// JSON
+
+/**
+ * Format value as JSON. Similar to JSON.stringify but returns "pretty" JSON by default.
+ * Pass false or 0 as the second argument to produce compact JSON.
+ */
+function jsonfmt(value :any, pretty? :number|boolean) :string
+
+/**
+ * Parse JSON, similar to JSON.parse but supports comments and extra trailing commas.
+ * I.e. it allows parsing "relaxed" JSON.
+ * If a type parameter is provided, is has the same effect as casting. i.e.
+ * jsonparse<Foo>(x) == (jsonparse(x) as Foo)
+ */
+function jsonparse<T = any>(json :string) :T
+
+
+// ------------------------------------------------------------------------------------
 // fetch
 
 /**

@@ -1365,6 +1365,26 @@ export class EditorState extends EventEmitter<EditorStateEvents> {
   }
 
 
+  // makes sure there is a line break after the last line; an extra blank line at the end
+  // for view zones, like print output on last line
+  ensureTrailingNewline() {
+    const lastVisibleLineno = this.currentModel.getLineCount() - 1
+    const lastVisibleLineContent = this.currentModel.getLineContent(lastVisibleLineno)
+    if (lastVisibleLineContent.trim().length > 0) {
+      console.log({lastVisibleLineContent})
+      // add linebreak after last visible line.
+      // save & restore view state to avoid persisting temporary scroll & selection changes
+      const viewState = this.editor.saveViewState()
+      this.currentModel.applyEdits([{ // IIdentifiedSingleEditOperation[]
+        range: new monaco.Range(lastVisibleLineno, Infinity, lastVisibleLineno, Infinity),
+        text: "\n",
+        forceMoveMarkers: false,
+      }])
+      this.editor.restoreViewState(viewState)
+    }
+  }
+
+
   initEditorActions() {
     this.editor.addAction({
       id: 'scripter-run-script',
