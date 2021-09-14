@@ -4,6 +4,7 @@
   "name": "Scripter",
   "main": "plugin.ts",
   "ui":   "ui.ts",
+  "editorType": ["figma"],
   "figplug": {
     "libs": ["../common/scripter-env"]
   },
