@@ -1,4 +1,4 @@
-// Figma Plugin API version 1, update 14
+// Figma Plugin API version 1, update 30
 
 declare global {
   // Global variable with Figma's plugin API.
@@ -7,13 +7,18 @@ declare global {
   const __uiFiles__: {
     [key: string]: string
   }
+  const console: Console
+
+  type EventType = "selectionchange" | "currentpagechange" | "close" | "timerstart" | "timerstop" | "timerpause" | "timerresume" | "timeradjust" | "timerdone" | "run"
 
   interface PluginAPI {
     readonly apiVersion: "1.0.0"
     readonly command: string
+    readonly editorType: 'figma' | 'figjam'
 
     readonly fileKey: string | undefined
 
+    readonly timer?: TimerAPI
     readonly viewport: ViewportAPI
     closePlugin(message?: string): void
 
@@ -24,15 +29,17 @@ declare global {
 
     readonly clientStorage: ClientStorageAPI
 
+    readonly parameters: ParametersAPI
+
     getNodeById(id: string): BaseNode | null
     getStyleById(id: string): BaseStyle | null
 
     readonly root: DocumentNode
     currentPage: PageNode
 
-    on(type: "selectionchange" | "currentpagechange" | "close", callback: () => void): void
-    once(type: "selectionchange" | "currentpagechange" | "close", callback: () => void): void
-    off(type: "selectionchange" | "currentpagechange" | "close", callback: () => void): void
+    on(type: EventType, callback: (event?: RunEvent) => void): void
+    once(type: EventType, callback: (event?: RunEvent) => void): void
+    off(type: EventType, callback: (event?: RunEvent) => void): void
 
     readonly mixed: unique symbol
 
@@ -47,6 +54,9 @@ declare global {
     createComponent(): ComponentNode
     createPage(): PageNode
     createSlice(): SliceNode
+    createSticky(): StickyNode
+    createConnector(): ConnectorNode
+    createShapeWithText(): ShapeWithTextNode
     /**
      * [DEPRECATED]: This API often fails to create a valid boolean operation. Use figma.union, figma.subtract, figma.intersect and figma.exclude instead.
      */
@@ -63,6 +73,16 @@ declare global {
     getLocalTextStyles(): TextStyle[]
     getLocalEffectStyles(): EffectStyle[]
     getLocalGridStyles(): GridStyle[]
+
+    moveLocalPaintStyleAfter(targetNode: PaintStyle, reference: PaintStyle | null): void
+    moveLocalTextStyleAfter(targetNode: TextStyle, reference: TextStyle | null): void
+    moveLocalEffectStyleAfter(targetNode: EffectStyle, reference: EffectStyle | null): void
+    moveLocalGridStyleAfter(targetNode: GridStyle, reference: GridStyle | null): void
+
+    moveLocalPaintFolderAfter(targetFolder: string, reference: string | null): void
+    moveLocalTextFolderAfter(targetFolder: string, reference: string | null): void
+    moveLocalEffectFolderAfter(targetFolder: string, reference: string | null): void
+    moveLocalGridFolderAfter(targetFolder: string, reference: string | null): void
 
     importComponentByKeyAsync(key: string): Promise<ComponentNode>
     importComponentSetByKeyAsync(key: string): Promise<ComponentSetNode>
@@ -94,6 +114,7 @@ declare global {
 
   interface NotificationOptions {
     timeout?: number
+    error?: boolean
   }
 
   interface NotificationHandler {
@@ -102,6 +123,7 @@ declare global {
 
   interface ShowUIOptions {
     visible?: boolean
+    title?: string
     width?: number
     height?: number
   }
@@ -129,11 +151,43 @@ declare global {
     off(type: "message", callback: MessageEventHandler): void
   }
 
+  interface TimerAPI {
+    readonly remaining: number
+    readonly total: number
+    readonly state: "STOPPED" | "PAUSED" | "RUNNING"
+
+    pause: () => void
+    resume: () => void
+    start: (seconds: number) => void
+    stop: () => void
+  }
+
   interface ViewportAPI {
     center: Vector
     zoom: number
     scrollAndZoomIntoView(nodes: ReadonlyArray<BaseNode>): void
     readonly bounds: Rect
+  }
+
+  interface ParameterValues {
+    [key: string]: any
+  }
+
+  interface SuggestionResults {
+    setSuggestions: (suggestions: string[]) => void
+  }
+
+  type ParameterChangeHandler = (parameters: ParameterValues, suggestionKey: string, result: SuggestionResults) => void
+
+  interface ParametersAPI {
+    on(type: "input", callback: ParameterChangeHandler): void
+    once(type: "input", callback: ParameterChangeHandler): void
+    off(type: "input", callback: ParameterChangeHandler): void
+  }
+
+  interface RunEvent {
+    command: string
+    parameters?: ParameterValues
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -249,6 +303,7 @@ declare global {
     readonly imageHash: string | null
     readonly imageTransform?: Transform // setting for "CROP"
     readonly scalingFactor?: number // setting for "TILE"
+    readonly rotation?: number // setting for "FILL" | "FIT" | "TILE"
     readonly filters?: ImageFilters
 
     readonly visible?: boolean
@@ -294,6 +349,7 @@ declare global {
   interface ExportSettingsImage {
     readonly format: "JPG" | "PNG"
     readonly contentsOnly?: boolean    // defaults to true
+    readonly useAbsoluteBounds?: boolean    // defaults to false
     readonly suffix?: string
     readonly constraint?: ExportSettingsConstraints
   }
@@ -301,6 +357,7 @@ declare global {
   interface ExportSettingsSVG {
     readonly format: "SVG"
     readonly contentsOnly?: boolean    // defaults to true
+    readonly useAbsoluteBounds?: boolean    // defaults to false
     readonly suffix?: string
     readonly svgOutlineText?: boolean  // defaults to true
     readonly svgIdAttribute?: boolean  // defaults to false
@@ -310,6 +367,7 @@ declare global {
   interface ExportSettingsPDF {
     readonly format: "PDF"
     readonly contentsOnly?: boolean    // defaults to true
+    readonly useAbsoluteBounds?: boolean    // defaults to false
     readonly suffix?: string
   }
 
@@ -363,6 +421,15 @@ declare global {
     readonly unit: "AUTO"
   }
 
+  type HyperlinkTarget = {
+    type: "URL" | "NODE"
+    value: string
+  }
+
+  type TextListOptions = {
+    type: "ORDERED" | "UNORDERED" | "NONE"
+  }
+
   type BlendMode =
     "NORMAL" |
     "DARKEN" |
@@ -387,7 +454,7 @@ declare global {
     fontName: FontName
   }
 
-  type Reaction = { action: Action, trigger: Trigger }
+  type Reaction = { action: Action | null, trigger: Trigger | null }
 
   type Action =
     { readonly type: "BACK" | "CLOSE" } |
@@ -404,7 +471,7 @@ declare global {
     }
 
   interface SimpleTransition {
-    readonly type: "DISSOLVE" | "SMART_ANIMATE"
+    readonly type: "DISSOLVE" | "SMART_ANIMATE" | "SCROLL_ANIMATE"
     readonly easing: Easing
     readonly duration: number
   }
@@ -421,13 +488,31 @@ declare global {
   type Transition = SimpleTransition | DirectionalTransition
 
   type Trigger =
-    { readonly type: "ON_CLICK" | "ON_HOVER" | "ON_PRESS" | "ON_DRAG" } |
-    { readonly type: "AFTER_TIMEOUT", readonly timeout: number } |
-    { readonly type: "MOUSE_ENTER" | "MOUSE_LEAVE" | "MOUSE_UP" | "MOUSE_DOWN"
-      readonly delay: number
-    }
+    | { readonly type: "ON_CLICK" | "ON_HOVER" | "ON_PRESS" | "ON_DRAG" }
+    | {
+        readonly type: "AFTER_TIMEOUT";
+        readonly timeout: number;
+      }
+    | {
+        readonly type:
+          | "MOUSE_ENTER"
+          | "MOUSE_LEAVE"
+          | "MOUSE_UP"
+          | "MOUSE_DOWN";
+        readonly delay: number;
+      }
+    | {
+        readonly type: "ON_KEY_DOWN";
+        readonly device:
+          | "KEYBOARD"
+          | "XBOX_ONE"
+          | "PS4"
+          | "SWITCH_PRO"
+          | "UNKNOWN_CONTROLLER";
+        readonly keyCodes: ReadonlyArray<number>;
+      };
 
-  type Navigation = "NAVIGATE" | "SWAP" | "OVERLAY"
+  type Navigation = "NAVIGATE" | "SWAP" | "OVERLAY" | "SCROLL_TO" | "CHANGE_TO"
 
   interface Easing {
     readonly type: "EASE_IN" | "EASE_OUT" | "EASE_IN_AND_OUT" | "LINEAR"
@@ -452,6 +537,22 @@ declare global {
   type OverlayBackgroundInteraction = "NONE" | "CLOSE_ON_CLICK_OUTSIDE"
 
   type PublishStatus = "UNPUBLISHED" | "CURRENT" | "CHANGED"
+
+  interface ConnectorEndpointPosition {
+    position: { x: number, y: number }
+  }
+
+  interface ConnectorEndpointPositionAndEndpointNodeId {
+    position: { x: number, y: number }
+    endpointNodeId: string
+  }
+
+  interface ConnectorEndpointEndpointNodeIdAndMagnet {
+    endpointNodeId: string
+    magnet: 'NONE' | 'AUTO' | 'TOP' | 'LEFT' | 'BOTTOM' | 'RIGHT'
+  }
+
+  type ConnectorEndpoint = ConnectorEndpointPosition | ConnectorEndpointEndpointNodeIdAndMagnet | ConnectorEndpointPositionAndEndpointNodeId
 
   ////////////////////////////////////////////////////////////////////////////////
   // Mixins
@@ -542,19 +643,25 @@ declare global {
   type StrokeJoin = "MITER" | "BEVEL" | "ROUND"
   type HandleMirroring = "NONE" | "ANGLE" | "ANGLE_AND_LENGTH"
 
-  interface GeometryMixin {
-    fills: ReadonlyArray<Paint> | PluginAPI['mixed']
+  interface MinimalStrokesMixin {
     strokes: ReadonlyArray<Paint>
-    strokeWeight: number
-    strokeMiterLimit: number
-    strokeAlign: "CENTER" | "INSIDE" | "OUTSIDE"
-    strokeCap: StrokeCap | PluginAPI['mixed']
-    strokeJoin: StrokeJoin | PluginAPI['mixed']
-    dashPattern: ReadonlyArray<number>
-    fillStyleId: string | PluginAPI['mixed']
     strokeStyleId: string
+    strokeWeight: number
+    strokeJoin: StrokeJoin | PluginAPI['mixed']
+    strokeAlign: "CENTER" | "INSIDE" | "OUTSIDE"
+    dashPattern: ReadonlyArray<number>
+  }
+
+  interface MinimalFillsMixin {
+    fills: ReadonlyArray<Paint> | PluginAPI['mixed']
+    fillStyleId: string | PluginAPI['mixed']
+  }
+  interface GeometryMixin extends MinimalStrokesMixin, MinimalFillsMixin {
+    strokeCap: StrokeCap | PluginAPI['mixed']
+    strokeMiterLimit: number
     outlineStroke(): VectorNode | null
   }
+
 
   interface CornerMixin {
     cornerRadius: number | PluginAPI['mixed']
@@ -583,11 +690,16 @@ declare global {
   }
 
   interface ReactionMixin {
-    readonly reactions: ReadonlyArray<Reaction>
+    reactions: ReadonlyArray<Reaction>
+  }
+
+  interface DocumentationLink {
+    readonly uri: string
   }
 
   interface PublishableMixin {
     description: string
+    documentationLinks: ReadonlyArray<DocumentationLink>
     readonly remote: boolean
     readonly key: string // The key to use with "importComponentByKeyAsync", "importComponentSetByKeyAsync", and "importStyleByKeyAsync"
     getPublishStatusAsync(): Promise<PublishStatus>
@@ -632,6 +744,64 @@ declare global {
     BaseFrameMixin,
     FramePrototypingMixin,
     ReactionMixin {}
+
+  interface OpaqueNodeMixin extends BaseNodeMixin  {
+    readonly absoluteTransform: Transform
+    relativeTransform: Transform
+    x: number
+    y: number
+    readonly width: number
+    readonly height: number
+  }
+
+  interface MinimalBlendMixin {
+    readonly opacity?: number
+    readonly blendMode?: BlendMode
+  }
+
+  interface TextSublayerNode {
+    readonly hasMissingFont: boolean
+
+    paragraphIndent: number
+    paragraphSpacing: number
+
+    fontSize: number | PluginAPI['mixed']
+    fontName: FontName | PluginAPI['mixed']
+    textCase: TextCase | PluginAPI['mixed']
+    textDecoration: TextDecoration | PluginAPI['mixed']
+    letterSpacing: LetterSpacing | PluginAPI['mixed']
+    lineHeight: LineHeight | PluginAPI['mixed']
+    hyperlink: HyperlinkTarget | null | PluginAPI['mixed']
+
+    characters: string
+    insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void
+    deleteCharacters(start: number, end: number): void
+
+    getRangeFontSize(start: number, end: number): number | PluginAPI['mixed']
+    setRangeFontSize(start: number, end: number, value: number): void
+    getRangeFontName(start: number, end: number): FontName | PluginAPI['mixed']
+    setRangeFontName(start: number, end: number, value: FontName): void
+    getRangeTextCase(start: number, end: number): TextCase | PluginAPI['mixed']
+    setRangeTextCase(start: number, end: number, value: TextCase): void
+    getRangeTextDecoration(start: number, end: number): TextDecoration | PluginAPI['mixed']
+    setRangeTextDecoration(start: number, end: number, value: TextDecoration): void
+    getRangeLetterSpacing(start: number, end: number): LetterSpacing | PluginAPI['mixed']
+    setRangeLetterSpacing(start: number, end: number, value: LetterSpacing): void
+    getRangeLineHeight(start: number, end: number): LineHeight | PluginAPI['mixed']
+    setRangeLineHeight(start: number, end: number, value: LineHeight): void
+    getRangeHyperlink(start: number, end: number): HyperlinkTarget | null | PluginAPI['mixed']
+    setRangeHyperlink(start: number, end: number, value: HyperlinkTarget | null): void
+    getRangeFills(start: number, end: number): Paint[] | PluginAPI['mixed']
+    setRangeFills(start: number, end: number, value: Paint[]): void
+    getRangeTextStyleId(start: number, end: number): string | PluginAPI['mixed']
+    setRangeTextStyleId(start: number, end: number, value: string): void
+    getRangeFillStyleId(start: number, end: number): string | PluginAPI['mixed']
+    setRangeFillStyleId(start: number, end: number, value: string): void
+    getRangeListOptions(start: number, end: number): TextListOptions | PluginAPI['mixed']
+    setRangeListOptions(start: number, end: number, value: TextListOptions): void
+    getRangeIndentation(start: number, end: number): number | PluginAPI['mixed']
+    setRangeIndentation(start: number, end: number, value: number): void
+  }
 
   ////////////////////////////////////////////////////////////////////////////////
   // Nodes
@@ -732,10 +902,10 @@ declare global {
     handleMirroring: HandleMirroring | PluginAPI['mixed']
   }
 
-  interface TextNode extends DefaultShapeMixin, ConstraintMixin {
+  interface TextNode extends DefaultShapeMixin, ConstraintMixin, TextSublayerNode {
     readonly type: "TEXT"
     clone(): TextNode
-    readonly hasMissingFont: boolean
+
     textAlignHorizontal: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED"
     textAlignVertical: "TOP" | "CENTER" | "BOTTOM"
     textAutoResize: "NONE" | "WIDTH_AND_HEIGHT" | "HEIGHT"
@@ -744,35 +914,6 @@ declare global {
     autoRename: boolean
 
     textStyleId: string | PluginAPI['mixed']
-    fontSize: number | PluginAPI['mixed']
-    fontName: FontName | PluginAPI['mixed']
-    textCase: TextCase | PluginAPI['mixed']
-    textDecoration: TextDecoration | PluginAPI['mixed']
-    letterSpacing: LetterSpacing | PluginAPI['mixed']
-    lineHeight: LineHeight | PluginAPI['mixed']
-
-    characters: string
-    insertCharacters(start: number, characters: string, useStyle?: "BEFORE" | "AFTER"): void
-    deleteCharacters(start: number, end: number): void
-
-    getRangeFontSize(start: number, end: number): number | PluginAPI['mixed']
-    setRangeFontSize(start: number, end: number, value: number): void
-    getRangeFontName(start: number, end: number): FontName | PluginAPI['mixed']
-    setRangeFontName(start: number, end: number, value: FontName): void
-    getRangeTextCase(start: number, end: number): TextCase | PluginAPI['mixed']
-    setRangeTextCase(start: number, end: number, value: TextCase): void
-    getRangeTextDecoration(start: number, end: number): TextDecoration | PluginAPI['mixed']
-    setRangeTextDecoration(start: number, end: number, value: TextDecoration): void
-    getRangeLetterSpacing(start: number, end: number): LetterSpacing | PluginAPI['mixed']
-    setRangeLetterSpacing(start: number, end: number, value: LetterSpacing): void
-    getRangeLineHeight(start: number, end: number): LineHeight | PluginAPI['mixed']
-    setRangeLineHeight(start: number, end: number, value: LineHeight): void
-    getRangeFills(start: number, end: number): Paint[] | PluginAPI['mixed']
-    setRangeFills(start: number, end: number, value: Paint[]): void
-    getRangeTextStyleId(start: number, end: number): string | PluginAPI['mixed']
-    setRangeTextStyleId(start: number, end: number, value: string): void
-    getRangeFillStyleId(start: number, end: number): string | PluginAPI['mixed']
-    setRangeFillStyleId(start: number, end: number, value: string): void
   }
 
   interface ComponentSetNode extends BaseFrameMixin, PublishableMixin {
@@ -791,6 +932,8 @@ declare global {
     readonly type: "INSTANCE"
     clone(): InstanceNode
     mainComponent: ComponentNode | null
+    swapComponent(componentNode: ComponentNode): void
+    detachInstance(): FrameNode
     scaleFactor: number
   }
 
@@ -800,6 +943,40 @@ declare global {
     booleanOperation: "UNION" | "INTERSECT" | "SUBTRACT" | "EXCLUDE"
 
     expanded: boolean
+  }
+
+  interface StickyNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, ExportMixin {
+    readonly type: "STICKY"
+    readonly text: TextSublayerNode
+    authorVisible: boolean
+  }
+
+  interface StampNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, ExportMixin {
+    readonly type: "STAMP",
+  }
+
+  interface ShapeWithTextNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, MinimalStrokesMixin, ExportMixin {
+    readonly type: "SHAPE_WITH_TEXT"
+    shapeType: 'SQUARE' | 'ELLIPSE' | 'ROUNDED_RECTANGLE' | 'DIAMOND' | 'TRIANGLE_UP' | 'TRIANGLE_DOWN' | 'PARALLELOGRAM_RIGHT' | 'PARALLELOGRAM_LEFT'
+    readonly text: TextSublayerNode
+    readonly cornerRadius?: number
+
+    resize(width: number, height: number): void
+    rescale(scale: number): void
+  }
+
+  interface LayerSublayerNode {
+    fills: Paint[] | PluginAPI['mixed']
+  }
+
+  interface ConnectorNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, MinimalStrokesMixin, ExportMixin {
+    readonly type: "CONNECTOR"
+    readonly text: TextSublayerNode
+    readonly textBackground: LayerSublayerNode
+    readonly cornerRadius?: number
+    connectorLineType: 'ELBOWED' | 'STRAIGHT'
+    connectorStart: ConnectorEndpoint
+    connectorEnd: ConnectorEndpoint
   }
 
   type BaseNode =
@@ -821,25 +998,13 @@ declare global {
     EllipseNode |
     PolygonNode |
     RectangleNode |
-    TextNode
+    TextNode |
+    StickyNode |
+    ConnectorNode |
+    ShapeWithTextNode |
+    StampNode
 
-  type NodeType =
-    "DOCUMENT" |
-    "PAGE" |
-    "SLICE" |
-    "FRAME" |
-    "GROUP" |
-    "COMPONENT_SET" |
-    "COMPONENT" |
-    "INSTANCE" |
-    "BOOLEAN_OPERATION" |
-    "VECTOR" |
-    "STAR" |
-    "LINE" |
-    "ELLIPSE" |
-    "POLYGON" |
-    "RECTANGLE" |
-    "TEXT"
+  type NodeType = BaseNode['type']
 
   ////////////////////////////////////////////////////////////////////////////////
   // Styles
@@ -886,6 +1051,18 @@ declare global {
     readonly hash: string
     getBytesAsync(): Promise<Uint8Array>
   }
+
+  // The plugin environment exposes the browser console API,
+  // so expected calls like console.log() still work.
+  interface Console {
+    log(message?: any, ...optionalParams: any[]): void
+    error(message?: any, ...optionalParams: any[]): void
+    assert(condition?: boolean, message?: string, ...data: any[]): void
+    info(message?: any, ...optionalParams: any[]): void
+    warn(message?: any, ...optionalParams: any[]): void
+    clear(): void
+  }
+
   } // declare global
 
   export {}
