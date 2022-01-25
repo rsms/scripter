@@ -80,7 +80,7 @@ function readfile(filename) {
 }
 
 function writefileIfDifferent(filename, content) {
-  if (readfile(filename) != content) {
+  if (!fs.existsSync(filename) || readfile(filename) !== content) {
     writefile(filename, content)
   }
 }

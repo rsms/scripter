@@ -1,4 +1,4 @@
-// Figma Plugin API version 1, update 30
+// Figma Plugin API version 1, update 40
 
 declare global {
   // Global variable with Figma's plugin API.
@@ -9,20 +9,48 @@ declare global {
   }
   const console: Console
 
-  type EventType = "selectionchange" | "currentpagechange" | "close" | "timerstart" | "timerstop" | "timerpause" | "timerresume" | "timeradjust" | "timerdone" | "run"
+  // The plugin environment exposes the browser console API,
+  // so expected calls like console.log() still work.
+  interface Console {
+    log(message?: any, ...optionalParams: any[]): void
+    error(message?: any, ...optionalParams: any[]): void
+    assert(condition?: boolean, message?: string, ...data: any[]): void
+    info(message?: any, ...optionalParams: any[]): void
+    warn(message?: any, ...optionalParams: any[]): void
+    clear(): void
+  }
+  function setTimeout(callback: Function, timeout: number): number;
+  function clearTimeout(handle: number): void;
+  function setInterval(callback: Function, timeout: number): number;
+  function clearInterval(handle: number): void;
+
+  type ArgFreeEventType = "selectionchange" | "currentpagechange" | "close" | "timerstart" | "timerstop" | "timerpause" | "timerresume" | "timeradjust" | "timerdone"
 
   interface PluginAPI {
     readonly apiVersion: "1.0.0"
     readonly command: string
     readonly editorType: 'figma' | 'figjam'
+    readonly pluginId?: string
+    readonly widgetId?: string
 
     readonly fileKey: string | undefined
 
+    skipInvisibleInstanceChildren: boolean
+
     readonly timer?: TimerAPI
     readonly viewport: ViewportAPI
+
+    readonly currentUser: User | null
+    readonly activeUsers: ActiveUser[]
+
     closePlugin(message?: string): void
 
     notify(message: string, options?: NotificationOptions): NotificationHandler
+
+    commitUndo(): void
+    triggerUndo(): void
+
+    saveVersionHistoryAsync(title: string, description?: string): Promise<void>
 
     showUI(html: string, options?: ShowUIOptions): void
     readonly ui: UIAPI
@@ -37,9 +65,17 @@ declare global {
     readonly root: DocumentNode
     currentPage: PageNode
 
-    on(type: EventType, callback: (event?: RunEvent) => void): void
-    once(type: EventType, callback: (event?: RunEvent) => void): void
-    off(type: EventType, callback: (event?: RunEvent) => void): void
+    on(type: ArgFreeEventType, callback: () => void): void;
+    on(type: "run", callback: (event: RunEvent) => void): void
+    on(type: "drop", callback: (event: DropEvent) => boolean): void;
+
+    once(type: ArgFreeEventType, callback: () => void): void
+    once(type: "run", callback: (event: RunEvent) => void): void;
+    once(type: "drop", callback: (event: DropEvent) => boolean): void;
+
+    off(type: ArgFreeEventType, callback: () => void): void
+    off(type: "run", callback: (event: RunEvent) => void): void;
+    off(type: "drop", callback: (event: DropEvent) => boolean): void;
 
     readonly mixed: unique symbol
 
@@ -57,6 +93,7 @@ declare global {
     createSticky(): StickyNode
     createConnector(): ConnectorNode
     createShapeWithText(): ShapeWithTextNode
+    createCodeBlock(): CodeBlockNode
     /**
      * [DEPRECATED]: This API often fails to create a valid boolean operation. Use figma.union, figma.subtract, figma.intersect and figma.exclude instead.
      */
@@ -97,6 +134,8 @@ declare global {
     createImage(data: Uint8Array): Image
     getImageByHash(hash: string): Image
 
+    createLinkPreviewAsync(url:string): Promise<EmbedNode | LinkUnfurlNode>
+
     combineAsVariants(nodes: ReadonlyArray<ComponentNode>, parent: BaseNode & ChildrenMixin, index?: number): ComponentSetNode
     group(nodes: ReadonlyArray<BaseNode>, parent: BaseNode & ChildrenMixin, index?: number): GroupNode
     flatten(nodes: ReadonlyArray<BaseNode>, parent?: BaseNode & ChildrenMixin, index?: number): VectorNode
@@ -110,6 +149,8 @@ declare global {
   interface ClientStorageAPI {
     getAsync(key: string): Promise<any | undefined>
     setAsync(key: string, value: any): Promise<void>
+    deleteAsync(key: string): Promise<void>
+    keysAsync(): Promise<string[]>
   }
 
   interface NotificationOptions {
@@ -126,6 +167,7 @@ declare global {
     title?: string
     width?: number
     height?: number
+    position?: { x: number; y: number }
   }
 
   interface UIPostMessageOptions {
@@ -174,20 +216,50 @@ declare global {
   }
 
   interface SuggestionResults {
-    setSuggestions: (suggestions: string[]) => void
+    setSuggestions(suggestions: Array<string | { name: string; data?: any; icon?: (string | Uint8Array); iconUrl?: string }>): void
+    setError(message: string): void
+    setLoadingMessage(message: string): void
   }
 
-  type ParameterChangeHandler = (parameters: ParameterValues, suggestionKey: string, result: SuggestionResults) => void
+  type ParameterInputEvent<ParametersType = ParameterValues> = {
+    query: string,
+    key: string,
+    parameters: Partial<ParametersType>,
+    result: SuggestionResults,
+  }
 
   interface ParametersAPI {
-    on(type: "input", callback: ParameterChangeHandler): void
-    once(type: "input", callback: ParameterChangeHandler): void
-    off(type: "input", callback: ParameterChangeHandler): void
+    on(type: "input", callback: (event: ParameterInputEvent) => void): void
+    once(type: "input", callback: (event: ParameterInputEvent) => void): void
+    off(type: "input", callback: (event: ParameterInputEvent) => void): void
   }
 
-  interface RunEvent {
+  interface RunEvent<ParametersType = (ParameterValues | undefined)> {
     command: string
-    parameters?: ParameterValues
+    parameters: ParametersType
+  }
+
+  interface DropEvent {
+    node: BaseNode | SceneNode
+    x: number
+    y: number
+    absoluteX: number
+    absoluteY: number
+    items: DropItem[]
+    files: DropFile[]
+    dropMetadata?: any
+  }
+
+  interface DropItem {
+    type: string
+    data: string
+  }
+
+  interface DropFile {
+    name: string
+    type: string
+    getBytesAsync: Promise<Uint8Array>
+    getTextAsync: Promise<string>
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -238,8 +310,19 @@ declare global {
     readonly innerRadius: number
   }
 
-  interface ShadowEffect {
-    readonly type: "DROP_SHADOW" | "INNER_SHADOW"
+  interface DropShadowEffect {
+    readonly type: "DROP_SHADOW"
+    readonly color: RGBA
+    readonly offset: Vector
+    readonly radius: number
+    readonly spread?: number
+    readonly visible: boolean
+    readonly blendMode: BlendMode
+    readonly showShadowBehindNode?: boolean
+  }
+
+  interface InnerShadowEffect {
+    readonly type: "INNER_SHADOW"
     readonly color: RGBA
     readonly offset: Vector
     readonly radius: number
@@ -254,7 +337,7 @@ declare global {
     readonly visible: boolean
   }
 
-  type Effect = ShadowEffect | BlurEffect
+  type Effect = DropShadowEffect | InnerShadowEffect | BlurEffect
 
   type ConstraintType = "MIN" | "CENTER" | "MAX" | "STRETCH" | "SCALE"
 
@@ -459,7 +542,8 @@ declare global {
   type Action =
     { readonly type: "BACK" | "CLOSE" } |
     { readonly type: "URL", url: string } |
-    { readonly type: "NODE"
+    {
+      readonly type: "NODE"
       readonly destinationId: string | null
       readonly navigation: Navigation
       readonly transition: Transition | null
@@ -490,32 +574,32 @@ declare global {
   type Trigger =
     | { readonly type: "ON_CLICK" | "ON_HOVER" | "ON_PRESS" | "ON_DRAG" }
     | {
-        readonly type: "AFTER_TIMEOUT";
-        readonly timeout: number;
-      }
+      readonly type: "AFTER_TIMEOUT";
+      readonly timeout: number;
+    }
     | {
-        readonly type:
-          | "MOUSE_ENTER"
-          | "MOUSE_LEAVE"
-          | "MOUSE_UP"
-          | "MOUSE_DOWN";
-        readonly delay: number;
-      }
+      readonly type:
+      | "MOUSE_ENTER"
+      | "MOUSE_LEAVE"
+      | "MOUSE_UP"
+      | "MOUSE_DOWN";
+      readonly delay: number;
+    }
     | {
-        readonly type: "ON_KEY_DOWN";
-        readonly device:
-          | "KEYBOARD"
-          | "XBOX_ONE"
-          | "PS4"
-          | "SWITCH_PRO"
-          | "UNKNOWN_CONTROLLER";
-        readonly keyCodes: ReadonlyArray<number>;
-      };
+      readonly type: "ON_KEY_DOWN";
+      readonly device:
+      | "KEYBOARD"
+      | "XBOX_ONE"
+      | "PS4"
+      | "SWITCH_PRO"
+      | "UNKNOWN_CONTROLLER";
+      readonly keyCodes: ReadonlyArray<number>;
+    };
 
   type Navigation = "NAVIGATE" | "SWAP" | "OVERLAY" | "SCROLL_TO" | "CHANGE_TO"
 
   interface Easing {
-    readonly type: "EASE_IN" | "EASE_OUT" | "EASE_IN_AND_OUT" | "LINEAR"
+    readonly type: "EASE_IN" | "EASE_OUT" | "EASE_IN_AND_OUT" | "LINEAR" | "EASE_IN_BACK" | "EASE_OUT_BACK" | "EASE_IN_AND_OUT_BACK" | "CUSTOM_CUBIC_BEZIER"
     readonly easingFunctionCubicBezier?: EasingFunctionBezier
   }
 
@@ -557,7 +641,7 @@ declare global {
   ////////////////////////////////////////////////////////////////////////////////
   // Mixins
 
-  interface BaseNodeMixin {
+  interface BaseNodeMixin extends PluginDataMixin {
     readonly id: string
     readonly parent: (BaseNode & ChildrenMixin) | null
     name: string // Note: setting this also sets `autoRename` to false on TextNodes
@@ -565,14 +649,20 @@ declare global {
     toString(): string
     remove(): void
 
+    setRelaunchData(data: { [command: string]: /* description */ string }): void
+    getRelaunchData(): { [command: string]: /* description */ string }
+  }
+
+  interface PluginDataMixin {
     getPluginData(key: string): string
     setPluginData(key: string, value: string): void
+    getPluginDataKeys(): string[]
 
     // Namespace is a string that must be at least 3 alphanumeric characters, and should
     // be a name related to your plugin. Other plugins will be able to read this data.
     getSharedPluginData(namespace: string, key: string): string
     setSharedPluginData(namespace: string, key: string, value: string): void
-    setRelaunchData(data: { [command: string]: /* description */ string }): void
+    getSharedPluginDataKeys(namespace: string): string[]
   }
 
   interface SceneNodeMixin {
@@ -600,6 +690,8 @@ declare global {
      * to call node.children.find(callback) or node.findChild(callback)
      */
     findOne(callback: (node: SceneNode) => boolean): SceneNode | null
+
+    findAllWithCriteria<T extends NodeType[]>(criteria: { types: T }): Array<{ type: T[number] } & SceneNode>
   }
 
   interface ConstraintMixin {
@@ -615,6 +707,7 @@ declare global {
 
     readonly width: number
     readonly height: number
+    readonly absoluteRenderBounds: Rect | null
     constrainProportions: boolean
 
     layoutAlign: "MIN" | "CENTER" | "MAX" | "STRETCH" | "INHERIT" // applicable only inside auto-layout frames
@@ -650,12 +743,15 @@ declare global {
     strokeJoin: StrokeJoin | PluginAPI['mixed']
     strokeAlign: "CENTER" | "INSIDE" | "OUTSIDE"
     dashPattern: ReadonlyArray<number>
+    strokeGeometry: VectorPaths
   }
 
   interface MinimalFillsMixin {
     fills: ReadonlyArray<Paint> | PluginAPI['mixed']
     fillStyleId: string | PluginAPI['mixed']
+    fillGeometry: VectorPaths
   }
+
   interface GeometryMixin extends MinimalStrokesMixin, MinimalFillsMixin {
     strokeCap: StrokeCap | PluginAPI['mixed']
     strokeMiterLimit: number
@@ -743,9 +839,9 @@ declare global {
   interface DefaultFrameMixin extends
     BaseFrameMixin,
     FramePrototypingMixin,
-    ReactionMixin {}
+    ReactionMixin { }
 
-  interface OpaqueNodeMixin extends BaseNodeMixin  {
+  interface OpaqueNodeMixin extends BaseNodeMixin, SceneNodeMixin, ExportMixin {
     readonly absoluteTransform: Transform
     relativeTransform: Transform
     x: number
@@ -757,6 +853,10 @@ declare global {
   interface MinimalBlendMixin {
     readonly opacity?: number
     readonly blendMode?: BlendMode
+  }
+
+  interface VariantMixin {
+    readonly variantProperties: { [property: string]: string } | null
   }
 
   interface TextSublayerNode {
@@ -781,6 +881,7 @@ declare global {
     setRangeFontSize(start: number, end: number, value: number): void
     getRangeFontName(start: number, end: number): FontName | PluginAPI['mixed']
     setRangeFontName(start: number, end: number, value: FontName): void
+    getRangeAllFontNames(start: number, end: number): FontName[]
     getRangeTextCase(start: number, end: number): TextCase | PluginAPI['mixed']
     setRangeTextCase(start: number, end: number, value: TextCase): void
     getRangeTextDecoration(start: number, end: number): TextDecoration | PluginAPI['mixed']
@@ -827,6 +928,8 @@ declare global {
      * to call node.children.find(callback) or node.findChild(callback)
      */
     findOne(callback: (node: PageNode | SceneNode) => boolean): PageNode | SceneNode | null
+
+    findAllWithCriteria<T extends NodeType[]>(criteria: { types: T }): Array<{ type: T[number] } & (PageNode | SceneNode)>
   }
 
   interface PageNode extends BaseNodeMixin, ChildrenMixin, ExportMixin {
@@ -837,6 +940,7 @@ declare global {
     guides: ReadonlyArray<Guide>
     selection: ReadonlyArray<SceneNode>
     selectedTextRange: { node: TextNode, start: number, end: number } | null
+    flowStartingPoints: ReadonlyArray<{ nodeId: string, name: string }>
 
     backgrounds: ReadonlyArray<Paint>
 
@@ -909,8 +1013,6 @@ declare global {
     textAlignHorizontal: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED"
     textAlignVertical: "TOP" | "CENTER" | "BOTTOM"
     textAutoResize: "NONE" | "WIDTH_AND_HEIGHT" | "HEIGHT"
-    paragraphIndent: number
-    paragraphSpacing: number
     autoRename: boolean
 
     textStyleId: string | PluginAPI['mixed']
@@ -920,19 +1022,21 @@ declare global {
     readonly type: "COMPONENT_SET"
     clone(): ComponentSetNode
     readonly defaultVariant: ComponentNode
+    readonly variantGroupProperties: { [property: string]: { values: string[] } }
   }
 
-  interface ComponentNode extends DefaultFrameMixin, PublishableMixin {
+  interface ComponentNode extends DefaultFrameMixin, PublishableMixin, VariantMixin {
     readonly type: "COMPONENT"
     clone(): ComponentNode
     createInstance(): InstanceNode
   }
 
-  interface InstanceNode extends DefaultFrameMixin {
+  interface InstanceNode extends DefaultFrameMixin, VariantMixin {
     readonly type: "INSTANCE"
     clone(): InstanceNode
     mainComponent: ComponentNode | null
     swapComponent(componentNode: ComponentNode): void
+    setProperties(properties: { [property: string]: string }): void
     detachInstance(): FrameNode
     scaleFactor: number
   }
@@ -945,31 +1049,42 @@ declare global {
     expanded: boolean
   }
 
-  interface StickyNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, ExportMixin {
+  interface StickyNode extends OpaqueNodeMixin, MinimalFillsMixin, MinimalBlendMixin {
     readonly type: "STICKY"
     readonly text: TextSublayerNode
     authorVisible: boolean
+    authorName: string
+    clone(): StickyNode
   }
 
-  interface StampNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, ExportMixin {
+  interface StampNode extends DefaultShapeMixin, ConstraintMixin {
     readonly type: "STAMP",
+    clone(): StampNode
   }
 
-  interface ShapeWithTextNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, MinimalStrokesMixin, ExportMixin {
+  interface ShapeWithTextNode extends OpaqueNodeMixin, MinimalFillsMixin, MinimalBlendMixin, MinimalStrokesMixin {
     readonly type: "SHAPE_WITH_TEXT"
-    shapeType: 'SQUARE' | 'ELLIPSE' | 'ROUNDED_RECTANGLE' | 'DIAMOND' | 'TRIANGLE_UP' | 'TRIANGLE_DOWN' | 'PARALLELOGRAM_RIGHT' | 'PARALLELOGRAM_LEFT'
+    shapeType: "SQUARE" | "ELLIPSE" | "ROUNDED_RECTANGLE" | "DIAMOND" | "TRIANGLE_UP" | "TRIANGLE_DOWN" | "PARALLELOGRAM_RIGHT" | "PARALLELOGRAM_LEFT" | "ENG_DATABASE" | "ENG_QUEUE" | "ENG_FILE" | "ENG_FOLDER"
     readonly text: TextSublayerNode
     readonly cornerRadius?: number
 
     resize(width: number, height: number): void
     rescale(scale: number): void
+    clone(): ShapeWithTextNode
+  }
+
+  interface CodeBlockNode extends OpaqueNodeMixin, MinimalBlendMixin {
+    readonly type: "CODE_BLOCK"
+    code: string
+    codeLanguage: 'TYPESCRIPT' | 'CPP' | 'RUBY' | 'CSS' | 'JAVASCRIPT' | 'HTML' | 'JSON' | 'GRAPHQL' | 'PYTHON' | 'GO' | 'SQL' | 'SWIFT' | 'KOTLIN' | 'RUST'
+    clone(): CodeBlockNode
   }
 
   interface LayerSublayerNode {
     fills: Paint[] | PluginAPI['mixed']
   }
 
-  interface ConnectorNode extends OpaqueNodeMixin, SceneNodeMixin, MinimalFillsMixin, MinimalBlendMixin, MinimalStrokesMixin, ExportMixin {
+  interface ConnectorNode extends OpaqueNodeMixin, MinimalBlendMixin, MinimalStrokesMixin {
     readonly type: "CONNECTOR"
     readonly text: TextSublayerNode
     readonly textBackground: LayerSublayerNode
@@ -977,6 +1092,43 @@ declare global {
     connectorLineType: 'ELBOWED' | 'STRAIGHT'
     connectorStart: ConnectorEndpoint
     connectorEnd: ConnectorEndpoint
+    clone(): ConnectorNode
+  }
+
+  interface WidgetNode extends OpaqueNodeMixin {
+    readonly type: 'WIDGET'
+    readonly widgetId: string
+    readonly widgetSyncedState: { [key: string]: any }
+    clone(): WidgetNode
+    cloneWidget(
+      syncedStateOverrides: { [name: string]: any },
+      syncedMapOverrides?: { [mapName: string]: { [key: string]: any } },
+    ): WidgetNode
+  }
+
+  interface EmbedData {
+    srcUrl: string;
+    canonicalUrl: string | null;
+    title: string | null;
+    description: string | null;
+    provider: string | null;
+  }
+  interface EmbedNode extends OpaqueNodeMixin, SceneNodeMixin {
+    readonly type: "EMBED"
+    readonly embedData: EmbedData;
+    clone(): EmbedNode
+  }
+
+  interface LinkUnfurlData {
+    url: string;
+    title: string | null;
+    description: string | null;
+    provider: string | null;
+  }
+  interface LinkUnfurlNode extends OpaqueNodeMixin, SceneNodeMixin {
+    readonly type: "LINK_UNFURL"
+    readonly linkUnfurlData: LinkUnfurlData;
+    clone(): LinkUnfurlNode
   }
 
   type BaseNode =
@@ -1002,7 +1154,11 @@ declare global {
     StickyNode |
     ConnectorNode |
     ShapeWithTextNode |
-    StampNode
+    CodeBlockNode |
+    StampNode |
+    WidgetNode |
+    EmbedNode |
+    LinkUnfurlNode
 
   type NodeType = BaseNode['type']
 
@@ -1010,7 +1166,7 @@ declare global {
   // Styles
   type StyleType = "PAINT" | "TEXT" | "EFFECT" | "GRID"
 
-  interface BaseStyle extends PublishableMixin {
+  interface BaseStyle extends PublishableMixin, PluginDataMixin {
     readonly id: string
     readonly type: StyleType
     name: string
@@ -1052,17 +1208,22 @@ declare global {
     getBytesAsync(): Promise<Uint8Array>
   }
 
-  // The plugin environment exposes the browser console API,
-  // so expected calls like console.log() still work.
-  interface Console {
-    log(message?: any, ...optionalParams: any[]): void
-    error(message?: any, ...optionalParams: any[]): void
-    assert(condition?: boolean, message?: string, ...data: any[]): void
-    info(message?: any, ...optionalParams: any[]): void
-    warn(message?: any, ...optionalParams: any[]): void
-    clear(): void
+  interface User {
+    readonly id: string | null
+    readonly name: string
+    readonly photoUrl: string | null
+
+    // The current user's multiplayer color. This will match the color of their
+    // dot stamps and cursor.
+    readonly color: string
+    readonly sessionId: number
   }
 
-  } // declare global
+  interface ActiveUser extends User {
+    readonly position: Vector | null
+    readonly viewport: Rect
+    readonly selection: string[]
+  }
+} // declare global
 
-  export {}
+export { }

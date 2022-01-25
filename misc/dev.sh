@@ -59,6 +59,7 @@ fi
 
 # symlink monaco & zip
 rm -rf build/dev/monaco-* build/dev/zip
+mkdir -p build/dev
 pushd build/dev >/dev/null
 ln -s $(ls -d "../../docs/$monaco_build_basedir")
 ln -s $(ls -d "../../docs/zip") zip
