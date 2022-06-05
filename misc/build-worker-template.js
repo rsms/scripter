@@ -1,6 +1,6 @@
 const fs = require("fs")
 const Path = require("path")
-const esbuild = require("esbuild")
+const esbuild = require("esbuild-wasm")
 const argv = process.argv.slice(1)
 
 const prog    = Path.relative(process.cwd(), __filename)
