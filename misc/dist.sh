@@ -1,7 +1,8 @@
 #!/bin/bash -e
 cd "$(dirname "$0")/.."
-./misc/build-plugin.sh
-./misc/build-app.sh
+
+npm run build-figma-plugin
+npm run build-app
 
 mkdir -p dist
 # GITREV=$(git rev-parse --short=16 HEAD)
