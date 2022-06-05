@@ -1,3 +1,5 @@
+import { downloadFile } from "./file"
+
 let worker = null
 let workerPromise = null
 
@@ -82,23 +84,5 @@ export async function createZipArchive(props :ZipCreateProps) :Promise<Blob> {
 export async function saveZipArchive(filename :string, props :ZipCreateProps) :Promise<void> {
   let zip = await getZipWorker()
   let buf = await zip.create(props)
-  let blob = (
-    typeof File != "undefined" ? new File([ buf ], filename, {type: "application/zip"}) :
-                                 new Blob([ buf ], {type: "application/zip"})
-  )
-  let objectURL = URL.createObjectURL(blob)
-  if (typeof window == "undefined" || typeof document == "undefined") {
-    // fallback to redirect
-    document.location.href = objectURL
-  } else {
-    // use the hyperlink trick to get proper filename
-    let a = document.createElementNS("http://www.w3.org/1999/xhtml", "a") as HTMLAnchorElement
-    a.href = objectURL
-    a.download = filename
-    let event = document.createEvent("MouseEvents")
-    event.initMouseEvent(
-      "click", true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null)
-    a.dispatchEvent(event)
-  }
-  setTimeout(() => { URL.revokeObjectURL(objectURL) }, 10)
+  downloadFile(filename, buf, "application/zip")
 }

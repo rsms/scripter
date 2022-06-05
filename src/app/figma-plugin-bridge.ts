@@ -193,7 +193,13 @@ class IFrameWorker implements ScripterWorkerI {
 
     frame.setAttribute(
       "sandbox",
-      "allow-scripts allow-modals allow-pointer-lock" + (
+      [
+        "allow-scripts",
+        "allow-modals",
+        "allow-pointer-lock",
+        "allow-downloads",
+        "allow-downloads-without-user-activation",
+      ].join(" ") + (
         // when the iframe is constructed with a script, set allow-same-origin to allow us
         // to interact with the iframe's document.
         // However, for security reasons, do NOT set this when the worker is loaded from an
