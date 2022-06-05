@@ -106,7 +106,7 @@ let rectangles = range(0, 5).map(i =>
 	Rectangle({ x: i * 150, fills: [ ORANGE.paint ] }))
 
 // select our new rectangles and center the viewport
-viewport.scrollAndZoomIntoView(setSelection(rectangles))
+viewport.focusAnimated(setSelection(rectangles))
 `),
 
 
