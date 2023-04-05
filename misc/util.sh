@@ -1,4 +1,5 @@
 export PATH=$PWD/node_modules/.bin:$PATH
+export NODE_OPTIONS=--openssl-legacy-provider
 
 has_newer() {
   DIR=$1
