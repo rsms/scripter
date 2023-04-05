@@ -57,6 +57,9 @@ if ! [ -d "$monaco_build_dir" ] || has_newer "src/monaco" "$monaco_build_dir/mon
   bash misc/build-monaco.sh
 fi
 
+# make build/dev directory if needed
+mkdir -p build/dev
+
 # symlink monaco & zip
 rm -rf build/dev/monaco-* build/dev/zip
 pushd build/dev >/dev/null
