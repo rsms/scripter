@@ -62,8 +62,7 @@ Type "figma." to start exploring the API.
 Scripts are automatically saved locally and securely.
 You can also load and save scripts to the current Figma file.
 To save a script, press the "Save to Figma File" button in the toolbar.
-Changes to the script are not automatically saved both to the Figma file
-as well as locally to your computer.
+Changes to the script are automatically saved both to the Figma file as well as locally to your computer.
 To remove a script from a Figma file, simply delete the frame in the Figma file's page.
 To share a script with someone else, save it to a Figma file and invite others to the file.
 To load a script from a Figma file, select the script's frame in Figma and then start Scripter.
